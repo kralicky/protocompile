@@ -15,14 +15,18 @@
 package linker
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/testing/protocmp"
 
 	"github.com/bufbuild/protocompile/ast"
 	"github.com/bufbuild/protocompile/parser"
@@ -207,4 +211,142 @@ func parseAndLink(t *testing.T, contents string) Result {
 	linkResult, err := Link(parseResult, depFiles, nil, h)
 	require.NoError(t, err)
 	return linkResult
+}
+
+func TestDelete(t *testing.T) {
+	// define the content for each of the test protobuf files
+	files := []string{
+		`
+		syntax = "proto3";
+		package test1;
+		message Test1 {
+			string field1 = 1;
+			int32 field2 = 2;
+			repeated string field3 = 3;
+		}
+		`,
+		`
+		syntax = "proto3";
+		package test2.subtest;
+		import "test1.proto";
+		message Test2 {
+			test1.Test1 field1 = 1;
+			string field2 = 2;
+			repeated string field3 = 3;
+		}
+		`,
+		`
+		syntax = "proto3";
+		package test3.subtest.part3;
+		import "test2.proto";
+		message Test3 {
+			test2.subtest.Test2 field1 = 1;
+			string field2 = 2;
+			repeated string field3 = 3;
+		}
+		`,
+		`
+		syntax = "proto3";
+		package test4.part4;
+		import "test3.proto";
+		message Test4 {
+			test3.subtest.part3.Test3 field1 = 1;
+			string field2 = 2;
+			repeated string field3 = 3;
+		}
+		`,
+		`
+		syntax = "proto3";
+		package test5.sub5;
+		import "test4.proto";
+		message Test5 {
+			test4.part4.Test4 field1 = 1;
+			string field2 = 2;
+			repeated string field3 = 3;
+		}
+		`,
+	}
+	h := reporter.NewHandler(nil)
+
+	parseAndLinkNamed := func(name, contents string, prevDeps ...File) Result {
+		t.Helper()
+		fileAst, err := parser.Parse(name, strings.NewReader(contents), h)
+		require.NoError(t, err)
+		parseResult, err := parser.ResultFromAST(fileAst, true, h)
+		require.NoError(t, err)
+		dep, err := protoregistry.GlobalFiles.FindFileByPath("google/protobuf/descriptor.proto")
+		require.NoError(t, err)
+		depAsFile, err := NewFileRecursive(dep)
+		require.NoError(t, err)
+		depFiles := Files{depAsFile}
+		depFiles = append(depFiles, prevDeps...)
+		linkResult, err := Link(parseResult, depFiles, nil, h)
+		require.NoError(t, err)
+		return linkResult
+	}
+
+	fds := make(map[string]protoreflect.FileDescriptor, len(files))
+	filenames := make([]string, 0, len(files))
+
+	linkedFiles := make([]File, 0, len(files))
+	for i, content := range files {
+		name := fmt.Sprintf("test%d.proto", i+1)
+		res := parseAndLinkNamed(name, content, linkedFiles...)
+		linkedFiles = append(linkedFiles, res)
+		fds[name] = res
+		filenames = append(filenames, name)
+	}
+
+	var symtab Symbols
+
+	// import each file and record the state of the symbol table
+	states := make([]*Symbols, 0, len(files))
+	for _, filename := range filenames {
+		err := symtab.Import(fds[filename], h)
+		require.NoError(t, err)
+		states = append(states, symtab.Clone())
+	}
+
+	// delete each file and verify that the state of the symbol table is restored to the previous state
+	for i := len(filenames) - 1; i >= 0; i-- {
+		err := symtab.Delete(fds[filenames[i]], h)
+		require.NoError(t, err)
+
+		// if this is the last file, the symbol table should be empty
+		if i == 0 {
+			requireSymbolsEmpty(t, &symtab)
+		} else {
+			// otherwise, the symbol table should match the state recorded after the previous file was imported
+			requireSymbolsEqual(t, &symtab, states[i-1])
+		}
+	}
+}
+
+func requireSymbolsEmpty(t *testing.T, s *Symbols) {
+	t.Helper()
+	require.Empty(t, s.pkgTrie.children)
+	require.Empty(t, s.pkgTrie.exts)
+	require.Empty(t, s.pkgTrie.files)
+	require.Empty(t, s.pkgTrie.symbols)
+}
+
+func requireSymbolsEqual(t *testing.T, a, b *Symbols) {
+	requirePackageSymbolsEqual(t, &a.pkgTrie, &b.pkgTrie)
+}
+
+func requirePackageSymbolsEqual(t *testing.T, a, b *packageSymbols) {
+	for k, v := range a.children {
+		requirePackageSymbolsEqual(t, v, b.children[k])
+	}
+	requireEquivalent(t, a.exts, b.exts)
+	requireEquivalent(t, a.files, b.files)
+	requireEquivalent(t, a.symbols, b.symbols)
+}
+
+func requireEquivalent(t *testing.T, expected, actual any) {
+	t.Helper()
+	diff := cmp.Diff(expected, actual, cmp.AllowUnexported(packageSymbols{}, symbolEntry{}), cmpopts.EquateEmpty(), protocmp.Transform())
+	if diff != "" {
+		t.Errorf(diff)
+	}
 }

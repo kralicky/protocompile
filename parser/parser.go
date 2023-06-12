@@ -190,4 +190,18 @@ type Result interface {
 	// FileDescriptorProto hierarchy. If this result has no AST, this returns a
 	// placeholder node.
 	MethodNode(*descriptorpb.MethodDescriptorProto) ast.RPCDeclNode
+
+	OptionDescriptor(ast.OptionDeclNode) *descriptorpb.UninterpretedOption
+	OptionNamePartDescriptor(ast.Node) *descriptorpb.UninterpretedOption_NamePart
+	MessageDescriptor(ast.MessageDeclNode) *descriptorpb.DescriptorProto
+	FieldDescriptor(ast.FieldDeclNode) *descriptorpb.FieldDescriptorProto
+	OneofDescriptor(ast.Node) *descriptorpb.OneofDescriptorProto
+	ExtensionRangeDescriptor(ast.RangeDeclNode) *descriptorpb.DescriptorProto_ExtensionRange
+	MessageReservedRangeDescriptor(ast.RangeDeclNode) *descriptorpb.DescriptorProto_ReservedRange
+	EnumDescriptor(ast.Node) *descriptorpb.EnumDescriptorProto
+	EnumValueDescriptor(ast.EnumValueDeclNode) *descriptorpb.EnumValueDescriptorProto
+	EnumReservedRangeDescriptor(ast.RangeDeclNode) *descriptorpb.EnumDescriptorProto_EnumReservedRange
+	ServiceDescriptor(ast.Node) *descriptorpb.ServiceDescriptorProto
+	MethodDescriptor(ast.RPCDeclNode) *descriptorpb.MethodDescriptorProto
+	Descriptor(ast.Node) proto.Message
 }

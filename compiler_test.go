@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -394,4 +395,130 @@ func TestDescriptorProtoPath(t *testing.T) {
 	// sanity check our constant
 	path := (*descriptorpb.FileDescriptorProto)(nil).ProtoReflect().Descriptor().ParentFile().Path()
 	require.Equal(t, descriptorProtoPath, path)
+}
+
+var baseContents = map[string]string{
+	"a/b/b1.proto": `
+syntax = "proto3";
+
+package a.b;
+
+message BeeOne {}
+`,
+	"a/b/b2.proto": `
+syntax = "proto3";
+
+package a.b;
+
+import "a/b/b1.proto";
+
+message BeeTwo {
+  BeeOne bee_one = 1;
+}
+`,
+	"c/c.proto": `
+syntax = "proto3";
+
+package c;
+
+import "a/b/b1.proto";
+import "a/b/b2.proto";
+import "google/protobuf/timestamp.proto";
+
+message See {
+  a.b.BeeOne bee_one = 1;
+  a.b.BeeTwo bee_two = 2;
+  google.protobuf.Timestamp timestamp = 3;
+}
+`,
+}
+
+func mkResolver(contents map[string]string) Resolver {
+	return ResolverFunc(func(name string) (SearchResult, error) {
+		if s, ok := contents[name]; ok {
+			return SearchResult{Source: strings.NewReader(s)}, nil
+		}
+		return SearchResult{}, os.ErrNotExist
+	})
+}
+func TestIncrementalCompiler(t *testing.T) {
+	baseResults := buildBaseDescriptors()
+
+	overlay := map[string]string{}
+
+	comp := Compiler{
+		MaxParallelism: runtime.NumCPU(),
+		Resolver: WithStandardImports(CompositeResolver{
+			mkResolver(overlay),
+			mkResolver(baseContents),
+		}),
+		SourceInfoMode: SourceInfoExtraComments | SourceInfoExtraOptionLocations,
+		RetainASTs:     true,
+		RetainResults:  true,
+	}
+	res, err := comp.Compile(context.Background(), "a/b/b1.proto", "a/b/b2.proto", "c/c.proto")
+	require.NoError(t, err)
+
+	requireASTsEqual(t, baseResults, res, "a/b/b1.proto", "a/b/b2.proto", "c/c.proto")
+
+	overlay["a/b/b1.proto"] = `
+syntax = "proto3";
+
+package a.b;
+
+message BeeZero {}
+`
+	res, err = comp.Compile(context.Background(), "a/b/b1.proto")
+	if !assert.ErrorContains(t, err, "a/b/b2.proto:9:3: field a.b.BeeTwo.bee_one: unknown type BeeOne") &&
+		!assert.ErrorContains(t, err, "c/c.proto:11:3: field c.See.bee_one: unknown type a.b.BeeOne") {
+		assert.FailNow(t, "expected error about unknown type BeeOne")
+	}
+
+	delete(overlay, "a/b/b1.proto")
+	res, err = comp.Compile(context.Background(), "a/b/b1.proto")
+	require.NoError(t, err)
+
+	overlay["c/c.proto"] = `
+syntax = "proto3";
+
+package c;
+
+import "a/b/b1.proto";
+import "a/b/b2.proto";
+import "google/protobuf/timestamp.proto";
+
+message See {
+  a.b.BeeOne bee_one = 1;
+  a.b.BeeTwo bee_two = 2;
+  google.protobuf.Timestamp timestamp = 3;
+	string foo = 4;
+}
+`
+
+	res, err = comp.Compile(context.Background(), "c/c.proto")
+	assert.NoError(t, err)
+}
+
+func buildBaseDescriptors() linker.Files {
+	comp := Compiler{
+		Resolver:       WithStandardImports(mkResolver(baseContents)),
+		SourceInfoMode: SourceInfoExtraComments | SourceInfoExtraOptionLocations,
+		RetainASTs:     true,
+	}
+
+	results, err := comp.Compile(context.Background(), "a/b/b1.proto", "a/b/b2.proto", "c/c.proto")
+	if err != nil {
+		panic(err)
+	}
+
+	return results
+}
+
+func requireASTsEqual(t *testing.T, a, b linker.Files, filenames ...string) {
+	t.Helper()
+	for _, filename := range filenames {
+		aRes := a.FindFileByPath(filename)
+		bRes := b.FindFileByPath(filename)
+		require.Equal(t, aRes.(linker.Result).AST(), bRes.(linker.Result).AST())
+	}
 }
