@@ -117,6 +117,13 @@ func (f *FileNode) Tokens() Sequence[Token] {
 	return f.fileInfo.Tokens()
 }
 
+func (f *FileNode) SourcePos(offset int) SourcePos {
+	return f.fileInfo.SourcePos(offset)
+}
+func (f *FileNode) TokenAtOffset(offset int) Token {
+	return f.fileInfo.TokenAtOffset(offset)
+}
+
 // FileElement is an interface implemented by all AST nodes that are
 // allowed as top-level declarations in the file.
 type FileElement interface {

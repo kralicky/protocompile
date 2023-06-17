@@ -376,6 +376,20 @@ func (f *FileInfo) SourcePos(offset int) SourcePos {
 	}
 }
 
+func (f *FileInfo) TokenAtOffset(offset int) Token {
+	if offset < 0 || offset >= len(f.data) {
+		return TokenError
+	}
+
+	i := sort.Search(len(f.items), func(n int) bool {
+		return f.items[n].offset > offset
+	})
+	if i < 0 {
+		return TokenError
+	}
+	return Token(i)
+}
+
 // Token represents a single lexed token.
 type Token int
 
