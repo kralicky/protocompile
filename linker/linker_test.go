@@ -51,9 +51,9 @@ func TestSimpleLink(t *testing.T) {
 		return
 	}
 
-	res, ok := fds[0].(linker.Result)
+	res, ok := fds.Files[0].(linker.Result)
 	require.True(t, ok)
-	fdset := prototest.LoadDescriptorSet(t, "../internal/testdata/desc_test_complex.protoset", linker.ResolverFromFile(fds[0]))
+	fdset := prototest.LoadDescriptorSet(t, "../internal/testdata/desc_test_complex.protoset", linker.ResolverFromFile(fds.Files[0]))
 	prototest.CheckFiles(t, res, fdset, true)
 }
 
@@ -70,9 +70,9 @@ func TestMultiFileLink(t *testing.T) {
 			continue
 		}
 
-		res, ok := fds[0].(linker.Result)
+		res, ok := fds.Files[0].(linker.Result)
 		require.True(t, ok)
-		fdset := prototest.LoadDescriptorSet(t, "../internal/testdata/all.protoset", linker.ResolverFromFile(fds[0]))
+		fdset := prototest.LoadDescriptorSet(t, "../internal/testdata/all.protoset", linker.ResolverFromFile(fds.Files[0]))
 		prototest.CheckFiles(t, res, fdset, true)
 	}
 }
@@ -91,7 +91,7 @@ func TestProto3Optional(t *testing.T) {
 
 	fdset := prototest.LoadDescriptorSet(t, "../internal/testdata/desc_test_proto3_optional.protoset", fds.AsResolver())
 
-	res, ok := fds[0].(linker.Result)
+	res, ok := fds.Files[0].(linker.Result)
 	require.True(t, ok)
 	prototest.CheckFiles(t, res, fdset, true)
 }
@@ -2090,7 +2090,11 @@ func compile(t *testing.T, input map[string]string) (linker.Files, error) {
 			Accessor: acc,
 		}),
 	}
-	return compiler.Compile(context.Background(), names...)
+	res, err := compiler.Compile(context.Background(), names...)
+	if err != nil {
+		return nil, err
+	}
+	return res.Files, nil
 }
 
 func TestProto3Enums(t *testing.T) {

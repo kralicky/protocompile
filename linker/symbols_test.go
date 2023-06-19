@@ -19,14 +19,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
-	"google.golang.org/protobuf/testing/protocmp"
 
 	"github.com/bufbuild/protocompile/ast"
 	"github.com/bufbuild/protocompile/parser"
@@ -151,7 +148,7 @@ func TestSymbolExtensions(t *testing.T) {
 	require.NoError(t, err)
 
 	addExt := func(pkg, extendee protoreflect.FullName, num protoreflect.FieldNumber) error {
-		return s.AddExtension(pkg, extendee, num, ast.UnknownPos("foo.proto"), reporter.NewHandler(nil))
+		return s.AddExtension(pkg, extendee, num, ast.UnknownPosInfo("foo.proto"), reporter.NewHandler(nil))
 	}
 
 	t.Run("mismatch", func(t *testing.T) {
@@ -229,6 +226,7 @@ func TestDelete(t *testing.T) {
 		syntax = "proto3";
 		package test2.subtest;
 		import "test1.proto";
+		import "google/protobuf/descriptor.proto";
 		message Test2 {
 			test1.Test1 field1 = 1;
 			string field2 = 2;
@@ -239,10 +237,15 @@ func TestDelete(t *testing.T) {
 		syntax = "proto3";
 		package test3.subtest.part3;
 		import "test2.proto";
+		import "google/protobuf/descriptor.proto";
 		message Test3 {
 			test2.subtest.Test2 field1 = 1;
 			string field2 = 2;
 			repeated string field3 = 3;
+		}
+
+		extend google.protobuf.MessageOptions {
+			optional string example = 10001;
 		}
 		`,
 		`
@@ -297,29 +300,41 @@ func TestDelete(t *testing.T) {
 		filenames = append(filenames, name)
 	}
 
-	var symtab Symbols
+	symtab := NewSymbolTable()
 
-	// import each file and record the state of the symbol table
-	states := make([]*Symbols, 0, len(files))
-	for _, filename := range filenames {
-		err := symtab.Import(fds[filename], h)
-		require.NoError(t, err)
-		states = append(states, symtab.Clone())
-	}
+	for z := 0; z < 100; z++ {
+		states := make([]*Symbols, 0, len(files))
+		// import each file and record the state of the symbol table
+		for _, filename := range filenames {
+			beforeImport := symtab.Clone()
+			err := symtab.Import(fds[filename], h)
+			afterImport := symtab.Clone()
+			require.NoError(t, err)
+			err = symtab.Delete(fds[filename], h)
+			require.NoError(t, err)
+			requireSymbolsEqual(t, beforeImport, symtab)
+			err = symtab.Import(fds[filename], h)
+			require.NoError(t, err)
+			requireSymbolsEqual(t, afterImport, symtab)
+			states = append(states, symtab.Clone())
+		}
 
-	// delete each file and verify that the state of the symbol table is restored to the previous state
-	for i := len(filenames) - 1; i >= 0; i-- {
-		err := symtab.Delete(fds[filenames[i]], h)
-		require.NoError(t, err)
+		// delete each file and verify that the state of the symbol table is restored to the previous state
+		for i := len(filenames) - 1; i >= 0; i-- {
+			err := symtab.Delete(fds[filenames[i]], h)
+			require.NoError(t, err)
 
-		// if this is the last file, the symbol table should be empty
-		if i == 0 {
-			requireSymbolsEmpty(t, &symtab)
-		} else {
-			// otherwise, the symbol table should match the state recorded after the previous file was imported
-			requireSymbolsEqual(t, &symtab, states[i-1])
+			// if this is the last file, the symbol table should be empty
+			if i == 0 {
+				requireSymbolsEmpty(t, symtab)
+			} else {
+				// otherwise, the symbol table should match the state recorded after the previous file was imported
+				requireSymbolsEqual(t, states[i-1], symtab)
+			}
 		}
 	}
+
+	requireSymbolsEmpty(t, symtab)
 }
 
 func requireSymbolsEmpty(t *testing.T, s *Symbols) {
@@ -330,23 +345,31 @@ func requireSymbolsEmpty(t *testing.T, s *Symbols) {
 	require.Empty(t, s.pkgTrie.symbols)
 }
 
-func requireSymbolsEqual(t *testing.T, a, b *Symbols) {
-	requirePackageSymbolsEqual(t, &a.pkgTrie, &b.pkgTrie)
+func requireSymbolsEqual(t *testing.T, expected, actual *Symbols) {
+	requirePackageSymbolsEqual(t, &expected.pkgTrie, &actual.pkgTrie)
 }
 
-func requirePackageSymbolsEqual(t *testing.T, a, b *packageSymbols) {
-	for k, v := range a.children {
-		requirePackageSymbolsEqual(t, v, b.children[k])
+func requirePackageSymbolsEqual(t *testing.T, expected, actual *packageSymbols) {
+	for k, v := range expected.children {
+		if bc, ok := actual.children[k]; !ok {
+			t.Fatalf("package %s not found in b\n----------\nexpected:\n%+v\n----------\nactual:\n%+v\n", k, expected.MarshalText(), actual.MarshalText()) // todo: handle transitive imports like google.protobuf.descriptor when deleting
+			continue
+		} else {
+			requirePackageSymbolsEqual(t, v, bc)
+		}
 	}
-	requireEquivalent(t, a.exts, b.exts)
-	requireEquivalent(t, a.files, b.files)
-	requireEquivalent(t, a.symbols, b.symbols)
+	requireEquivalent(t, expected.exts, actual.exts)
+	requireEquivalent(t, expected.files, actual.files)
+	requireEquivalent(t, expected.symbols, actual.symbols)
 }
 
 func requireEquivalent(t *testing.T, expected, actual any) {
 	t.Helper()
-	diff := cmp.Diff(expected, actual, cmp.AllowUnexported(packageSymbols{}, symbolEntry{}), cmpopts.EquateEmpty(), protocmp.Transform())
-	if diff != "" {
-		t.Errorf(diff)
+	if !assert.Equal(t, expected, actual) {
+		t.Fatalf("expected:\n%s\nactual:\n%s\n", expected, actual)
 	}
+	// diff := cmp.Diff(expected, actual, cmp.AllowUnexported(packageSymbols{}, symbolEntry{}, extNumber{}, file{}, ast.FileInfo{}), cmpopts.EquateEmpty(), protocmp.Transform())
+	// if diff != "" {
+	// 	t.Errorf(diff)
+	// }
 }

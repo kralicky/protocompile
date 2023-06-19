@@ -42,7 +42,7 @@ import (
 // returned value have all values stored in UninterpretedOptions fields.
 func Link(parsed parser.Result, dependencies Files, symbols *Symbols, handler *reporter.Handler) (Result, error) {
 	if symbols == nil {
-		symbols = &Symbols{}
+		symbols = NewSymbolTable()
 	}
 	prefix := parsed.FileDescriptorProto().GetPackage()
 	if prefix != "" {
