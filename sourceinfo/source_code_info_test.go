@@ -51,15 +51,15 @@ func TestSourceCodeInfo(t *testing.T) {
 	require.NoError(t, err)
 	// also test that imported files have source code info
 	// (desc_test_comments.proto imports desc_test_options.proto)
-	importedFd := fds[0].FindImportByPath("desc_test_options.proto")
+	importedFd := fds.Files[0].FindImportByPath("desc_test_options.proto")
 	require.NotNil(t, importedFd)
 
-	fdset := prototest.LoadDescriptorSet(t, "../internal/testdata/source_info.protoset", linker.ResolverFromFile(fds[0]))
+	fdset := prototest.LoadDescriptorSet(t, "../internal/testdata/source_info.protoset", linker.ResolverFromFile(fds.Files[0]))
 	actualFdset := &descriptorpb.FileDescriptorSet{
 		File: []*descriptorpb.FileDescriptorProto{
 			protoutil.ProtoFromFileDescriptor(importedFd),
-			protoutil.ProtoFromFileDescriptor(fds[0]),
-			protoutil.ProtoFromFileDescriptor(fds[1]),
+			protoutil.ProtoFromFileDescriptor(fds.Files[0]),
+			protoutil.ProtoFromFileDescriptor(fds.Files[1]),
 		},
 	}
 
@@ -179,7 +179,7 @@ func TestSourceCodeInfoOptions(t *testing.T) {
 		}
 		require.NoError(t, err)
 
-		file, err := linker.NewFileRecursive(fds[0])
+		file, err := linker.NewFileRecursive(fds.Files[0])
 		require.NoError(t, err)
 		resolver := linker.ResolverFromFile(file)
 		return describeSourceCodeInfo(file.Path(), file.SourceLocations(), resolver)

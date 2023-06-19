@@ -31,25 +31,25 @@ var ErrInvalidSource = errors.New("parse failed: invalid proto source")
 type ErrorWithPos interface {
 	error
 	// GetPosition returns the source position that caused the underlying error.
-	GetPosition() ast.SourcePos
+	GetPosition() ast.SourcePosInfo
 	// Unwrap returns the underlying error.
 	Unwrap() error
 }
 
 // Error creates a new ErrorWithPos from the given error and source position.
-func Error(pos ast.SourcePos, err error) ErrorWithPos {
+func Error(pos ast.SourcePosInfo, err error) ErrorWithPos {
 	return errorWithSourcePos{pos: pos, underlying: err}
 }
 
 // Errorf creates a new ErrorWithPos whose underlying error is created using the
 // given message format and arguments (via fmt.Errorf).
-func Errorf(pos ast.SourcePos, format string, args ...interface{}) ErrorWithPos {
+func Errorf(pos ast.SourcePosInfo, format string, args ...interface{}) ErrorWithPos {
 	return errorWithSourcePos{pos: pos, underlying: fmt.Errorf(format, args...)}
 }
 
 type errorWithSourcePos struct {
 	underlying error
-	pos        ast.SourcePos
+	pos        ast.SourcePosInfo
 }
 
 func (e errorWithSourcePos) Error() string {
@@ -57,7 +57,7 @@ func (e errorWithSourcePos) Error() string {
 	return fmt.Sprintf("%s: %v", sourcePos, e.underlying)
 }
 
-func (e errorWithSourcePos) GetPosition() ast.SourcePos {
+func (e errorWithSourcePos) GetPosition() ast.SourcePosInfo {
 	return e.pos
 }
 

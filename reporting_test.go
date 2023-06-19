@@ -417,7 +417,7 @@ func TestWarningReporting(t *testing.T) {
 			var msgs []msg
 			rep := func(warn reporter.ErrorWithPos) {
 				msgs = append(msgs, msg{
-					pos: warn.GetPosition(), text: warn.Unwrap().Error(),
+					pos: warn.GetPosition().Start(), text: warn.Unwrap().Error(),
 				})
 			}
 			compiler := Compiler{

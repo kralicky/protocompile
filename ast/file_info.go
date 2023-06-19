@@ -413,10 +413,30 @@ type Item int
 // ItemInfo provides details about an item's location in the source file and
 // its contents.
 type ItemInfo interface {
-	Start() SourcePos
-	End() SourcePos
+	SourcePosInfo
 	LeadingWhitespace() string
 	RawText() string
+}
+
+type SourcePosInfo interface {
+	Start() SourcePos
+	End() SourcePos
+}
+
+func NewSourcePosInfo(start, end SourcePos) SourcePosInfo {
+	return sourcePosInfo{start, end}
+}
+
+type sourcePosInfo struct {
+	start, end SourcePos
+}
+
+func (s sourcePosInfo) Start() SourcePos {
+	return s.start
+}
+
+func (s sourcePosInfo) End() SourcePos {
+	return s.end
 }
 
 // NodeInfo represents the details for a node or token in the source file's AST.

@@ -63,12 +63,12 @@ func (r *result) validateExtension(fld protoreflect.FieldDescriptor, handler *re
 		// themselves (no scalar extensions)
 		if fld.Kind() != protoreflect.MessageKind {
 			file := r.FileNode()
-			pos := file.NodeInfo(r.FieldNode(fd.proto).FieldType()).Start()
+			pos := file.NodeInfo(r.FieldNode(fd.proto).FieldType())
 			return handler.HandleErrorf(pos, "messages with message-set wire format cannot contain scalar extensions, only messages")
 		}
 		if fld.Cardinality() == protoreflect.Repeated {
 			file := r.FileNode()
-			pos := file.NodeInfo(r.FieldNode(fd.proto).FieldLabel()).Start()
+			pos := file.NodeInfo(r.FieldNode(fd.proto).FieldLabel())
 			return handler.HandleErrorf(pos, "messages with message-set wire format cannot contain repeated extensions, only optional")
 		}
 	} else if fld.Number() > internal.MaxNormalTag {
@@ -76,7 +76,7 @@ func (r *result) validateExtension(fld protoreflect.FieldDescriptor, handler *re
 		// now that things are linked, we can check if the extendee is messageset wire format
 		// and, if not, enforce tighter limit.
 		file := r.FileNode()
-		pos := file.NodeInfo(r.FieldNode(fd.proto).FieldTag()).Start()
+		pos := file.NodeInfo(r.FieldNode(fd.proto).FieldTag())
 		return handler.HandleErrorf(pos, "tag number %d is higher than max allowed tag number (%d)", fld.Number(), internal.MaxNormalTag)
 	}
 
@@ -128,12 +128,12 @@ func (r *result) validateJSONNamesInEnum(ed *descriptorpb.EnumDescriptorProto, h
 			fldNode := r.EnumValueNode(evd)
 			existingNode := r.EnumValueNode(existing)
 			conflictErr := fmt.Errorf("%s: camel-case name (with optional enum name prefix removed) %q conflicts with camel-case name of enum value %s, defined at %v",
-				scope, name, existing.GetName(), r.FileNode().NodeInfo(existingNode).Start())
+				scope, name, existing.GetName(), r.FileNode().NodeInfo(existingNode))
 
 			// Since proto2 did not originally have a JSON format, we report conflicts as just warnings
 			if r.Syntax() != protoreflect.Proto3 {
-				handler.HandleWarningWithPos(r.FileNode().NodeInfo(fldNode).Start(), conflictErr)
-			} else if err := handler.HandleErrorf(r.FileNode().NodeInfo(fldNode).Start(), conflictErr.Error()); err != nil {
+				handler.HandleWarningWithPos(r.FileNode().NodeInfo(fldNode), conflictErr)
+			} else if err := handler.HandleErrorf(r.FileNode().NodeInfo(fldNode), conflictErr.Error()); err != nil {
 				return err
 			}
 		} else {
@@ -176,9 +176,9 @@ func (r *result) validateFieldJSONNames(md *descriptorpb.DescriptorProto, useCus
 				if !existing.custom {
 					srcCustomStr = "default"
 				}
-				pos := r.FileNode().NodeInfo(fldNode).Start()
+				pos := r.FileNode().NodeInfo(fldNode)
 				conflictErr := reporter.Errorf(pos, "%s: %s JSON name %q conflicts with %s JSON name of field %s, defined at %v",
-					scope, customStr, name, srcCustomStr, existing.source.GetName(), r.FileNode().NodeInfo(r.FieldNode(existing.source)).Start())
+					scope, customStr, name, srcCustomStr, existing.source.GetName(), r.FileNode().NodeInfo(r.FieldNode(existing.source)))
 
 				// Since proto2 did not originally have default JSON names, we report conflicts
 				// between default names (neither is a custom name) as just warnings.

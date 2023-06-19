@@ -741,7 +741,8 @@ func (l *protoLex) skipToEndOfBlockComment(lval *protoSymType) (ok, hasErr bool)
 func (l *protoLex) addSourceError(err error) (reporter.ErrorWithPos, bool) {
 	ewp, ok := err.(reporter.ErrorWithPos)
 	if !ok {
-		ewp = reporter.Error(l.prev(), err)
+		prev := l.prev()
+		ewp = reporter.Error(ast.NewSourcePosInfo(prev, prev), err)
 	}
 	handlerErr := l.handler.HandleError(ewp)
 	return ewp, handlerErr == nil
@@ -756,5 +757,5 @@ func (l *protoLex) errWithCurrentPos(err error, offset int) reporter.ErrorWithPo
 		return ewp
 	}
 	pos := l.info.SourcePos(l.input.offset() + offset)
-	return reporter.Error(pos, err)
+	return reporter.Error(ast.NewSourcePosInfo(pos, pos), err)
 }

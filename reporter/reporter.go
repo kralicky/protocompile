@@ -152,7 +152,7 @@ func (h *Handler) HandleError(err error) error {
 // If the handler has already aborted (by returning a non-nil error from a prior
 // call to HandleError or HandleErrorf), that same error is returned and the
 // given error is not reported.
-func (h *Handler) HandleErrorWithPos(pos ast.SourcePos, err error) error {
+func (h *Handler) HandleErrorWithPos(pos ast.SourcePosInfo, err error) error {
 	if ewp, ok := err.(ErrorWithPos); ok {
 		// replace existing position with given one
 		err = errorWithSourcePos{pos: pos, underlying: ewp.Unwrap()}
@@ -168,7 +168,7 @@ func (h *Handler) HandleErrorWithPos(pos ast.SourcePos, err error) error {
 // If the handler has already aborted (by returning a non-nil error from a call
 // to HandleError or HandleErrorf), that same error is returned and the given
 // error is not reported.
-func (h *Handler) HandleErrorf(pos ast.SourcePos, format string, args ...interface{}) error {
+func (h *Handler) HandleErrorf(pos ast.SourcePosInfo, format string, args ...interface{}) error {
 	return h.HandleError(Errorf(pos, format, args...))
 }
 
@@ -190,7 +190,7 @@ func (h *Handler) HandleWarning(err ErrorWithPos) {
 
 // HandleWarningWithPos handles a warning with the given source position. This will
 // delegate to the handler's configured reporter.
-func (h *Handler) HandleWarningWithPos(pos ast.SourcePos, err error) {
+func (h *Handler) HandleWarningWithPos(pos ast.SourcePosInfo, err error) {
 	ewp, ok := err.(ErrorWithPos)
 	if ok {
 		// replace existing position with given one
@@ -203,7 +203,7 @@ func (h *Handler) HandleWarningWithPos(pos ast.SourcePos, err error) {
 
 // HandleWarningf handles a warning with the given source position, creating the
 // actual error value using the given message format and arguments.
-func (h *Handler) HandleWarningf(pos ast.SourcePos, format string, args ...interface{}) {
+func (h *Handler) HandleWarningf(pos ast.SourcePosInfo, format string, args ...interface{}) {
 	h.HandleWarning(Errorf(pos, format, args...))
 }
 

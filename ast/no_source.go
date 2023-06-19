@@ -20,6 +20,23 @@ func UnknownPos(filename string) SourcePos {
 	return SourcePos{Filename: filename}
 }
 
+func UnknownPosInfo(filename string) SourcePosInfo {
+	return NoSourcePosInfo{filename: filename}
+}
+
+// NoSourcePosInfo returns UnknownPos for both Start and End.
+type NoSourcePosInfo struct {
+	filename string
+}
+
+func (n NoSourcePosInfo) Start() SourcePos {
+	return UnknownPos(n.filename)
+}
+
+func (n NoSourcePosInfo) End() SourcePos {
+	return UnknownPos(n.filename)
+}
+
 // NoSourceNode is a placeholder AST node that implements numerous
 // interfaces in this package. It can be used to represent an AST
 // element for a file whose source is not available.
