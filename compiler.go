@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"io"
 	"runtime"
-	"runtime/debug"
 	"strings"
 	"sync"
 
@@ -115,6 +114,11 @@ const (
 	SourceInfoExtraOptionLocations = SourceInfoMode(4)
 )
 
+type CompileResult struct {
+	linker.Files
+	UnlinkedParserResults map[string]parser.Result
+}
+
 // Compile compiles the given file names into fully-linked descriptors. The
 // compiler's resolver is used to locate source code (or intermediate artifacts
 // such as parsed ASTs or descriptor protos) and then do what is necessary to
@@ -125,9 +129,9 @@ const (
 // or source code). That result will contain a full AST for the file if the
 // compiler had to parse it (i.e. the resolver provided source code for that
 // file).
-func (c *Compiler) Compile(ctx context.Context, files ...string) (linker.Files, error) {
+func (c *Compiler) Compile(ctx context.Context, files ...string) (CompileResult, error) {
 	if len(files) == 0 {
-		return nil, nil
+		return CompileResult{}, nil
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -180,27 +184,38 @@ func (c *Compiler) Compile(ctx context.Context, files ...string) (linker.Files, 
 	e.mu.Unlock()
 
 	descs := make(linker.Files, 0, len(results))
+	unlinked := make(map[string]parser.Result)
 	var firstError error
 	for _, r := range results {
 		select {
 		case <-r.ready:
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return CompileResult{}, ctx.Err()
 		}
 		if r.err != nil {
 			if firstError == nil {
 				firstError = r.err
 			}
 		}
-		descs = append(descs, r.res)
+		if r.res != nil {
+			descs = append(descs, r.res)
+		} else if r.parseRes != nil {
+			unlinked[r.name] = r.parseRes
+		}
 	}
 
 	if err := h.Error(); err != nil {
-		return descs, err
+		return CompileResult{
+			Files:                 descs,
+			UnlinkedParserResults: unlinked,
+		}, err
 	}
 	// this should probably never happen; if any task returned an
 	// error, h.Error() should be non-nil
-	return descs, firstError
+	return CompileResult{
+		Files:                 descs,
+		UnlinkedParserResults: unlinked,
+	}, firstError
 }
 
 type result struct {
@@ -213,7 +228,9 @@ type result struct {
 
 	// produces a linker.File or error, only available when ready is closed
 	res linker.File
-	err error
+	// parser result, may be available if linking fails but the file is syntactically valid
+	parseRes parser.Result
+	err      error
 
 	mu sync.Mutex
 	// the results that are dependencies of this result; this result is
@@ -225,7 +242,23 @@ type result struct {
 func (r *result) fail(err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	r.err = err
+	r.res = nil
+	r.parseRes = nil
+
+	r.lastBlockedOn, r.blockedOn = r.blockedOn, nil
+	close(r.ready)
+}
+
+func (r *result) failPartial(parseRes parser.Result, err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.err = err
+	r.res = nil
+	r.parseRes = parseRes
+
 	r.lastBlockedOn, r.blockedOn = r.blockedOn, nil
 	close(r.ready)
 }
@@ -233,7 +266,13 @@ func (r *result) fail(err error) {
 func (r *result) complete(f linker.File) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	r.err = nil
 	r.res = f
+	if parseRes, ok := f.(parser.Result); ok {
+		r.parseRes = parseRes
+	}
+
 	r.lastBlockedOn, r.blockedOn = r.blockedOn, nil
 	close(r.ready)
 }
@@ -340,23 +379,23 @@ func (e *executor) compileLocked(ctx context.Context, file string, explicitFile 
 	}
 	e.results[file] = r
 	go func() {
-		defer func() {
-			if p := recover(); p != nil {
-				if r.err == nil {
-					// TODO: strip top frames from stack trace so that the panic is
-					//  the top of the trace?
-					panicErr := PanicError{File: file, Value: p, Stack: string(debug.Stack())}
-					r.fail(panicErr)
-				}
-				// TODO: if r.err != nil, then this task has already
-				//  failed and there's nothing we can really do to
-				//  communicate this panic to parent goroutine. This
-				//  means the panic must have happened *after* the
-				//  failure was already recorded (or during?)
-				//  It would be nice to do something else here, like
-				//  send the compiler an out-of-band error? Or log?
-			}
-		}()
+		// defer func() {
+		// 	if p := recover(); p != nil {
+		// 		if r.err == nil {
+		// 			// TODO: strip top frames from stack trace so that the panic is
+		// 			//  the top of the trace?
+		// 			panicErr := PanicError{File: file, Value: p, Stack: string(debug.Stack())}
+		// 			r.fail(panicErr)
+		// 		}
+		// 		// TODO: if r.err != nil, then this task has already
+		// 		//  failed and there's nothing we can really do to
+		// 		//  communicate this panic to parent goroutine. This
+		// 		//  means the panic must have happened *after* the
+		// 		//  failure was already recorded (or during?)
+		// 		//  It would be nice to do something else here, like
+		// 		//  send the compiler an out-of-band error? Or log?
+		// 	}
+		// }()
 		e.doCompile(ctx, file, r)
 	}()
 	return r
@@ -438,8 +477,12 @@ func (e *executor) doCompile(ctx context.Context, file string, r *result) {
 		}
 	}()
 
-	desc, err := t.asFile(ctx, file, sr)
+	desc, err := t.asFile(ctx, file, &sr)
 	if err != nil {
+		if sr.ParseResult != nil {
+			r.failPartial(sr.ParseResult, err)
+			return
+		}
 		r.fail(err)
 		return
 	}
@@ -471,7 +514,8 @@ func (t *task) release() {
 
 const descriptorProtoPath = "google/protobuf/descriptor.proto"
 
-func (t *task) asFile(ctx context.Context, name string, r SearchResult) (linker.File, error) {
+func (t *task) asFile(ctx context.Context, name string, pr *SearchResult) (linker.File, error) {
+	r := *pr
 	if r.Desc != nil {
 		if r.Desc.Path() != name {
 			return nil, fmt.Errorf("search result for %q returned descriptor for %q", name, r.Desc.Path())
@@ -483,6 +527,8 @@ func (t *task) asFile(ctx context.Context, name string, r SearchResult) (linker.
 	if err != nil {
 		return nil, err
 	}
+	pr.ParseResult = parseRes
+
 	if linkRes, ok := parseRes.(linker.Result); ok {
 		// if resolver returned a parse result that was actually a link result,
 		// use the link result directly (no other steps needed)
@@ -589,7 +635,7 @@ func (t *task) asFile(ctx context.Context, name string, r SearchResult) (linker.
 	return t.link(parseRes, deps, overrideDescriptorProto)
 }
 
-func (e *executor) checkForDependencyCycle(res *result, sequence []string, pos ast.SourcePos, checked map[string]struct{}) error {
+func (e *executor) checkForDependencyCycle(res *result, sequence []string, pos ast.SourcePosInfo, checked map[string]struct{}) error {
 	if _, ok := checked[res.name]; ok {
 		// already checked this one
 		return nil
@@ -618,7 +664,7 @@ func (e *executor) checkForDependencyCycle(res *result, sequence []string, pos a
 	return nil
 }
 
-func handleImportCycle(h *reporter.Handler, pos ast.SourcePos, importSequence []string, dep string) {
+func handleImportCycle(h *reporter.Handler, pos ast.SourcePosInfo, importSequence []string, dep string) {
 	var buf bytes.Buffer
 	buf.WriteString("cycle found in imports: ")
 	for _, imp := range importSequence {
@@ -629,23 +675,23 @@ func handleImportCycle(h *reporter.Handler, pos ast.SourcePos, importSequence []
 	_ = h.HandleErrorf(pos, buf.String())
 }
 
-func findImportPos(res parser.Result, dep string) ast.SourcePos {
+func findImportPos(res parser.Result, dep string) ast.SourcePosInfo {
 	root := res.AST()
 	if root == nil {
-		return ast.UnknownPos(res.FileNode().Name())
+		return ast.UnknownPosInfo(res.FileNode().Name())
 	}
 	for _, decl := range root.Decls {
 		if imp, ok := decl.(*ast.ImportNode); ok {
 			if imp.Name.AsString() == dep {
-				return root.NodeInfo(imp.Name).Start()
+				return root.NodeInfo(imp.Name)
 			}
 		}
 	}
 	// this should never happen...
-	return ast.UnknownPos(res.FileNode().Name())
+	return ast.UnknownPosInfo(res.FileNode().Name())
 }
 
-func (t *task) link(parseRes parser.Result, deps linker.Files, overrideDescriptorProtoRes linker.File) (linker.File, error) {
+func (t *task) link(parseRes parser.Result, deps linker.Files, overrideDescriptorProtoRes linker.File) (linker.Result, error) {
 	t.e.symTxLock.Lock()
 	pendingSymtab := t.e.sym.Clone()
 	file, err := linker.Link(parseRes, deps, pendingSymtab, t.h)

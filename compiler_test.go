@@ -51,7 +51,7 @@ func TestParseFilesMessageComments(t *testing.T) {
 	}
 	comments := ""
 	expected := " Comment for TestMessage\n"
-	for _, fd := range files {
+	for _, fd := range files.Files {
 		msg := fd.Messages().ByName("TestMessage")
 		if msg != nil {
 			si := fd.SourceLocations().ByDescriptor(msg)
@@ -82,7 +82,7 @@ func TestParseFilesWithImportsNoImportPath(t *testing.T) {
 	if !assert.Nil(t, err, "%v", err) {
 		t.FailNow()
 	}
-	assert.Equal(t, len(relFilePaths), len(protos))
+	assert.Equal(t, len(relFilePaths), len(protos.Files))
 }
 
 func TestParseFilesWithDependencies(t *testing.T) {
@@ -220,8 +220,8 @@ message Foo {
 	fds, err := compiler.Compile(ctx, "test.proto")
 	assert.Nil(t, err)
 
-	field := fds[0].Messages().Get(0).Fields().Get(0)
-	comment := fds[0].SourceLocations().ByDescriptor(field).LeadingComments
+	field := fds.Files[0].Messages().Get(0).Fields().Get(0)
+	comment := fds.Files[0].SourceLocations().ByDescriptor(field).LeadingComments
 	assert.Equal(t, " leading comments\n", comment)
 }
 
@@ -252,12 +252,12 @@ message Foo {
 		t.FailNow()
 	}
 
-	ext := fds[0].Extensions().ByName("foo")
-	md := fds[0].Messages().Get(0)
+	ext := fds.Files[0].Extensions().ByName("foo")
+	md := fds.Files[0].Messages().Get(0)
 	fooVal := md.Options().ProtoReflect().Get(ext)
 	assert.Equal(t, "foo", fooVal.String())
 
-	ext = fds[0].Extensions().ByName("bar")
+	ext = fds.Files[0].Extensions().ByName("bar")
 	barVal := md.Options().ProtoReflect().Get(ext)
 	assert.Equal(t, int64(123), barVal.Int())
 }
@@ -283,7 +283,7 @@ func TestDataRace(t *testing.T) {
 		SourceInfoMode: SourceInfoStandard,
 	}).Compile(context.Background(), "desc_test_complex.proto")
 	require.NoError(t, err)
-	resolvedProto := files[0].(linker.Result).FileDescriptorProto()
+	resolvedProto := files.Files[0].(linker.Result).FileDescriptorProto()
 
 	descriptor, err := protoregistry.GlobalFiles.FindFileByPath(descriptorProtoPath)
 	require.NoError(t, err)
@@ -459,7 +459,7 @@ func TestIncrementalCompiler(t *testing.T) {
 	res, err := comp.Compile(context.Background(), "a/b/b1.proto", "a/b/b2.proto", "c/c.proto")
 	require.NoError(t, err)
 
-	requireASTsEqual(t, baseResults, res, "a/b/b1.proto", "a/b/b2.proto", "c/c.proto")
+	requireASTsEqual(t, baseResults, res.Files, "a/b/b1.proto", "a/b/b2.proto", "c/c.proto")
 
 	overlay["a/b/b1.proto"] = `
 syntax = "proto3";
@@ -511,7 +511,7 @@ func buildBaseDescriptors() linker.Files {
 		panic(err)
 	}
 
-	return results
+	return results.Files
 }
 
 func requireASTsEqual(t *testing.T, a, b linker.Files, filenames ...string) {

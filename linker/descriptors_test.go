@@ -59,7 +59,7 @@ func TestFields(t *testing.T) {
 			}
 			results, err := compiler.Compile(context.Background(), testFileName)
 			require.NoError(t, err)
-			fd := results[0]
+			fd := results.Files[0]
 
 			checkAttributes(t, protocFd, fd, fmt.Sprintf("%q", testFileName))
 		})

@@ -285,8 +285,8 @@ func benchmarkProtocompile(b *testing.B, c *protocompile.Compiler, sources []str
 	fds, err := c.Compile(context.Background(), sources...)
 	require.NoError(b, err)
 	var fdSet descriptorpb.FileDescriptorSet
-	fdSet.File = make([]*descriptorpb.FileDescriptorProto, len(fds))
-	for i, fd := range fds {
+	fdSet.File = make([]*descriptorpb.FileDescriptorProto, len(fds.Files))
+	for i, fd := range fds.Files {
 		if canonicalBytes {
 			fdSet.File[i] = fd.(linker.Result).CanonicalProto()
 		} else {
