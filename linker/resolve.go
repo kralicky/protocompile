@@ -540,6 +540,7 @@ func (r *result) resolveOptionValue(handler *reporter.Handler, mc *internal.Mess
 					if err := handler.HandleErrorf(r.FileNode().NodeInfo(fld.Name.Name), "%v%v", mc, err); err != nil {
 						return err
 					}
+					continue
 				} else {
 					r.optionQualifiedNames[fld.Name.Name] = fqn
 				}

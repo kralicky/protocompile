@@ -854,15 +854,23 @@ func (interp *interpreter) interpretOptions(fqn string, element, opts proto.Mess
 			if err := interp.reporter.HandleErrorf(interp.nodeInfo(node.GetName()), "%vinvalid option 'uninterpreted_option'", mc); err != nil {
 				return nil, err
 			}
+			continue
 		}
 		mc.Option = uo
 		res, err := interp.interpretField(mc, msg, uo, 0, nil)
 		if err != nil {
 			if interp.lenient {
+				interp.reporter.HandleWarningf(interp.nodeInfo(node), "%v%v", mc, err)
 				remain = append(remain, uo)
 				continue
 			}
 			return nil, err
+		}
+		if res == nil {
+			if err := interp.reporter.HandleErrorf(interp.nodeInfo(node.GetName()), "%vunknown option", mc); err != nil {
+				return nil, err
+			}
+			continue
 		}
 		res.unknown = !isKnownField(optsDesc, res)
 		results = append(results, res)
@@ -899,9 +907,7 @@ func (interp *interpreter) interpretOptions(fqn string, element, opts proto.Mess
 
 	if err := validateRecursive(msg, ""); err != nil {
 		node := interp.file.Node(element)
-		if err := interp.reporter.HandleErrorf(interp.nodeInfo(node), "error in %s options: %v", descriptorType(element), err); err != nil {
-			return nil, err
-		}
+		return nil, interp.reporter.HandleErrorf(interp.nodeInfo(node), "error in %s options: %v", descriptorType(element), err)
 	}
 
 	// now try to convert into the passed in message and fail if not successful
