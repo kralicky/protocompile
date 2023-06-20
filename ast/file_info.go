@@ -419,6 +419,7 @@ type ItemInfo interface {
 }
 
 type SourcePosInfo interface {
+	fmt.Stringer
 	Start() SourcePos
 	End() SourcePos
 }
@@ -437,6 +438,10 @@ func (s sourcePosInfo) Start() SourcePos {
 
 func (s sourcePosInfo) End() SourcePos {
 	return s.end
+}
+
+func (s sourcePosInfo) String() string {
+	return fmt.Sprintf("%s:%d:%d-%d", s.start.Filename, s.start.Line, s.start.Col, s.end.Col)
 }
 
 // NodeInfo represents the details for a node or token in the source file's AST.
@@ -545,6 +550,11 @@ func (n NodeInfo) LeadingComments() Comments {
 		first:    start,
 		num:      numComments,
 	}
+}
+
+func (n NodeInfo) String() string {
+	start, end := n.Start(), n.End()
+	return fmt.Sprintf("%s:%d:%d-%d", start.Filename, start.Line, start.Col, end.Col)
 }
 
 // TrailingComments returns the trailing comment for the element, if any.
@@ -707,4 +717,13 @@ func (c Comment) LeadingWhitespace() string {
 func (c Comment) RawText() string {
 	span := c.fileInfo.items[c.AsItem()]
 	return string(c.fileInfo.data[span.offset : span.offset+span.length])
+}
+
+func (c Comment) String() string {
+	if !c.IsValid() {
+		return ""
+	}
+
+	start, end := c.Start(), c.End()
+	return fmt.Sprintf("%s:%d:%d-%d:%d: %s", start.Filename, start.Line, start.Col, end.Line, end.Col, c.RawText())
 }

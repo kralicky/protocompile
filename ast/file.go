@@ -120,6 +120,7 @@ func (f *FileNode) Tokens() Sequence[Token] {
 func (f *FileNode) SourcePos(offset int) SourcePos {
 	return f.fileInfo.SourcePos(offset)
 }
+
 func (f *FileNode) TokenAtOffset(offset int) Token {
 	return f.fileInfo.TokenAtOffset(offset)
 }

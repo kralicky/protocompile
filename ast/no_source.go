@@ -37,6 +37,10 @@ func (n NoSourcePosInfo) End() SourcePos {
 	return UnknownPos(n.filename)
 }
 
+func (n NoSourcePosInfo) String() string {
+	return n.filename
+}
+
 // NoSourceNode is a placeholder AST node that implements numerous
 // interfaces in this package. It can be used to represent an AST
 // element for a file whose source is not available.
