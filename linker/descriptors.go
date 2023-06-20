@@ -29,6 +29,7 @@ import (
 	"github.com/bufbuild/protocompile/internal"
 	"github.com/bufbuild/protocompile/parser"
 	"github.com/bufbuild/protocompile/protoutil"
+	"github.com/bufbuild/protocompile/sourceinfo"
 )
 
 // This file contains implementations of protoreflect.Descriptor. Note that
@@ -69,6 +70,7 @@ type result struct {
 	extensions   extDescriptors
 	services     svcDescriptors
 	srcLocations srcLocs
+	optsIndex    sourceinfo.OptionIndex
 }
 
 var _ protoreflect.FileDescriptor = (*result)(nil)
@@ -151,10 +153,11 @@ func (r *result) Services() protoreflect.ServiceDescriptors {
 	return &r.services
 }
 
-func (r *result) PopulateSourceCodeInfo() {
+func (r *result) PopulateSourceCodeInfo(optsIndex sourceinfo.OptionIndex) {
 	srcLocProtos := asSourceLocations(r.FileDescriptorProto().GetSourceCodeInfo().GetLocation())
 	srcLocIndex := computeSourceLocIndex(srcLocProtos)
 	r.srcLocations = srcLocs{file: r, locs: srcLocProtos, index: srcLocIndex}
+	r.optsIndex = optsIndex
 }
 
 func (r *result) SourceLocations() protoreflect.SourceLocations {

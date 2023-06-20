@@ -764,7 +764,7 @@ func (t *task) link(parseRes parser.Result, deps linker.Files, overrideDescripto
 			srcInfoOpts = append(srcInfoOpts, sourceinfo.WithExtraOptionLocations())
 		}
 		parseRes.FileDescriptorProto().SourceCodeInfo = sourceinfo.GenerateSourceInfo(parseRes.AST(), optsIndex, srcInfoOpts...)
-		file.PopulateSourceCodeInfo()
+		file.PopulateSourceCodeInfo(optsIndex)
 	}
 
 	if !t.e.c.RetainASTs {

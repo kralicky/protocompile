@@ -23,6 +23,7 @@ import (
 	"github.com/bufbuild/protocompile/ast"
 	"github.com/bufbuild/protocompile/parser"
 	"github.com/bufbuild/protocompile/reporter"
+	"github.com/bufbuild/protocompile/sourceinfo"
 )
 
 // Link handles linking a parsed descriptor proto into a fully-linked descriptor.
@@ -125,7 +126,7 @@ type Result interface {
 	// its `source_code_info` field populated. This is typically a post-process
 	// step separate from linking, because computing source code info requires
 	// interpreting options (which is done after linking).
-	PopulateSourceCodeInfo()
+	PopulateSourceCodeInfo(sourceinfo.OptionIndex)
 
 	// CanonicalProto returns the file descriptor proto in a form that
 	// will be serialized in a canonical way. The "canonical" way matches
