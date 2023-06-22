@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"io"
 	"runtime"
-	"runtime/debug"
 	"strings"
 	"sync"
 
@@ -356,6 +355,12 @@ func (e *executor) invalidate(files ...string) []string {
 
 	filenames := make([]string, 0, len(invalidated))
 	for name := range invalidated {
+		if _, err := e.c.Resolver.FindFileByPath(name); err != nil {
+			// if the file doesn't exist anymore, we don't need to
+			// recompile it
+			fmt.Println("invalidated file was deleted, skipping: ", name)
+			continue
+		}
 		filenames = append(filenames, name)
 	}
 	return filenames
@@ -396,9 +401,6 @@ func (e *executor) compileLocked(ctx context.Context, file string, explicitFile 
 		return r
 	}
 
-	if e.hooks.PreCompile != nil {
-		e.hooks.PreCompile(file)
-	}
 	// fmt.Printf("compiling %s\n", file)
 
 	r = &result{
@@ -409,21 +411,21 @@ func (e *executor) compileLocked(ctx context.Context, file string, explicitFile 
 	e.results[file] = r
 	go func() {
 		defer func() {
-			if p := recover(); p != nil {
-				if r.err == nil {
-					// TODO: strip top frames from stack trace so that the panic is
-					//  the top of the trace?
-					panicErr := PanicError{File: file, Value: p, Stack: string(debug.Stack())}
-					r.fail(panicErr)
-				}
-				// TODO: if r.err != nil, then this task has already
-				//  failed and there's nothing we can really do to
-				//  communicate this panic to parent goroutine. This
-				//  means the panic must have happened *after* the
-				//  failure was already recorded (or during?)
-				//  It would be nice to do something else here, like
-				//  send the compiler an out-of-band error? Or log?
-			}
+			// if p := recover(); p != nil {
+			// 	if r.err == nil {
+			// 		// TODO: strip top frames from stack trace so that the panic is
+			// 		//  the top of the trace?
+			// 		panicErr := PanicError{File: file, Value: p, Stack: string(debug.Stack())}
+			// 		r.fail(panicErr)
+			// 	}
+			// 	// TODO: if r.err != nil, then this task has already
+			// 	//  failed and there's nothing we can really do to
+			// 	//  communicate this panic to parent goroutine. This
+			// 	//  means the panic must have happened *after* the
+			// 	//  failure was already recorded (or during?)
+			// 	//  It would be nice to do something else here, like
+			// 	//  send the compiler an out-of-band error? Or log?
+			// }
 
 			if e.hooks.PostCompile != nil {
 				e.hooks.PostCompile(file)
@@ -493,6 +495,10 @@ func (e *executor) doCompile(ctx context.Context, file string, r *result) {
 		return
 	}
 	defer t.release()
+
+	if e.hooks.PreCompile != nil {
+		e.hooks.PreCompile(file)
+	}
 
 	sr, err := e.c.Resolver.FindFileByPath(file)
 	if err != nil {
