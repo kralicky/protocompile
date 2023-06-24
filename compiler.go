@@ -642,7 +642,10 @@ func (t *task) asFile(ctx context.Context, name string, pr *SearchResult) (linke
 						// it's usually considered immediately fatal. However, if the reason
 						// we were resolving is due to an import, turn this into an error with
 						// source position that pinpoints the import statement and report it.
-						return nil, reporter.Error(findImportPos(parseRes, res.name), rerr)
+						if err := t.h.HandleErrorWithPos(findImportPos(parseRes, res.name), rerr); err != nil {
+							return nil, err
+						}
+						continue
 					}
 					return nil, res.err
 				}

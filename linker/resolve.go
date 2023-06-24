@@ -71,6 +71,12 @@ func resolveInFile[T any](f File, publicImportsOnly bool, checked []string, fn f
 	imports := f.Imports()
 	for i, l := 0, imports.Len(); i < l; i++ {
 		imp := imports.Get(i)
+		if imp.FileDescriptor == nil {
+			// this can happen when an import cannot be resolved, but we are trying to
+			// continue anyway to report additional errors (e.g types that can't be
+			// resolved because they are in an import that can't be resolved)
+			continue
+		}
 		if publicImportsOnly && !imp.IsPublic {
 			continue
 		}
@@ -173,8 +179,10 @@ func (r *result) resolveReferences(handler *reporter.Handler, s *Symbols) error 
 		}
 	}
 
+	file := r.FileNode()
+
 	return walk.DescriptorsEnterAndExit(r,
-		func(d protoreflect.Descriptor) error {
+		func(d protoreflect.Descriptor) (retErr error) {
 			fqn := d.FullName()
 			switch d := d.(type) {
 			case *msgDescriptor:
@@ -207,7 +215,6 @@ func (r *result) resolveReferences(handler *reporter.Handler, s *Symbols) error 
 					return err
 				}
 				if r.Syntax() == protoreflect.Proto3 && !allowedProto3Extendee(d.field.proto.GetExtendee()) {
-					file := r.FileNode()
 					node := r.FieldNode(d.field.proto).FieldExtendee()
 					if err := handler.HandleErrorf(file.NodeInfo(node), "extend blocks in proto3 can only be used to define custom options"); err != nil {
 						return err
@@ -440,11 +447,17 @@ func resolveMethodTypes(m *mtdDescriptor, handler *reporter.Handler, scopes []sc
 	node := r.MethodNode(mtd)
 	dsc := r.resolve(mtd.GetInputType(), false, scopes)
 	if dsc == nil {
-		return handler.HandleErrorf(file.NodeInfo(node.GetInputType()), "%s: unknown request type %s", scope, mtd.GetInputType())
+		if err := handler.HandleErrorf(file.NodeInfo(node.GetInputType()), "%s: unknown request type %s", scope, mtd.GetInputType()); err != nil {
+			return err
+		}
 	} else if isSentinelDescriptor(dsc) {
-		return handler.HandleErrorf(file.NodeInfo(node.GetInputType()), "%s: unknown request type %s; resolved to %s which is not defined; consider using a leading dot", scope, mtd.GetInputType(), dsc.FullName())
+		if err := handler.HandleErrorf(file.NodeInfo(node.GetInputType()), "%s: unknown request type %s; resolved to %s which is not defined; consider using a leading dot", scope, mtd.GetInputType(), dsc.FullName()); err != nil {
+			return err
+		}
 	} else if msg, ok := dsc.(protoreflect.MessageDescriptor); !ok {
-		return handler.HandleErrorf(file.NodeInfo(node.GetInputType()), "%s: invalid request type: %s is %s, not a message", scope, dsc.FullName(), descriptorTypeWithArticle(dsc))
+		if err := handler.HandleErrorf(file.NodeInfo(node.GetInputType()), "%s: invalid request type: %s is %s, not a message", scope, dsc.FullName(), descriptorTypeWithArticle(dsc)); err != nil {
+			return err
+		}
 	} else {
 		typeName := "." + string(dsc.FullName())
 		if mtd.GetInputType() != typeName {
@@ -456,11 +469,17 @@ func resolveMethodTypes(m *mtdDescriptor, handler *reporter.Handler, scopes []sc
 	// TODO: make input and output type resolution more DRY
 	dsc = r.resolve(mtd.GetOutputType(), false, scopes)
 	if dsc == nil {
-		return handler.HandleErrorf(file.NodeInfo(node.GetOutputType()), "%s: unknown response type %s", scope, mtd.GetOutputType())
+		if err := handler.HandleErrorf(file.NodeInfo(node.GetOutputType()), "%s: unknown response type %s", scope, mtd.GetOutputType()); err != nil {
+			return err
+		}
 	} else if isSentinelDescriptor(dsc) {
-		return handler.HandleErrorf(file.NodeInfo(node.GetOutputType()), "%s: unknown response type %s; resolved to %s which is not defined; consider using a leading dot", scope, mtd.GetOutputType(), dsc.FullName())
+		if err := handler.HandleErrorf(file.NodeInfo(node.GetOutputType()), "%s: unknown response type %s; resolved to %s which is not defined; consider using a leading dot", scope, mtd.GetOutputType(), dsc.FullName()); err != nil {
+			return err
+		}
 	} else if msg, ok := dsc.(protoreflect.MessageDescriptor); !ok {
-		return handler.HandleErrorf(file.NodeInfo(node.GetOutputType()), "%s: invalid response type: %s is %s, not a message", scope, dsc.FullName(), descriptorTypeWithArticle(dsc))
+		if err := handler.HandleErrorf(file.NodeInfo(node.GetOutputType()), "%s: invalid response type: %s is %s, not a message", scope, dsc.FullName(), descriptorTypeWithArticle(dsc)); err != nil {
+			return err
+		}
 	} else {
 		typeName := "." + string(dsc.FullName())
 		if mtd.GetOutputType() != typeName {

@@ -153,6 +153,9 @@ type Files []File
 // contains no such file, nil is returned.
 func (f Files) FindFileByPath(path string) File {
 	for _, file := range f {
+		if file == nil {
+			continue
+		}
 		if file.Path() == path {
 			return file
 		}

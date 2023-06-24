@@ -15,6 +15,7 @@
 package linker
 
 import (
+	"errors"
 	"fmt"
 
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -53,9 +54,22 @@ func Link(parsed parser.Result, dependencies Files, symbols *Symbols, handler *r
 	for _, imp := range parsed.FileDescriptorProto().Dependency {
 		dep := dependencies.FindFileByPath(imp)
 		if dep == nil {
-			return nil, fmt.Errorf("dependencies is missing import %q", imp)
-		}
-		if err := symbols.Import(dep, handler); err != nil {
+			// handle unresolvable import paths
+			// first, find the import node for this path
+			var importNode *ast.ImportNode
+			for _, node := range parsed.AST().Decls {
+				if importNode, _ = node.(*ast.ImportNode); importNode != nil && importNode.Name.AsString() == imp {
+					break
+				}
+			}
+			if importNode == nil {
+				panic("bug: could not find import node for path: " + imp)
+			}
+			nodeInfo := parsed.AST().NodeInfo(importNode)
+			if err := handler.HandleErrorf(nodeInfo, "could not resolve import %q", imp); err != nil {
+				return nil, err
+			}
+		} else if err := symbols.Import(dep, handler); err != nil {
 			return nil, err
 		}
 	}
@@ -73,7 +87,10 @@ func Link(parsed parser.Result, dependencies Files, symbols *Symbols, handler *r
 	// are no duplicate symbols and will also let us resolve and revise all type
 	// references in next step.
 	if err := symbols.importResult(r, handler); err != nil {
-		return nil, err
+		if !errors.Is(err, reporter.ErrInvalidSource) {
+			// let reference resolution continue so we can report more errors
+			return nil, err
+		}
 	}
 
 	// After we've populated the pool, we can now try to resolve all type
