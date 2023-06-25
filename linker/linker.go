@@ -15,6 +15,7 @@
 package linker
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/bufbuild/protocompile/parser"
 	"github.com/bufbuild/protocompile/reporter"
 	"github.com/bufbuild/protocompile/sourceinfo"
+	art "github.com/plar/go-adaptive-radix-tree"
 )
 
 // Link handles linking a parsed descriptor proto into a fully-linked descriptor.
@@ -77,7 +79,7 @@ func Link(parsed parser.Result, dependencies Files, symbols *Symbols, handler *r
 	r := &result{
 		Result:               parsed,
 		deps:                 dependencies,
-		descriptors:          map[string]protoreflect.Descriptor{},
+		descriptors:          art.New(),
 		usedImports:          map[string]struct{}{},
 		prefix:               prefix,
 		optionQualifiedNames: map[ast.IdentValueNode]string{},
@@ -144,6 +146,8 @@ type Result interface {
 	// step separate from linking, because computing source code info requires
 	// interpreting options (which is done after linking).
 	PopulateSourceCodeInfo(sourceinfo.OptionIndex)
+
+	FindDescriptorsByPrefix(ctx context.Context, prefix string) ([]protoreflect.Descriptor, error)
 
 	// CanonicalProto returns the file descriptor proto in a form that
 	// will be serialized in a canonical way. The "canonical" way matches

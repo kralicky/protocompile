@@ -15,6 +15,7 @@
 package linker
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -30,6 +31,7 @@ import (
 	"github.com/bufbuild/protocompile/parser"
 	"github.com/bufbuild/protocompile/protoutil"
 	"github.com/bufbuild/protocompile/sourceinfo"
+	art "github.com/plar/go-adaptive-radix-tree"
 )
 
 // This file contains implementations of protoreflect.Descriptor. Note that
@@ -47,7 +49,7 @@ type result struct {
 
 	// A map of all descriptors keyed by their fully-qualified name (without
 	// any leading dot).
-	descriptors map[string]protoreflect.Descriptor
+	descriptors art.Tree
 
 	// A set of imports that have been used in the course of linking and
 	// interpreting options.
@@ -162,6 +164,26 @@ func (r *result) PopulateSourceCodeInfo(optsIndex sourceinfo.OptionIndex) {
 
 func (r *result) SourceLocations() protoreflect.SourceLocations {
 	return &r.srcLocations
+}
+
+func (r *result) FindDescriptorsByPrefix(ctx context.Context, prefix string) (results []protoreflect.Descriptor, err error) {
+	r.descriptors.ForEachPrefix(art.Key(prefix), func(node art.Node) (cont bool) {
+		if ctx.Err() != nil {
+			err = ctx.Err()
+			return false
+		}
+		if node.Kind() == art.Leaf {
+			value := node.Value()
+			if value == nil {
+				return true
+			}
+			if desc, ok := value.(protoreflect.Descriptor); ok {
+				results = append(results, desc)
+			}
+		}
+		return true
+	})
+	return
 }
 
 func computeSourceLocIndex(locs []protoreflect.SourceLocation) map[interface{}]int {
@@ -545,7 +567,7 @@ var _ protoutil.DescriptorProtoWrapper = (*msgDescriptor)(nil)
 
 func (r *result) createMessageDescriptor(md *descriptorpb.DescriptorProto, parent protoreflect.Descriptor, index int, fqn string) *msgDescriptor {
 	ret := &msgDescriptor{file: r, parent: parent, index: index, proto: md, fqn: fqn}
-	r.descriptors[fqn] = ret
+	r.descriptors.Insert(art.Key(fqn), ret)
 
 	prefix := fqn + "."
 	// NB: We MUST create fields before oneofs so that we can populate the
@@ -783,7 +805,7 @@ var _ protoutil.DescriptorProtoWrapper = (*enumDescriptor)(nil)
 
 func (r *result) createEnumDescriptor(ed *descriptorpb.EnumDescriptorProto, parent protoreflect.Descriptor, index int, fqn string) *enumDescriptor {
 	ret := &enumDescriptor{file: r, parent: parent, index: index, proto: ed, fqn: fqn}
-	r.descriptors[fqn] = ret
+	r.descriptors.Insert(art.Key(fqn), ret)
 
 	// Unlike all other elements, the fully-qualified name of enum values
 	// is NOT scoped to their parent element (the enum), but rather to
@@ -934,7 +956,7 @@ var _ protoutil.DescriptorProtoWrapper = (*enValDescriptor)(nil)
 
 func (r *result) createEnumValueDescriptor(ed *descriptorpb.EnumValueDescriptorProto, parent *enumDescriptor, index int, fqn string) *enValDescriptor {
 	ret := &enValDescriptor{file: r, parent: parent, index: index, proto: ed, fqn: fqn}
-	r.descriptors[fqn] = ret
+	r.descriptors.Insert(art.Key(fqn), ret)
 	return ret
 }
 
@@ -1021,7 +1043,7 @@ var _ protoutil.DescriptorProtoWrapper = &extTypeDescriptor{}
 
 func (r *result) createExtTypeDescriptor(fd *descriptorpb.FieldDescriptorProto, parent protoreflect.Descriptor, index int, fqn string) *extTypeDescriptor {
 	ret := &fldDescriptor{file: r, parent: parent, index: index, proto: fd, fqn: fqn}
-	r.descriptors[fqn] = ret
+	r.descriptors.Insert(art.Key(fqn), ret)
 	return &extTypeDescriptor{ExtensionTypeDescriptor: dynamicpb.NewExtensionType(ret).TypeDescriptor(), field: ret}
 }
 
@@ -1104,7 +1126,7 @@ var _ protoutil.DescriptorProtoWrapper = (*fldDescriptor)(nil)
 
 func (r *result) createFieldDescriptor(fd *descriptorpb.FieldDescriptorProto, parent *msgDescriptor, index int, fqn string) *fldDescriptor {
 	ret := &fldDescriptor{file: r, parent: parent, index: index, proto: fd, fqn: fqn}
-	r.descriptors[fqn] = ret
+	r.descriptors.Insert(art.Key(fqn), ret)
 	return ret
 }
 
@@ -1581,7 +1603,7 @@ var _ protoutil.DescriptorProtoWrapper = (*oneofDescriptor)(nil)
 
 func (r *result) createOneofDescriptor(ood *descriptorpb.OneofDescriptorProto, parent *msgDescriptor, index int, fqn string) *oneofDescriptor {
 	ret := &oneofDescriptor{file: r, parent: parent, index: index, proto: ood, fqn: fqn}
-	r.descriptors[fqn] = ret
+	r.descriptors.Insert(art.Key(fqn), ret)
 
 	var fields []*fldDescriptor
 	for _, fld := range parent.fields.fields {
@@ -1692,7 +1714,7 @@ var _ protoutil.DescriptorProtoWrapper = (*svcDescriptor)(nil)
 
 func (r *result) createServiceDescriptor(sd *descriptorpb.ServiceDescriptorProto, index int, fqn string) *svcDescriptor {
 	ret := &svcDescriptor{file: r, index: index, proto: sd, fqn: fqn}
-	r.descriptors[fqn] = ret
+	r.descriptors.Insert(art.Key(fqn), ret)
 
 	prefix := fqn + "."
 	ret.methods = r.createMethods(prefix, ret, sd.Method)
@@ -1790,7 +1812,7 @@ var _ protoutil.DescriptorProtoWrapper = (*mtdDescriptor)(nil)
 
 func (r *result) createMethodDescriptor(mtd *descriptorpb.MethodDescriptorProto, parent *svcDescriptor, index int, fqn string) *mtdDescriptor {
 	ret := &mtdDescriptor{file: r, parent: parent, index: index, proto: mtd, fqn: fqn}
-	r.descriptors[fqn] = ret
+	r.descriptors.Insert(art.Key(fqn), ret)
 	return ret
 }
 
@@ -1858,9 +1880,12 @@ func (r *result) FindExtensionByNumber(msg protoreflect.FullName, tag protorefle
 	return findExtension(r, msg, tag)
 }
 
-func (r *result) FindDescriptorByName(name protoreflect.FullName) protoreflect.Descriptor {
-	fqn := strings.TrimPrefix(string(name), ".")
-	return r.descriptors[fqn]
+func (r *result) FindDescriptorByName(fqn protoreflect.FullName) protoreflect.Descriptor {
+	d, ok := r.descriptors.Search(art.Key(fqn))
+	if !ok {
+		return nil
+	}
+	return d.(protoreflect.Descriptor)
 }
 
 func (r *result) hasSource() bool {
