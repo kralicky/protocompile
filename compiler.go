@@ -17,6 +17,7 @@ package protocompile
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"runtime"
@@ -563,7 +564,7 @@ func (t *task) asFile(ctx context.Context, name string, pr *SearchResult) (linke
 	}
 
 	parseRes, err := t.asParseResult(name, r)
-	if err != nil {
+	if parseRes == nil {
 		return nil, err
 	}
 	pr.ParseResult = parseRes
@@ -811,7 +812,9 @@ func (t *task) asParseResult(name string, r SearchResult) (parser.Result, error)
 
 	file, err := t.asAST(name, r)
 	if err != nil {
-		return nil, err
+		if !errors.Is(err, reporter.ErrInvalidSource) || file == nil {
+			return nil, err
+		}
 	}
 
 	return parser.ResultFromAST(file, true, t.h)
