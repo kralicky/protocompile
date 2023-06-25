@@ -34,6 +34,11 @@ type result struct {
 
 	nodes        map[proto.Message]ast.Node
 	nodesInverse map[ast.Node]proto.Message
+
+	// A position in the source file corresponding to the end of the last import
+	// statement (the point just after the semicolon). This can be used as an
+	// insertion point for new import statements.
+	importInsertionPoint ast.SourcePos
 }
 
 // ResultWithoutAST returns a parse result that has no AST. All methods for
@@ -72,7 +77,38 @@ func ResultFromAST(file *ast.FileNode, validate bool, handler *reporter.Handler)
 	// can do validation on presence of label, but final descriptors are expected
 	// to always have them present).
 	fillInMissingLabels(r.proto)
+	var lastSeenImport *ast.ImportNode
+DECLS:
+	for _, decl := range file.Decls {
+		switch decl := decl.(type) {
+		case *ast.PackageNode:
+			if lastSeenImport == nil {
+				// as a backup in case there are no imports
+				r.importInsertionPoint = file.NodeInfo(decl).End()
+			}
+		case *ast.ImportNode:
+			lastSeenImport = decl
+		default:
+			if lastSeenImport != nil {
+				pos := file.NodeInfo(lastSeenImport).End()
+				r.importInsertionPoint = ast.SourcePos{
+					Filename: pos.Filename,
+					Line:     pos.Line + 1,
+					Col:      0,
+				}
+				break DECLS
+			}
+		}
+	}
+
 	return r, handler.Error()
+}
+
+func (r *result) ImportInsertionPoint() ast.SourcePos {
+	if r.importInsertionPoint == (ast.SourcePos{}) {
+		return r.file.NodeInfo(r.file.Syntax).End()
+	}
+	return r.importInsertionPoint
 }
 
 func (r *result) AST() *ast.FileNode {

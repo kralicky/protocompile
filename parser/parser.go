@@ -204,4 +204,6 @@ type Result interface {
 	ServiceDescriptor(ast.Node) *descriptorpb.ServiceDescriptorProto
 	MethodDescriptor(ast.RPCDeclNode) *descriptorpb.MethodDescriptorProto
 	Descriptor(ast.Node) proto.Message
+
+	ImportInsertionPoint() ast.SourcePos
 }
