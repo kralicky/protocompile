@@ -648,6 +648,11 @@ func (t *task) asFile(ctx context.Context, name string, pr *SearchResult) (linke
 						}
 						continue
 					}
+					if errors.Is(res.err, reporter.ErrInvalidSource) {
+						// continue if the handler has suppressed all errors, to allow
+						// link errors to be reported later
+						continue
+					}
 					return nil, res.err
 				}
 				deps[i] = res.res
