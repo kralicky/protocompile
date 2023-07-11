@@ -83,6 +83,7 @@ func Link(parsed parser.Result, dependencies Files, symbols *Symbols, handler *r
 		usedImports:          map[string]struct{}{},
 		prefix:               prefix,
 		optionQualifiedNames: map[ast.IdentValueNode]string{},
+		resolvedReferences:   map[protoreflect.Descriptor][]ast.SourcePosInfo{},
 	}
 
 	// First, we put all symbols into a single pool, which lets us ensure there
@@ -148,6 +149,8 @@ type Result interface {
 	PopulateSourceCodeInfo(sourceinfo.OptionIndex)
 
 	FindDescriptorsByPrefix(ctx context.Context, prefix string) ([]protoreflect.Descriptor, error)
+
+	FindReferences(to protoreflect.Descriptor) []ast.SourcePosInfo
 
 	// CanonicalProto returns the file descriptor proto in a form that
 	// will be serialized in a canonical way. The "canonical" way matches

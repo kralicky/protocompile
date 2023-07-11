@@ -306,7 +306,7 @@ func resolveFieldTypes(f *fldDescriptor, handler *reporter.Handler, s *Symbols, 
 	scope := fmt.Sprintf("field %s", f.fqn)
 	if fld.GetExtendee() != "" {
 		scope := fmt.Sprintf("extension %s", f.fqn)
-		dsc := r.resolve(fld.GetExtendee(), false, scopes)
+		dsc := r.resolve(file.NodeInfo(node.FieldExtendee()), fld.GetExtendee(), false, scopes)
 		if dsc == nil {
 			return handler.HandleErrorf(file.NodeInfo(node.FieldExtendee()), "unknown extendee type %s", fld.GetExtendee())
 		}
@@ -353,7 +353,7 @@ func resolveFieldTypes(f *fldDescriptor, handler *reporter.Handler, s *Symbols, 
 		return nil
 	}
 
-	dsc := r.resolve(fld.GetTypeName(), true, scopes)
+	dsc := r.resolve(file.NodeInfo(node.FieldType()), fld.GetTypeName(), true, scopes)
 	if dsc == nil {
 		return handler.HandleErrorf(file.NodeInfo(node.FieldType()), "%s: unknown type %s", scope, fld.GetTypeName())
 	}
@@ -445,7 +445,7 @@ func resolveMethodTypes(m *mtdDescriptor, handler *reporter.Handler, scopes []sc
 	mtd := m.proto
 	file := r.FileNode()
 	node := r.MethodNode(mtd)
-	dsc := r.resolve(mtd.GetInputType(), false, scopes)
+	dsc := r.resolve(file.NodeInfo(node.GetInputType()), mtd.GetInputType(), false, scopes)
 	if dsc == nil {
 		if err := handler.HandleErrorf(file.NodeInfo(node.GetInputType()), "%s: unknown request type %s", scope, mtd.GetInputType()); err != nil {
 			return err
@@ -467,7 +467,7 @@ func resolveMethodTypes(m *mtdDescriptor, handler *reporter.Handler, scopes []sc
 	}
 
 	// TODO: make input and output type resolution more DRY
-	dsc = r.resolve(mtd.GetOutputType(), false, scopes)
+	dsc = r.resolve(file.NodeInfo(node.GetOutputType()), mtd.GetOutputType(), false, scopes)
 	if dsc == nil {
 		if err := handler.HandleErrorf(file.NodeInfo(node.GetOutputType()), "%s: unknown response type %s", scope, mtd.GetOutputType()); err != nil {
 			return err
@@ -504,7 +504,7 @@ opts:
 		for _, nm := range opt.Name {
 			if nm.GetIsExtension() {
 				node := r.OptionNamePartNode(nm)
-				fqn, err := r.resolveExtensionName(nm.GetNamePart(), scopes)
+				fqn, err := r.resolveExtensionName(file.NodeInfo(node), nm.GetNamePart(), scopes)
 				if err != nil {
 					if err := handler.HandleErrorf(file.NodeInfo(node), "%v%v", mc, err); err != nil {
 						return err
@@ -554,7 +554,7 @@ func (r *result) resolveOptionValue(handler *reporter.Handler, mc *internal.Mess
 				// likely due to how it re-uses C++ text format implementation, and normal text
 				// format doesn't expect that kind of relative reference.)
 				scopes := scopes[:1] // first scope is file, the rest are enclosing messages
-				fqn, err := r.resolveExtensionName(string(fld.Name.Name.AsIdentifier()), scopes)
+				fqn, err := r.resolveExtensionName(r.FileNode().NodeInfo(fld.Name.Name), string(fld.Name.Name.AsIdentifier()), scopes)
 				if err != nil {
 					if err := handler.HandleErrorf(r.FileNode().NodeInfo(fld.Name.Name), "%v%v", mc, err); err != nil {
 						return err
@@ -584,8 +584,8 @@ func (r *result) resolveOptionValue(handler *reporter.Handler, mc *internal.Mess
 	return nil
 }
 
-func (r *result) resolveExtensionName(name string, scopes []scope) (string, error) {
-	dsc := r.resolve(name, false, scopes)
+func (r *result) resolveExtensionName(whence ast.SourcePosInfo, name string, scopes []scope) (string, error) {
+	dsc := r.resolve(whence, name, false, scopes)
 	if dsc == nil {
 		return "", fmt.Errorf("unknown extension %s", name)
 	}
@@ -600,7 +600,12 @@ func (r *result) resolveExtensionName(name string, scopes []scope) (string, erro
 	return string("." + dsc.FullName()), nil
 }
 
-func (r *result) resolve(name string, onlyTypes bool, scopes []scope) protoreflect.Descriptor {
+func (r *result) resolve(whence ast.SourcePosInfo, name string, onlyTypes bool, scopes []scope) (resolved protoreflect.Descriptor) {
+	defer func() {
+		if resolved != nil {
+			r.resolvedReferences[resolved] = append(r.resolvedReferences[resolved], whence)
+		}
+	}()
 	if strings.HasPrefix(name, ".") {
 		// already fully-qualified
 		return r.resolveElement(protoreflect.FullName(name[1:]))

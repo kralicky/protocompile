@@ -66,6 +66,11 @@ type result struct {
 	// are resolved during linking and stored here, to be used to interpret options.
 	optionQualifiedNames map[ast.IdentValueNode]string
 
+	// A map of descriptors to all resolved references to them. The reference
+	// locations contain the start and end position of the relevant identifier
+	// referencing the descriptor.
+	resolvedReferences map[protoreflect.Descriptor][]ast.SourcePosInfo
+
 	imports      fileImports
 	messages     msgDescriptors
 	enums        enumDescriptors
@@ -184,6 +189,13 @@ func (r *result) FindDescriptorsByPrefix(ctx context.Context, prefix string) (re
 		return true
 	})
 	return
+}
+
+func (r *result) FindReferences(to protoreflect.Descriptor) (results []ast.SourcePosInfo) {
+	if r.resolvedReferences == nil {
+		return nil
+	}
+	return r.resolvedReferences[to]
 }
 
 func computeSourceLocIndex(locs []protoreflect.SourceLocation) map[interface{}]int {
