@@ -236,6 +236,20 @@ func (c *Compiler) Compile(ctx context.Context, files ...string) (CompileResult,
 	}, firstError
 }
 
+func (c *Compiler) GetImplicitResults() linker.Files {
+	var implicit linker.Files
+	for _, ir := range c.exec.results {
+		if ir.explicitFile {
+			continue
+		}
+		if ir.res == nil {
+			continue
+		}
+		implicit = append(implicit, ir.res)
+	}
+	return implicit
+}
+
 type result struct {
 	name  string
 	ready chan struct{}
