@@ -17,7 +17,6 @@ package ast
 import (
 	"fmt"
 	"sort"
-	"unicode/utf8"
 )
 
 // FileInfo contains information about the contents of a source file, including
@@ -351,20 +350,9 @@ func (f *FileInfo) SourcePos(offset int) SourcePos {
 		return f.lines[n] > offset
 	})
 
-	// If it weren't for tabs and multibyte unicode characters, we
-	// could trivially compute the column just based on offset and the
-	// starting offset of lineNumber :(
-	// Wish this were more efficient... that would require also storing
-	// computed line+column information, which would triple the size of
-	// f's items slice...
-	col := 0
-	for i := f.lines[lineNumber-1]; i < offset; i++ {
-		if f.data[i] == '\t' {
-			nextTabStop := 8 - (col % 8)
-			col += nextTabStop
-		} else if utf8.RuneStart(f.data[i]) {
-			col++
-		}
+	col := offset
+	if lineNumber > 0 {
+		col -= f.lines[lineNumber-1]
 	}
 
 	return SourcePos{
