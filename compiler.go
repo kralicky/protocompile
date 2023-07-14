@@ -237,6 +237,9 @@ func (c *Compiler) Compile(ctx context.Context, files ...string) (CompileResult,
 }
 
 func (c *Compiler) GetImplicitResults() linker.Files {
+	if c.exec == nil {
+		return nil
+	}
 	var implicit linker.Files
 	for _, ir := range c.exec.results {
 		if ir.explicitFile {
