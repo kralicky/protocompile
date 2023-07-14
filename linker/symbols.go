@@ -200,7 +200,10 @@ func (s *Symbols) Import(fd protoreflect.FileDescriptor, handler *reporter.Handl
 	return s.importFileWithExtensions(pkg, fd, handler)
 }
 
-var ErrPackageStillInUse = errors.New("package still in use")
+var (
+	ErrPackageStillInUse = errors.New("package still in use")
+	ErrNoPackageName     = errors.New("no package name")
+)
 
 // Deletes all symbols associated with the given file descriptor.
 func (s *Symbols) Delete(fd protoreflect.FileDescriptor, handler *reporter.Handler) error {
@@ -222,6 +225,10 @@ func (s *Symbols) Delete(fd protoreflect.FileDescriptor, handler *reporter.Handl
 	err := s.prepareDeletePackages(fd.Package(), handler)
 	if err != nil {
 		if errors.Is(err, ErrPackageStillInUse) {
+			return nil
+		}
+		if errors.Is(err, ErrNoPackageName) {
+			// no package name, so there's nothing to delete
 			return nil
 		}
 		return err
@@ -320,7 +327,7 @@ func (s *Symbols) importPackages(pkgPos ast.SourcePos, pkg protoreflect.FullName
 
 func (s *Symbols) prepareDeletePackages(pkg protoreflect.FullName, handler *reporter.Handler) error {
 	if pkg == "" {
-		return fmt.Errorf("package name is required")
+		return ErrNoPackageName
 	}
 
 	parts := strings.Split(string(pkg), ".")
