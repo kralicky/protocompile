@@ -66,3 +66,31 @@ func (e errorWithSourcePos) Unwrap() error {
 }
 
 var _ ErrorWithPos = errorWithSourcePos{}
+
+// Custom error types that contain additional information for each error.
+
+type AlreadyDefinedError struct {
+	isPkg              bool
+	PreviousDefinition ast.SourcePosInfo
+}
+
+func AlreadyDefined(previousDefinition ast.SourcePosInfo) AlreadyDefinedError {
+	return AlreadyDefinedError{
+		PreviousDefinition: previousDefinition,
+	}
+}
+
+func AlreadyDefinedAsPkg(previousDefinition ast.SourcePosInfo) AlreadyDefinedError {
+	return AlreadyDefinedError{
+		isPkg:              true,
+		PreviousDefinition: previousDefinition,
+	}
+}
+
+func (e AlreadyDefinedError) Error() string {
+	var asPkg string
+	if e.isPkg {
+		asPkg = " as a package"
+	}
+	return fmt.Sprintf("already defined%s at %s", asPkg, e.PreviousDefinition)
+}

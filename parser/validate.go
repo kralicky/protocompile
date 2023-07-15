@@ -342,9 +342,7 @@ func validateEnum(res *result, isProto3 bool, name protoreflect.FullName, ed *de
 	if allowAlias && !hasAlias {
 		optNode := res.OptionNode(allowAliasOpt)
 		optNodeInfo := res.file.NodeInfo(optNode.GetValue())
-		if err := handler.HandleErrorf(optNodeInfo, "%s: allow_alias is true but no values are aliases", scope); err != nil {
-			return err
-		}
+		handler.HandleWarningf(optNodeInfo, "%s: allow_alias is true but no values are aliases", scope)
 	}
 
 	// reserved ranges should not overlap

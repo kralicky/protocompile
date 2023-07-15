@@ -38,7 +38,7 @@ func TestSymbolsPackages(t *testing.T) {
 	assert.Equal(t, &s.pkgTrie, s.getPackage(""))
 
 	h := reporter.NewHandler(nil)
-	pos := ast.UnknownPos("foo.proto")
+	pos := ast.UnknownPosInfo("foo.proto")
 	pkg, err := s.importPackages(pos, "build.buf.foo.bar.baz", h)
 	require.NoError(t, err)
 	// new package has nothing in it
@@ -142,9 +142,9 @@ func TestSymbolExtensions(t *testing.T) {
 
 	var s Symbols
 
-	_, err := s.importPackages(ast.UnknownPos("foo.proto"), "foo.bar", reporter.NewHandler(nil))
+	_, err := s.importPackages(ast.UnknownPosInfo("foo.proto"), "foo.bar", reporter.NewHandler(nil))
 	require.NoError(t, err)
-	_, err = s.importPackages(ast.UnknownPos("google/protobuf/descriptor.proto"), "google.protobuf", reporter.NewHandler(nil))
+	_, err = s.importPackages(ast.UnknownPosInfo("google/protobuf/descriptor.proto"), "google.protobuf", reporter.NewHandler(nil))
 	require.NoError(t, err)
 
 	addExt := func(pkg, extendee protoreflect.FullName, num protoreflect.FieldNumber) error {

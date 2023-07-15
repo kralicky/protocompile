@@ -111,7 +111,7 @@ type extNumber struct {
 }
 
 type symbolEntry struct {
-	pos         ast.SourcePos
+	pos         ast.SourcePosInfo
 	isEnumValue bool
 	isPackage   bool
 	refcount    int // number of times this symbol has been imported
@@ -168,9 +168,9 @@ func (s *Symbols) Import(fd protoreflect.FileDescriptor, handler *reporter.Handl
 		fd = f.FileDescriptor
 	}
 
-	var pkgPos ast.SourcePos
+	var pkgPos ast.SourcePosInfo
 	if res, ok := fd.(*result); ok {
-		pkgPos = packageNameStart(res)
+		pkgPos = packageNamePos(res)
 	} else {
 		pkgPos = sourcePositionForPackage(fd)
 	}
@@ -300,7 +300,7 @@ func (s *packageSymbols) deleteFile(fd protoreflect.FileDescriptor, handler *rep
 	return nil
 }
 
-func (s *Symbols) importPackages(pkgPos ast.SourcePos, pkg protoreflect.FullName, handler *reporter.Handler) (*packageSymbols, error) {
+func (s *Symbols) importPackages(pkgPos ast.SourcePosInfo, pkg protoreflect.FullName, handler *reporter.Handler) (*packageSymbols, error) {
 	if pkg == "" {
 		return &s.pkgTrie, nil
 	}
@@ -357,7 +357,7 @@ func (s *Symbols) prepareDeletePackages(pkg protoreflect.FullName, handler *repo
 	return err
 }
 
-func (s *packageSymbols) importPackage(pkgPos ast.SourcePos, pkg protoreflect.FullName, handler *reporter.Handler) (*packageSymbols, error) {
+func (s *packageSymbols) importPackage(pkgPos ast.SourcePosInfo, pkg protoreflect.FullName, handler *reporter.Handler) (*packageSymbols, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	existing, ok := s.symbols[pkg]
@@ -433,22 +433,25 @@ func (s *Symbols) getPackage(pkg protoreflect.FullName) *packageSymbols {
 	return cur
 }
 
-func reportSymbolCollision(pos ast.SourcePos, fqn protoreflect.FullName, additionIsEnumVal bool, existing symbolEntry, handler *reporter.Handler) error {
+func reportSymbolCollision(pos ast.SourcePosInfo, fqn protoreflect.FullName, additionIsEnumVal bool, existing symbolEntry, handler *reporter.Handler) error {
 	// because of weird scoping for enum values, provide more context in error message
 	// if this conflict is with an enum value
-	var isPkg, suffix string
+	var suffix string
 	if additionIsEnumVal || existing.isEnumValue {
 		suffix = "; protobuf uses C++ scoping rules for enum values, so they exist in the scope enclosing the enum"
 	}
-	if existing.isPackage {
-		isPkg = " as a package"
-	}
 	orig := existing.pos
 	conflict := pos
-	if posLess(conflict, orig) {
+	if posLess(conflict.Start(), orig.Start()) {
 		orig, conflict = conflict, orig
 	}
-	return handler.HandleErrorf(ast.NewSourcePosInfo(conflict, conflict), "symbol %q already defined%s at %v%s", fqn, isPkg, orig, suffix)
+	var err error
+	if existing.isPackage {
+		err = reporter.AlreadyDefinedAsPkg(existing.pos)
+	} else {
+		err = reporter.AlreadyDefined(existing.pos)
+	}
+	return handler.HandleErrorf(conflict, "symbol %q %w%s", fqn, err, suffix)
 }
 
 func posLess(a, b ast.SourcePos) bool {
@@ -474,26 +477,33 @@ func (s *packageSymbols) checkFileLocked(f protoreflect.FileDescriptor, handler 
 	})
 }
 
-func sourcePositionForPackage(fd protoreflect.FileDescriptor) ast.SourcePos {
+func sourcePositionForPackage(fd protoreflect.FileDescriptor) ast.SourcePosInfo {
 	loc := fd.SourceLocations().ByPath([]int32{internal.FilePackageTag})
 	if isZeroLoc(loc) {
-		return ast.UnknownPos(fd.Path())
+		return ast.UnknownPosInfo(fd.Path())
 	}
-	return ast.SourcePos{
-		Filename: fd.Path(),
-		Line:     loc.StartLine,
-		Col:      loc.StartColumn,
-	}
+	return ast.NewSourcePosInfo(
+		ast.SourcePos{
+			Filename: fd.Path(),
+			Line:     loc.StartLine,
+			Col:      loc.StartColumn,
+		},
+		ast.SourcePos{
+			Filename: fd.Path(),
+			Line:     loc.EndLine,
+			Col:      loc.EndColumn,
+		},
+	)
 }
 
-func sourcePositionFor(d protoreflect.Descriptor) ast.SourcePos {
+func sourcePositionFor(d protoreflect.Descriptor) ast.SourcePosInfo {
 	file := d.ParentFile()
 	if file == nil {
-		return ast.UnknownPos(unknownFilePath)
+		return ast.UnknownPosInfo(unknownFilePath)
 	}
 	path, ok := computePath(d)
 	if !ok {
-		return ast.UnknownPos(file.Path())
+		return ast.UnknownPosInfo(file.Path())
 	}
 	namePath := path
 	switch d.(type) {
@@ -519,14 +529,21 @@ func sourcePositionFor(d protoreflect.Descriptor) ast.SourcePos {
 	if isZeroLoc(loc) {
 		loc = file.SourceLocations().ByPath(path)
 		if isZeroLoc(loc) {
-			return ast.UnknownPos(file.Path())
+			return ast.UnknownPosInfo(file.Path())
 		}
 	}
-	return ast.SourcePos{
-		Filename: file.Path(),
-		Line:     loc.StartLine,
-		Col:      loc.StartColumn,
-	}
+	return ast.NewSourcePosInfo(
+		ast.SourcePos{
+			Filename: file.Path(),
+			Line:     loc.StartLine,
+			Col:      loc.StartColumn,
+		},
+		ast.SourcePos{
+			Filename: file.Path(),
+			Line:     loc.EndLine,
+			Col:      loc.EndColumn,
+		},
+	)
 }
 
 func sourcePositionForNumber(fd protoreflect.FieldDescriptor) ast.SourcePosInfo {
@@ -631,7 +648,7 @@ func (s *Symbols) importResultWithExtensions(pkg *packageSymbols, r *result, han
 }
 
 func (s *Symbols) importResult(r *result, handler *reporter.Handler) error {
-	pkg, err := s.importPackages(packageNameStart(r), r.Package(), handler)
+	pkg, err := s.importPackages(packageNamePos(r), r.Package(), handler)
 	if err != nil || pkg == nil {
 		return err
 	}
@@ -778,7 +795,7 @@ func (s *packageSymbols) checkResultLocked(r *result, handler *reporter.Handler)
 		_, isEnumVal := d.(*descriptorpb.EnumValueDescriptorProto)
 		file := r.FileNode()
 		node := r.Node(d)
-		pos := nameStart(file, node)
+		pos := namePos(file, node)
 		// check symbols already in this symbol table
 		if existing, ok := s.symbols[fqn]; ok {
 			if err := reportSymbolCollision(pos, fqn, isEnumVal, existing, handler); err != nil {
@@ -801,42 +818,42 @@ func (s *packageSymbols) checkResultLocked(r *result, handler *reporter.Handler)
 	})
 }
 
-func packageNameStart(r *result) ast.SourcePos {
+func packageNamePos(r *result) ast.SourcePosInfo {
 	if node, ok := r.FileNode().(*ast.FileNode); ok {
 		for _, decl := range node.Decls {
 			if pkgNode, ok := decl.(*ast.PackageNode); ok {
-				return r.FileNode().NodeInfo(pkgNode.Name).Start()
+				return r.FileNode().NodeInfo(pkgNode.Name)
 			}
 		}
 	}
-	return ast.UnknownPos(r.Path())
+	return ast.UnknownPosInfo(r.Path())
 }
 
-func nameStart(file ast.FileDeclNode, n ast.Node) ast.SourcePos {
+func namePos(file ast.FileDeclNode, n ast.Node) ast.SourcePosInfo {
 	// TODO: maybe ast package needs a NamedNode interface to simplify this?
 	switch n := n.(type) {
 	case ast.FieldDeclNode:
-		return file.NodeInfo(n.FieldName()).Start()
+		return file.NodeInfo(n.FieldName())
 	case ast.MessageDeclNode:
-		return file.NodeInfo(n.MessageName()).Start()
+		return file.NodeInfo(n.MessageName())
 	case ast.OneofDeclNode:
-		return file.NodeInfo(n.OneofName()).Start()
+		return file.NodeInfo(n.OneofName())
 	case ast.EnumValueDeclNode:
-		return file.NodeInfo(n.GetName()).Start()
+		return file.NodeInfo(n.GetName())
 	case *ast.EnumNode:
-		return file.NodeInfo(n.Name).Start()
+		return file.NodeInfo(n.Name)
 	case *ast.ServiceNode:
-		return file.NodeInfo(n.Name).Start()
+		return file.NodeInfo(n.Name)
 	case ast.RPCDeclNode:
-		return file.NodeInfo(n.GetName()).Start()
+		return file.NodeInfo(n.GetName())
 	default:
-		return file.NodeInfo(n).Start()
+		return file.NodeInfo(n)
 	}
 }
 
 func (s *packageSymbols) commitResultLocked(r *result) {
 	_ = walk.DescriptorProtos(r.FileDescriptorProto(), func(fqn protoreflect.FullName, d proto.Message) error {
-		pos := nameStart(r.FileNode(), r.Node(d))
+		pos := namePos(r.FileNode(), r.Node(d))
 		_, isEnumValue := d.(protoreflect.EnumValueDescriptor)
 		s.symbols[fqn] = symbolEntry{pos: pos, isEnumValue: isEnumValue}
 		return nil
