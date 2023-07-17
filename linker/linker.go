@@ -146,11 +146,17 @@ type Result interface {
 	// its `source_code_info` field populated. This is typically a post-process
 	// step separate from linking, because computing source code info requires
 	// interpreting options (which is done after linking).
-	PopulateSourceCodeInfo(sourceinfo.OptionIndex)
+	PopulateSourceCodeInfo(sourceinfo.OptionIndex, sourceinfo.OptionDescriptorIndex)
 
 	FindDescriptorsByPrefix(ctx context.Context, prefix string) ([]protoreflect.Descriptor, error)
 
 	FindReferences(to protoreflect.Descriptor) []ast.SourcePosInfo
+
+	FindOptionSourceInfo(*ast.OptionNode) *sourceinfo.OptionSourceInfo
+	FindOptionNameFieldDescriptor(name *descriptorpb.UninterpretedOption_NamePart) protoreflect.FieldDescriptor
+	FindOptionMessageDescriptor(option *descriptorpb.UninterpretedOption) protoreflect.MessageDescriptor
+	FindFieldDescriptorByFieldReferenceNode(node *ast.FieldReferenceNode) protoreflect.FieldDescriptor
+	FindMessageDescriptorByTypeReferenceURLNode(node *ast.FieldReferenceNode) protoreflect.MessageDescriptor
 
 	// CanonicalProto returns the file descriptor proto in a form that
 	// will be serialized in a canonical way. The "canonical" way matches

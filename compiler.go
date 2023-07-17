@@ -775,7 +775,7 @@ func (t *task) link(parseRes parser.Result, deps linker.Files, overrideDescripto
 		interpretOpts = []options.InterpreterOption{options.WithOverrideDescriptorProto(overrideDescriptorProtoRes)}
 	}
 
-	optsIndex, err := options.InterpretOptions(file, t.h, interpretOpts...)
+	optsIndex, descIndex, err := options.InterpretOptions(file, t.h, interpretOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -796,7 +796,7 @@ func (t *task) link(parseRes parser.Result, deps linker.Files, overrideDescripto
 			srcInfoOpts = append(srcInfoOpts, sourceinfo.WithExtraOptionLocations())
 		}
 		parseRes.FileDescriptorProto().SourceCodeInfo = sourceinfo.GenerateSourceInfo(parseRes.AST(), optsIndex, srcInfoOpts...)
-		file.PopulateSourceCodeInfo(optsIndex)
+		file.PopulateSourceCodeInfo(optsIndex, descIndex)
 	}
 
 	if !t.e.c.RetainASTs {

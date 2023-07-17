@@ -1035,7 +1035,7 @@ func (r *result) ServiceDescriptor(n ast.Node) *descriptorpb.ServiceDescriptorPr
 
 func (r *result) Descriptor(n ast.Node) proto.Message {
 	if d, ok := r.nodesInverse[n]; ok {
-		return d.(proto.Message)
+		return d
 	}
 	return nil
 }

@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/bufbuild/protocompile/ast"
@@ -38,6 +39,22 @@ import (
 // information about child elements, for options whose values are composite
 // (like a list or message literal).
 type OptionIndex map[*ast.OptionNode]*OptionSourceInfo
+
+type OptionDescriptorIndex struct {
+	UninterpretedNameDescriptorsToFieldDescriptors map[*descriptorpb.UninterpretedOption_NamePart]protoreflect.FieldDescriptor
+	FieldReferenceNodesToFieldDescriptors          map[ast.Node]protoreflect.FieldDescriptor
+	OptionsToMessageDescriptors                    map[*descriptorpb.UninterpretedOption]protoreflect.MessageDescriptor
+	TypeReferenceURLsToMessageDescriptors          map[*ast.FieldReferenceNode]protoreflect.MessageDescriptor
+}
+
+func NewOptionDescriptorIndex() OptionDescriptorIndex {
+	return OptionDescriptorIndex{
+		UninterpretedNameDescriptorsToFieldDescriptors: make(map[*descriptorpb.UninterpretedOption_NamePart]protoreflect.FieldDescriptor),
+		FieldReferenceNodesToFieldDescriptors:          make(map[ast.Node]protoreflect.FieldDescriptor),
+		OptionsToMessageDescriptors:                    make(map[*descriptorpb.UninterpretedOption]protoreflect.MessageDescriptor),
+		TypeReferenceURLsToMessageDescriptors:          make(map[*ast.FieldReferenceNode]protoreflect.MessageDescriptor),
+	}
+}
 
 // OptionSourceInfo describes the source info path for an option value and
 // contains information about the value's descendants in the AST.

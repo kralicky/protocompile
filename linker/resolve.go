@@ -504,14 +504,14 @@ opts:
 		for _, nm := range opt.Name {
 			if nm.GetIsExtension() {
 				node := r.OptionNamePartNode(nm)
-				fqn, err := r.resolveExtensionName(file.NodeInfo(node), nm.GetNamePart(), scopes)
+				desc, err := r.resolveExtensionName(file.NodeInfo(node), nm.GetNamePart(), scopes)
 				if err != nil {
 					if err := handler.HandleErrorf(file.NodeInfo(node), "%v%v", mc, err); err != nil {
 						return err
 					}
 					continue opts
 				}
-				nm.NamePart = proto.String(fqn)
+				nm.NamePart = proto.String("." + string(desc.FullName()))
 			}
 		}
 		// also resolve any extension names found inside message literals in option values
@@ -554,14 +554,14 @@ func (r *result) resolveOptionValue(handler *reporter.Handler, mc *internal.Mess
 				// likely due to how it re-uses C++ text format implementation, and normal text
 				// format doesn't expect that kind of relative reference.)
 				scopes := scopes[:1] // first scope is file, the rest are enclosing messages
-				fqn, err := r.resolveExtensionName(r.FileNode().NodeInfo(fld.Name.Name), string(fld.Name.Name.AsIdentifier()), scopes)
+				desc, err := r.resolveExtensionName(r.FileNode().NodeInfo(fld.Name.Name), string(fld.Name.Name.AsIdentifier()), scopes)
 				if err != nil {
 					if err := handler.HandleErrorf(r.FileNode().NodeInfo(fld.Name.Name), "%v%v", mc, err); err != nil {
 						return err
 					}
 					continue
 				} else {
-					r.optionQualifiedNames[fld.Name.Name] = fqn
+					r.optionQualifiedNames[fld.Name.Name] = "." + string(desc.FullName())
 				}
 			}
 
@@ -584,20 +584,21 @@ func (r *result) resolveOptionValue(handler *reporter.Handler, mc *internal.Mess
 	return nil
 }
 
-func (r *result) resolveExtensionName(whence ast.SourcePosInfo, name string, scopes []scope) (string, error) {
+func (r *result) resolveExtensionName(whence ast.SourcePosInfo, name string, scopes []scope) (protoreflect.FieldDescriptor, error) {
 	dsc := r.resolve(whence, name, false, scopes)
 	if dsc == nil {
-		return "", fmt.Errorf("unknown extension %s", name)
+		return nil, fmt.Errorf("unknown extension %s", name)
 	}
 	if isSentinelDescriptor(dsc) {
-		return "", fmt.Errorf("unknown extension %s; resolved to %s which is not defined; consider using a leading dot", name, dsc.FullName())
+		return nil, fmt.Errorf("unknown extension %s; resolved to %s which is not defined; consider using a leading dot", name, dsc.FullName())
 	}
 	if ext, ok := dsc.(protoreflect.FieldDescriptor); !ok {
-		return "", fmt.Errorf("invalid extension: %s is %s, not an extension", name, descriptorTypeWithArticle(dsc))
+		return nil, fmt.Errorf("invalid extension: %s is %s, not an extension", name, descriptorTypeWithArticle(dsc))
 	} else if !ext.IsExtension() {
-		return "", fmt.Errorf("invalid extension: %s is a field but not an extension", name)
+		return nil, fmt.Errorf("invalid extension: %s is a field but not an extension", name)
+	} else {
+		return ext, nil
 	}
-	return string("." + dsc.FullName()), nil
 }
 
 func (r *result) resolve(whence ast.SourcePosInfo, name string, onlyTypes bool, scopes []scope) (resolved protoreflect.Descriptor) {

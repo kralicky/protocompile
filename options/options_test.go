@@ -235,7 +235,7 @@ func TestOptionsInUnlinkedFiles(t *testing.T) {
 			if !assert.Nil(t, err, "failed to produce descriptor proto") {
 				return
 			}
-			_, err = options.InterpretUnlinkedOptions(res)
+			_, _, err = options.InterpretUnlinkedOptions(res)
 			if !assert.Nil(t, err, "failed to interpret options") {
 				return
 			}

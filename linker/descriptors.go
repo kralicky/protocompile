@@ -71,13 +71,14 @@ type result struct {
 	// referencing the descriptor.
 	resolvedReferences map[protoreflect.Descriptor][]ast.SourcePosInfo
 
-	imports      fileImports
-	messages     msgDescriptors
-	enums        enumDescriptors
-	extensions   extDescriptors
-	services     svcDescriptors
-	srcLocations srcLocs
-	optsIndex    sourceinfo.OptionIndex
+	imports       fileImports
+	messages      msgDescriptors
+	enums         enumDescriptors
+	extensions    extDescriptors
+	services      svcDescriptors
+	srcLocations  srcLocs
+	optsIndex     sourceinfo.OptionIndex
+	optsDescIndex sourceinfo.OptionDescriptorIndex
 }
 
 var _ protoreflect.FileDescriptor = (*result)(nil)
@@ -160,15 +161,23 @@ func (r *result) Services() protoreflect.ServiceDescriptors {
 	return &r.services
 }
 
-func (r *result) PopulateSourceCodeInfo(optsIndex sourceinfo.OptionIndex) {
+func (r *result) PopulateSourceCodeInfo(optsIndex sourceinfo.OptionIndex, optsDescIndex sourceinfo.OptionDescriptorIndex) {
 	srcLocProtos := asSourceLocations(r.FileDescriptorProto().GetSourceCodeInfo().GetLocation())
 	srcLocIndex := computeSourceLocIndex(srcLocProtos)
 	r.srcLocations = srcLocs{file: r, locs: srcLocProtos, index: srcLocIndex}
 	r.optsIndex = optsIndex
+	r.optsDescIndex = optsDescIndex
 }
 
 func (r *result) SourceLocations() protoreflect.SourceLocations {
 	return &r.srcLocations
+}
+
+func (r *result) FindOptionSourceInfo(node *ast.OptionNode) *sourceinfo.OptionSourceInfo {
+	if r.optsIndex == nil {
+		return nil
+	}
+	return r.optsIndex[node]
 }
 
 func (r *result) FindDescriptorsByPrefix(ctx context.Context, prefix string) (results []protoreflect.Descriptor, err error) {
@@ -196,6 +205,22 @@ func (r *result) FindReferences(to protoreflect.Descriptor) (results []ast.Sourc
 		return nil
 	}
 	return r.resolvedReferences[to]
+}
+
+func (o *result) FindOptionNameFieldDescriptor(name *descriptorpb.UninterpretedOption_NamePart) protoreflect.FieldDescriptor {
+	return o.optsDescIndex.UninterpretedNameDescriptorsToFieldDescriptors[name]
+}
+
+func (o *result) FindOptionMessageDescriptor(option *descriptorpb.UninterpretedOption) protoreflect.MessageDescriptor {
+	return o.optsDescIndex.OptionsToMessageDescriptors[option]
+}
+
+func (o *result) FindFieldDescriptorByFieldReferenceNode(node *ast.FieldReferenceNode) protoreflect.FieldDescriptor {
+	return o.optsDescIndex.FieldReferenceNodesToFieldDescriptors[node]
+}
+
+func (o *result) FindMessageDescriptorByTypeReferenceURLNode(node *ast.FieldReferenceNode) protoreflect.MessageDescriptor {
+	return o.optsDescIndex.TypeReferenceURLsToMessageDescriptors[node]
 }
 
 func computeSourceLocIndex(locs []protoreflect.SourceLocation) map[interface{}]int {

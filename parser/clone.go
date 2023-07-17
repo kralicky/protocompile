@@ -45,10 +45,12 @@ func Clone(r Result) Result {
 	if res, ok := r.(*result); ok {
 		newProto := proto.Clone(res.proto).(*descriptorpb.FileDescriptorProto) //nolint:errcheck
 		newNodes := make(map[proto.Message]ast.Node, len(res.nodes))
+		newNodesInverse := make(map[ast.Node]proto.Message, len(res.nodesInverse))
 		newResult := &result{
-			file:  res.file,
-			proto: newProto,
-			nodes: newNodes,
+			file:         res.file,
+			proto:        newProto,
+			nodes:        newNodes,
+			nodesInverse: newNodesInverse,
 		}
 		recreateNodeIndexForFile(res, newResult, res.proto, newProto)
 		return newResult
@@ -153,6 +155,10 @@ func updateNodeIndex[M proto.Message](orig, clone *result, origProto, cloneProto
 	node := orig.nodes[origProto]
 	if node != nil {
 		clone.nodes[cloneProto] = node
+	}
+	desc := orig.nodesInverse[node]
+	if desc != nil {
+		clone.nodesInverse[node] = desc
 	}
 }
 

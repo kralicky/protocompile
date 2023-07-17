@@ -57,6 +57,7 @@ type interpreter struct {
 	lenient                 bool
 	reporter                *reporter.Handler
 	index                   sourceinfo.OptionIndex
+	descriptorIndex         sourceinfo.OptionDescriptorIndex
 }
 
 type file interface {
@@ -94,7 +95,7 @@ func WithOverrideDescriptorProto(f linker.File) InterpreterOption {
 //
 // The given handler is used to report errors and warnings. If any errors are
 // reported, this function returns a non-nil error.
-func InterpretOptions(linked linker.Result, handler *reporter.Handler, opts ...InterpreterOption) (sourceinfo.OptionIndex, error) {
+func InterpretOptions(linked linker.Result, handler *reporter.Handler, opts ...InterpreterOption) (sourceinfo.OptionIndex, sourceinfo.OptionDescriptorIndex, error) {
 	return interpretOptions(false, linked, linker.ResolverFromFile(linked), handler, opts)
 }
 
@@ -107,7 +108,7 @@ func InterpretOptions(linked linker.Result, handler *reporter.Handler, opts ...I
 // In lenient more, errors resolving option names and type errors are ignored.
 // Any options that are uninterpretable (due to such errors) will remain in the
 // "uninterpreted_option" fields.
-func InterpretOptionsLenient(linked linker.Result, opts ...InterpreterOption) (sourceinfo.OptionIndex, error) {
+func InterpretOptionsLenient(linked linker.Result, opts ...InterpreterOption) (sourceinfo.OptionIndex, sourceinfo.OptionDescriptorIndex, error) {
 	return interpretOptions(true, linked, linker.ResolverFromFile(linked), reporter.NewHandler(nil), opts)
 }
 
@@ -122,17 +123,18 @@ func InterpretOptionsLenient(linked linker.Result, opts ...InterpreterOption) (s
 // interpreted. Other errors resolving option names or type errors will be
 // effectively ignored. Any options that are uninterpretable (due to such
 // errors) will remain in the "uninterpreted_option" fields.
-func InterpretUnlinkedOptions(parsed parser.Result, opts ...InterpreterOption) (sourceinfo.OptionIndex, error) {
+func InterpretUnlinkedOptions(parsed parser.Result, opts ...InterpreterOption) (sourceinfo.OptionIndex, sourceinfo.OptionDescriptorIndex, error) {
 	return interpretOptions(true, noResolveFile{parsed}, nil, reporter.NewHandler(nil), opts)
 }
 
-func interpretOptions(lenient bool, file file, res linker.Resolver, handler *reporter.Handler, interpOpts []InterpreterOption) (sourceinfo.OptionIndex, error) {
+func interpretOptions(lenient bool, file file, res linker.Resolver, handler *reporter.Handler, interpOpts []InterpreterOption) (sourceinfo.OptionIndex, sourceinfo.OptionDescriptorIndex, error) {
 	interp := interpreter{
-		file:     file,
-		resolver: res,
-		lenient:  lenient,
-		reporter: handler,
-		index:    sourceinfo.OptionIndex{},
+		file:            file,
+		resolver:        res,
+		lenient:         lenient,
+		reporter:        handler,
+		index:           sourceinfo.OptionIndex{},
+		descriptorIndex: sourceinfo.NewOptionDescriptorIndex(),
 	}
 	interp.container, _ = file.(optionsContainer)
 	for _, opt := range interpOpts {
@@ -149,7 +151,7 @@ func interpretOptions(lenient bool, file file, res linker.Resolver, handler *rep
 		if len(opts.UninterpretedOption) > 0 {
 			remain, err := interp.interpretOptions(fd.GetName(), fd, opts, opts.UninterpretedOption)
 			if err != nil {
-				return nil, err
+				return nil, sourceinfo.OptionDescriptorIndex{}, err
 			}
 			opts.UninterpretedOption = remain
 		}
@@ -157,19 +159,19 @@ func interpretOptions(lenient bool, file file, res linker.Resolver, handler *rep
 	for _, md := range fd.GetMessageType() {
 		fqn := prefix + md.GetName()
 		if err := interp.interpretMessageOptions(fqn, md); err != nil {
-			return nil, err
+			return nil, sourceinfo.OptionDescriptorIndex{}, err
 		}
 	}
 	for _, fld := range fd.GetExtension() {
 		fqn := prefix + fld.GetName()
 		if err := interp.interpretFieldOptions(fqn, fld); err != nil {
-			return nil, err
+			return nil, sourceinfo.OptionDescriptorIndex{}, err
 		}
 	}
 	for _, ed := range fd.GetEnumType() {
 		fqn := prefix + ed.GetName()
 		if err := interp.interpretEnumOptions(fqn, ed); err != nil {
-			return nil, err
+			return nil, sourceinfo.OptionDescriptorIndex{}, err
 		}
 	}
 	for _, sd := range fd.GetService() {
@@ -178,7 +180,7 @@ func interpretOptions(lenient bool, file file, res linker.Resolver, handler *rep
 		if len(opts.GetUninterpretedOption()) > 0 {
 			remain, err := interp.interpretOptions(fqn, sd, opts, opts.UninterpretedOption)
 			if err != nil {
-				return nil, err
+				return nil, sourceinfo.OptionDescriptorIndex{}, err
 			}
 			opts.UninterpretedOption = remain
 		}
@@ -188,13 +190,13 @@ func interpretOptions(lenient bool, file file, res linker.Resolver, handler *rep
 			if len(opts.GetUninterpretedOption()) > 0 {
 				remain, err := interp.interpretOptions(mtdFqn, mtd, opts, opts.UninterpretedOption)
 				if err != nil {
-					return nil, err
+					return nil, sourceinfo.OptionDescriptorIndex{}, err
 				}
 				opts.UninterpretedOption = remain
 			}
 		}
 	}
-	return interp.index, nil
+	return interp.index, interp.descriptorIndex, nil
 }
 
 func resolveDescriptor[T protoreflect.Descriptor](res linker.Resolver, name string) T {
@@ -1124,6 +1126,9 @@ func (interp *interpreter) interpretField(mc *internal.MessageContext, msg proto
 				mc, nm.GetNamePart(), msg.Descriptor().FullName())
 		}
 	}
+	interp.descriptorIndex.UninterpretedNameDescriptorsToFieldDescriptors[nm] = fld
+	interp.descriptorIndex.FieldReferenceNodesToFieldDescriptors[node] = fld
+	interp.descriptorIndex.OptionsToMessageDescriptors[opt] = fld.Message()
 
 	if len(opt.GetName()) > nameIndex+1 {
 		nextnm := opt.GetName()[nameIndex+1]
@@ -2002,6 +2007,8 @@ func (interp *interpreter) messageLiteralValue(mc *internal.MessageContext, fiel
 			if err != nil {
 				return interpretedFieldValue{}, reporter.Errorf(interp.nodeInfo(fieldNode.Val), "%vfailed to serialize message value: %w", mc, err)
 			}
+
+			interp.descriptorIndex.TypeReferenceURLsToMessageDescriptors[fieldNode.Name] = anyMd
 			fdm.Set(valueDescriptor, protoreflect.ValueOfBytes(b))
 		} else {
 			var ffld protoreflect.FieldDescriptor
