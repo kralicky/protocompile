@@ -14,7 +14,9 @@
 
 package ast
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // Walk conducts a walk of the AST rooted at the given root using the
 // given visitor. It performs a "pre-order traversal", visiting a
@@ -37,6 +39,12 @@ type WalkOption func(*walkOptions)
 
 type walkOptions struct {
 	before, after func(Node) error
+
+	hasRangeRequirement bool
+	start, end          Token
+
+	hasIntersectionRequirement bool
+	intersects                 Token
 }
 
 // WithBefore returns a WalkOption that will cause the given function to be
@@ -63,6 +71,21 @@ func WithAfter(fn func(Node) error) WalkOption {
 	}
 }
 
+func WithRange(start, end Token) WalkOption {
+	return func(options *walkOptions) {
+		options.hasRangeRequirement = true
+		options.start = start
+		options.end = end
+	}
+}
+
+func WithIntersection(intersects Token) WalkOption {
+	return func(options *walkOptions) {
+		options.hasIntersectionRequirement = true
+		options.intersects = intersects
+	}
+}
+
 func walk(root Node, v Visitor, opts walkOptions) (err error) {
 	if opts.before != nil {
 		if err := opts.before(root); err != nil {
@@ -81,8 +104,22 @@ func walk(root Node, v Visitor, opts walkOptions) (err error) {
 		}()
 	}
 
-	if err := Visit(root, v); err != nil {
-		return err
+	canVisit := true
+	if opts.hasRangeRequirement {
+		if root.Start() > opts.end || root.End() < opts.start {
+			canVisit = false
+		}
+	}
+	if canVisit && opts.hasIntersectionRequirement {
+		if root.Start() > opts.intersects || root.End() < opts.intersects {
+			canVisit = false
+		}
+	}
+
+	if canVisit {
+		if err := Visit(root, v); err != nil {
+			return err
+		}
 	}
 
 	if comp, ok := root.(CompositeNode); ok {

@@ -370,7 +370,8 @@ func (f *FileInfo) TokenAtOffset(offset int) Token {
 	}
 
 	i := sort.Search(len(f.items), func(n int) bool {
-		return f.items[n].offset >= offset
+		item := f.items[n]
+		return item.offset+item.length > offset
 	})
 	if i < 0 {
 		return TokenError
