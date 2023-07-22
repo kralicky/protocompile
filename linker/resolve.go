@@ -355,7 +355,14 @@ func resolveFieldTypes(f *fldDescriptor, handler *reporter.Handler, s *Symbols, 
 
 	dsc := r.resolve(file.NodeInfo(node.FieldType()), fld.GetTypeName(), true, scopes)
 	if dsc == nil {
-		return handler.HandleErrorf(file.NodeInfo(node.FieldType()), "%s: unknown type %s", scope, fld.GetTypeName())
+		if err := handler.HandleErrorWithPos(file.NodeInfo(node.FieldType()), &errUndeclaredName{
+			scope:      scope,
+			what:       "type",
+			name:       fld.GetTypeName(),
+			parentFile: file,
+		}); err != nil {
+			return err
+		}
 	}
 	if isSentinelDescriptor(dsc) {
 		return handler.HandleErrorf(file.NodeInfo(node.FieldType()), "%s: unknown type %s; resolved to %s which is not defined; consider using a leading dot", scope, fld.GetTypeName(), dsc.FullName())
@@ -447,7 +454,12 @@ func resolveMethodTypes(m *mtdDescriptor, handler *reporter.Handler, scopes []sc
 	node := r.MethodNode(mtd)
 	dsc := r.resolve(file.NodeInfo(node.GetInputType()), mtd.GetInputType(), false, scopes)
 	if dsc == nil {
-		if err := handler.HandleErrorf(file.NodeInfo(node.GetInputType()), "%s: unknown request type %s", scope, mtd.GetInputType()); err != nil {
+		if err := handler.HandleErrorWithPos(file.NodeInfo(node.GetInputType()), &errUndeclaredName{
+			scope:      scope,
+			what:       "request type",
+			name:       mtd.GetInputType(),
+			parentFile: file,
+		}); err != nil {
 			return err
 		}
 	} else if isSentinelDescriptor(dsc) {
@@ -469,7 +481,12 @@ func resolveMethodTypes(m *mtdDescriptor, handler *reporter.Handler, scopes []sc
 	// TODO: make input and output type resolution more DRY
 	dsc = r.resolve(file.NodeInfo(node.GetOutputType()), mtd.GetOutputType(), false, scopes)
 	if dsc == nil {
-		if err := handler.HandleErrorf(file.NodeInfo(node.GetOutputType()), "%s: unknown response type %s", scope, mtd.GetOutputType()); err != nil {
+		if err := handler.HandleErrorWithPos(file.NodeInfo(node.GetOutputType()), &errUndeclaredName{
+			scope:      scope,
+			what:       "response type",
+			name:       mtd.GetOutputType(),
+			parentFile: file,
+		}); err != nil {
 			return err
 		}
 	} else if isSentinelDescriptor(dsc) {

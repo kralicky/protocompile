@@ -195,3 +195,38 @@ func (e errUnusedImport) Error() string {
 func (e errUnusedImport) UnusedImport() string {
 	return string(e)
 }
+
+type ErrorUndeclaredName interface {
+	error
+	UndeclaredName() string
+	ParentFile() ast.FileDeclNode
+	Hint() string
+}
+
+type errUndeclaredName struct {
+	scope      string
+	what       string
+	name       string
+	hint       string
+	parentFile ast.FileDeclNode
+}
+
+func (e *errUndeclaredName) Error() string {
+	hint := e.hint
+	if e.hint != "" {
+		hint = " (" + hint + ")"
+	}
+	return fmt.Sprintf("%s: unknown %s %s%s", e.scope, e.what, e.name, hint)
+}
+
+func (e *errUndeclaredName) UndeclaredName() string {
+	return e.name
+}
+
+func (e *errUndeclaredName) ParentFile() ast.FileDeclNode {
+	return e.parentFile
+}
+
+func (e *errUndeclaredName) Hint() string {
+	return e.hint
+}
