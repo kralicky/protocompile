@@ -15,6 +15,7 @@
 package protocompile
 
 import (
+	"github.com/bufbuild/protocompile/internal"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	_ "google.golang.org/protobuf/types/known/anypb" // link in packages that include the standard protos included with protoc.
@@ -34,6 +35,8 @@ import (
 // so that clients do not need to explicitly supply a copy of these protos (just
 // like callers of protoc do not need to supply them).
 var standardImports map[string]protoreflect.FileDescriptor
+
+var wellKnownMessages = map[protoreflect.FullName]bool{}
 
 func init() {
 	standardFilenames := []string{
@@ -58,5 +61,20 @@ func init() {
 			panic(err.Error())
 		}
 		standardImports[fn] = fd
+
+		msgs := fd.Messages()
+		for i := 0; i < msgs.Len(); i++ {
+			msg := msgs.Get(i)
+			wellKnownMessages[msg.FullName()] = true
+		}
 	}
+}
+
+func IsWellKnownType(name protoreflect.FullName) bool {
+	return wellKnownMessages[name]
+}
+
+func IsScalarType(t string) bool {
+	_, ok := internal.FieldTypes[t]
+	return ok
 }
