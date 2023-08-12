@@ -355,14 +355,12 @@ func resolveFieldTypes(f *fldDescriptor, handler *reporter.Handler, s *Symbols, 
 
 	dsc := r.resolve(file.NodeInfo(node.FieldType()), fld.GetTypeName(), true, scopes)
 	if dsc == nil {
-		if err := handler.HandleErrorWithPos(file.NodeInfo(node.FieldType()), &errUndeclaredName{
+		return handler.HandleErrorWithPos(file.NodeInfo(node.FieldType()), &errUndeclaredName{
 			scope:      scope,
 			what:       "type",
 			name:       fld.GetTypeName(),
 			parentFile: file,
-		}); err != nil {
-			return err
-		}
+		})
 	}
 	if isSentinelDescriptor(dsc) {
 		return handler.HandleErrorf(file.NodeInfo(node.FieldType()), "%s: unknown type %s; resolved to %s which is not defined; consider using a leading dot", scope, fld.GetTypeName(), dsc.FullName())
