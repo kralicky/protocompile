@@ -1925,6 +1925,18 @@ func (r *result) FindDescriptorByName(fqn protoreflect.FullName) protoreflect.De
 	return d.(protoreflect.Descriptor)
 }
 
+func (r *result) FindExtendeeDescriptorByName(fqn protoreflect.FullName) protoreflect.MessageDescriptor {
+	for _, extDesc := range r.extensions.exts {
+		if extDesc.field == nil {
+			continue
+		}
+		if extDesc.field.extendee.FullName() == fqn {
+			return extDesc.field.extendee
+		}
+	}
+	return nil
+}
+
 func (r *result) hasSource() bool {
 	n := r.FileNode()
 	_, ok := n.(*ast.FileNode)

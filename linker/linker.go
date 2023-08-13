@@ -157,6 +157,7 @@ type Result interface {
 	FindOptionMessageDescriptor(option *descriptorpb.UninterpretedOption) protoreflect.MessageDescriptor
 	FindFieldDescriptorByFieldReferenceNode(node *ast.FieldReferenceNode) protoreflect.FieldDescriptor
 	FindMessageDescriptorByTypeReferenceURLNode(node *ast.FieldReferenceNode) protoreflect.MessageDescriptor
+	FindExtendeeDescriptorByName(fqn protoreflect.FullName) protoreflect.MessageDescriptor
 
 	// CanonicalProto returns the file descriptor proto in a form that
 	// will be serialized in a canonical way. The "canonical" way matches

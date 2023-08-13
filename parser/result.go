@@ -287,6 +287,7 @@ func (r *result) addExtensions(ext *ast.ExtendNode, flds *[]*descriptorpb.FieldD
 			fd := r.asFieldDescriptor(decl, internal.MaxTag, isProto3, handler)
 			fd.Extendee = proto.String(extendee)
 			*flds = append(*flds, fd)
+			r.putFieldNode(fd, decl)
 		case *ast.GroupNode:
 			count++
 			// ditto: use higher limit right now
