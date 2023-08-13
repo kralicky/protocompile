@@ -1180,6 +1180,13 @@ func (interp *interpreter) interpretField(mc *internal.MessageContext, msg proto
 	if err != nil {
 		return nil, interp.reporter.HandleError(err)
 	}
+
+	for _, interpretedField := range val.msgVal {
+		fields := fld.Message().Fields()
+		fieldDesc := fields.ByNumber(protowire.Number(interpretedField.number))
+		interp.descriptorIndex.FieldReferenceNodesToFieldDescriptors[interpretedField.node] = fieldDesc
+	}
+
 	return &interpretedOption{
 		pathPrefix: pathPrefix,
 		interpretedField: interpretedField{
