@@ -121,6 +121,10 @@ func (r *result) Name() protoreflect.Name {
 	return ""
 }
 
+func (r *result) String() string {
+	return r.FileNode().Name()
+}
+
 func (r *result) FullName() protoreflect.FullName {
 	return r.Package()
 }
