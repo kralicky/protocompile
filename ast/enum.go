@@ -16,6 +16,16 @@ package ast
 
 import "fmt"
 
+// EnumDeclNode is a node in the AST that defines an enum type. This can be
+// either an *EnumNode or a NoSourceNode.
+type EnumDeclNode interface {
+	Node
+	GetName() Node
+}
+
+var _ EnumDeclNode = (*EnumNode)(nil)
+var _ EnumDeclNode = NoSourceNode{}
+
 // EnumNode represents an enum declaration. Example:
 //
 //	enum Foo { BAR = 0; BAZ = 1 }
@@ -30,6 +40,10 @@ type EnumNode struct {
 
 func (*EnumNode) fileElement() {}
 func (*EnumNode) msgElement()  {}
+
+func (e *EnumNode) GetName() Node {
+	return e.Name
+}
 
 // NewEnumNode creates a new *EnumNode. All arguments must be non-nil. While
 // it is technically allowed for decls to be nil or empty, the resulting node

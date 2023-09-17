@@ -16,6 +16,16 @@ package ast
 
 import "fmt"
 
+// ServiceDeclNode is a node in the AST that defines a service type. This
+// can be either a *ServiceNode or a NoSourceNode.
+type ServiceDeclNode interface {
+	Node
+	GetName() Node
+}
+
+var _ ServiceDeclNode = (*ServiceNode)(nil)
+var _ ServiceDeclNode = NoSourceNode{}
+
 // ServiceNode represents a service declaration. Example:
 //
 //	service Foo {
@@ -32,6 +42,10 @@ type ServiceNode struct {
 }
 
 func (*ServiceNode) fileElement() {}
+
+func (s *ServiceNode) GetName() Node {
+	return s.Name
+}
 
 // NewServiceNode creates a new *ServiceNode. All arguments must be non-nil.
 //   - keyword: The token corresponding to the "service" keyword.

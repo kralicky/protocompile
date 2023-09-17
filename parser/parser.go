@@ -169,7 +169,7 @@ type Result interface {
 	// return nil, such as if the given enum is not part of the
 	// FileDescriptorProto hierarchy. If this result has no AST, this returns a
 	// placeholder node.
-	EnumNode(*descriptorpb.EnumDescriptorProto) ast.Node
+	EnumNode(*descriptorpb.EnumDescriptorProto) ast.EnumDeclNode
 	// EnumValueNode returns the AST node corresponding to the given enum. This
 	// can return nil, such as if the given enum value is not part of the
 	// FileDescriptorProto hierarchy. If this result has no AST, this returns a
@@ -184,7 +184,7 @@ type Result interface {
 	// can return nil, such as if the given service is not part of the
 	// FileDescriptorProto hierarchy. If this result has no AST, this returns a
 	// placeholder node.
-	ServiceNode(*descriptorpb.ServiceDescriptorProto) ast.Node
+	ServiceNode(*descriptorpb.ServiceDescriptorProto) ast.ServiceDeclNode
 	// MethodNode returns the AST node corresponding to the given method. This
 	// can return nil, such as if the given method is not part of the
 	// FileDescriptorProto hierarchy. If this result has no AST, this returns a
@@ -198,10 +198,10 @@ type Result interface {
 	OneofDescriptor(ast.Node) *descriptorpb.OneofDescriptorProto
 	ExtensionRangeDescriptor(ast.RangeDeclNode) *descriptorpb.DescriptorProto_ExtensionRange
 	MessageReservedRangeDescriptor(ast.RangeDeclNode) *descriptorpb.DescriptorProto_ReservedRange
-	EnumDescriptor(ast.Node) *descriptorpb.EnumDescriptorProto
+	EnumDescriptor(ast.EnumDeclNode) *descriptorpb.EnumDescriptorProto
 	EnumValueDescriptor(ast.EnumValueDeclNode) *descriptorpb.EnumValueDescriptorProto
 	EnumReservedRangeDescriptor(ast.RangeDeclNode) *descriptorpb.EnumDescriptorProto_EnumReservedRange
-	ServiceDescriptor(ast.Node) *descriptorpb.ServiceDescriptorProto
+	ServiceDescriptor(ast.ServiceDeclNode) *descriptorpb.ServiceDescriptorProto
 	MethodDescriptor(ast.RPCDeclNode) *descriptorpb.MethodDescriptorProto
 	Descriptor(ast.Node) proto.Message
 

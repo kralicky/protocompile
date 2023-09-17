@@ -879,11 +879,11 @@ func (r *result) MessageReservedRangeNode(rr *descriptorpb.DescriptorProto_Reser
 	return r.nodes[rr].(ast.RangeDeclNode)
 }
 
-func (r *result) EnumNode(e *descriptorpb.EnumDescriptorProto) ast.Node {
+func (r *result) EnumNode(e *descriptorpb.EnumDescriptorProto) ast.EnumDeclNode {
 	if r.nodes == nil {
 		return ast.NewNoSourceNode(r.proto.GetName())
 	}
-	return r.nodes[e]
+	return r.nodes[e].(ast.EnumDeclNode)
 }
 
 func (r *result) EnumValueNode(e *descriptorpb.EnumValueDescriptorProto) ast.EnumValueDeclNode {
@@ -900,11 +900,11 @@ func (r *result) EnumReservedRangeNode(rr *descriptorpb.EnumDescriptorProto_Enum
 	return r.nodes[rr].(ast.RangeDeclNode)
 }
 
-func (r *result) ServiceNode(s *descriptorpb.ServiceDescriptorProto) ast.Node {
+func (r *result) ServiceNode(s *descriptorpb.ServiceDescriptorProto) ast.ServiceDeclNode {
 	if r.nodes == nil {
 		return ast.NewNoSourceNode(r.proto.GetName())
 	}
-	return r.nodes[s]
+	return r.nodes[s].(ast.ServiceDeclNode)
 }
 
 func (r *result) MethodNode(m *descriptorpb.MethodDescriptorProto) ast.RPCDeclNode {
@@ -915,7 +915,7 @@ func (r *result) MethodNode(m *descriptorpb.MethodDescriptorProto) ast.RPCDeclNo
 }
 
 // EnumDescriptor implements Result.
-func (r *result) EnumDescriptor(n ast.Node) *descriptorpb.EnumDescriptorProto {
+func (r *result) EnumDescriptor(n ast.EnumDeclNode) *descriptorpb.EnumDescriptorProto {
 	if d, ok := r.nodesInverse[n]; ok {
 		if ed, ok := d.(*descriptorpb.EnumDescriptorProto); ok {
 			return ed
@@ -1025,7 +1025,7 @@ func (r *result) OptionNamePartDescriptor(n ast.Node) *descriptorpb.Uninterprete
 }
 
 // ServiceDescriptor implements Result.
-func (r *result) ServiceDescriptor(n ast.Node) *descriptorpb.ServiceDescriptorProto {
+func (r *result) ServiceDescriptor(n ast.ServiceDeclNode) *descriptorpb.ServiceDescriptorProto {
 	if d, ok := r.nodesInverse[n]; ok {
 		if sd, ok := d.(*descriptorpb.ServiceDescriptorProto); ok {
 			return sd
