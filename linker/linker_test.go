@@ -51,9 +51,9 @@ func TestSimpleLink(t *testing.T) {
 		return
 	}
 
-	res, ok := fds.Files[0].(linker.Result)
+	res, ok := fds.SortedFiles[0].(linker.Result)
 	require.True(t, ok)
-	fdset := prototest.LoadDescriptorSet(t, "../internal/testdata/desc_test_complex.protoset", linker.ResolverFromFile(fds.Files[0]))
+	fdset := prototest.LoadDescriptorSet(t, "../internal/testdata/desc_test_complex.protoset", linker.ResolverFromFile(fds.SortedFiles[0]))
 	prototest.CheckFiles(t, res, fdset, true)
 }
 
@@ -70,9 +70,9 @@ func TestMultiFileLink(t *testing.T) {
 			continue
 		}
 
-		res, ok := fds.Files[0].(linker.Result)
+		res, ok := fds.SortedFiles[0].(linker.Result)
 		require.True(t, ok)
-		fdset := prototest.LoadDescriptorSet(t, "../internal/testdata/all.protoset", linker.ResolverFromFile(fds.Files[0]))
+		fdset := prototest.LoadDescriptorSet(t, "../internal/testdata/all.protoset", linker.ResolverFromFile(fds.SortedFiles[0]))
 		prototest.CheckFiles(t, res, fdset, true)
 	}
 }
@@ -84,14 +84,14 @@ func TestProto3Optional(t *testing.T) {
 			ImportPaths: []string{"../internal/testdata"},
 		}),
 	}
-	fds, err := compiler.Compile(context.Background(), "desc_test_proto3_optional.proto")
+	compileResults, err := compiler.Compile(context.Background(), "desc_test_proto3_optional.proto")
 	if !assert.Nil(t, err) {
 		return
 	}
 
-	fdset := prototest.LoadDescriptorSet(t, "../internal/testdata/desc_test_proto3_optional.protoset", fds.AsResolver())
+	fdset := prototest.LoadDescriptorSet(t, "../internal/testdata/desc_test_proto3_optional.protoset", compileResults.AsResolver())
 
-	res, ok := fds.Files[0].(linker.Result)
+	res, ok := compileResults.SortedFiles[0].(linker.Result)
 	require.True(t, ok)
 	prototest.CheckFiles(t, res, fdset, true)
 }
@@ -2071,7 +2071,7 @@ func removePrefixIndent(s string) string {
 	return strings.Join(lines, "\n")
 }
 
-func compile(t *testing.T, input map[string]string) (linker.Files, error) {
+func compile(t *testing.T, input map[string]string) (linker.SortedFiles, error) {
 	t.Helper()
 	acc := func(filename string) (io.ReadCloser, error) {
 		f, ok := input[filename]
@@ -2094,7 +2094,7 @@ func compile(t *testing.T, input map[string]string) (linker.Files, error) {
 	if err != nil {
 		return nil, err
 	}
-	return res.Files, nil
+	return res.SortedFiles, nil
 }
 
 func TestProto3Enums(t *testing.T) {

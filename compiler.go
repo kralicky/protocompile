@@ -92,6 +92,11 @@ type Compiler struct {
 
 	RetainResults bool
 
+	// If true, all linked dependencies will be provided in the compiler results,
+	// even if they were not explicitly requested to be compiled. Otherwise,
+	// only the requested files will be included in the results.
+	IncludeDependenciesInResults bool
+
 	Hooks CompilerHooks
 
 	exec *executor
@@ -101,10 +106,14 @@ type CompilerHooks struct {
 	// If not nil, called before a file is invalidated.
 	// Will be called before any dependencies have been invalidated.
 	PreInvalidate func(path string, reason string)
-	// If not nil, called after a file has been invalidated.
-	// Will be called after any dependencies have been invalidated.
-	PostInvalidate func(path string)
-
+	// If not nil, called after a file (and all its dependencies) have been
+	// invalidated.
+	// The previous result is guaranteed to be equal to a result that was
+	// returned in the single most recent call to Compile; for all other purposes
+	// it should be treated as opaque.
+	// If the file is no longer resolvable (if it was deleted, for example),
+	// willRecompile will be set to false. Otherwise, it will be true.
+	PostInvalidate func(path string, previousResult linker.File, willRecompile bool)
 	// If not nil, called before a file is compiled.
 	PreCompile func(path string)
 	// If not nil, called after a file has been compiled.
@@ -132,7 +141,7 @@ const (
 )
 
 type CompileResult struct {
-	linker.Files
+	linker.SortedFiles
 	UnlinkedParserResults map[string]parser.Result
 }
 
@@ -222,35 +231,22 @@ func (c *Compiler) Compile(ctx context.Context, files ...string) (CompileResult,
 		}
 	}
 
+	if c.IncludeDependenciesInResults {
+		descs = linker.ComputeReflexiveTransitiveClosure(descs)
+	}
+
 	if err := h.Error(); err != nil {
 		return CompileResult{
-			Files:                 descs,
+			SortedFiles:           descs.Sort(),
 			UnlinkedParserResults: unlinked,
 		}, err
 	}
 	// this should probably never happen; if any task returned an
 	// error, h.Error() should be non-nil
 	return CompileResult{
-		Files:                 descs,
+		SortedFiles:           descs.Sort(),
 		UnlinkedParserResults: unlinked,
 	}, firstError
-}
-
-func (c *Compiler) GetImplicitResults() linker.Files {
-	if c.exec == nil {
-		return nil
-	}
-	var implicit linker.Files
-	for _, ir := range c.exec.results {
-		if ir.explicitFile {
-			continue
-		}
-		if ir.res == nil {
-			continue
-		}
-		implicit = append(implicit, ir.res)
-	}
-	return implicit
 }
 
 type result struct {
@@ -262,7 +258,7 @@ type result struct {
 	explicitFile bool
 
 	// produces a linker.File or error, only available when ready is closed
-	res linker.File
+	res linker.Result
 	// parser result, may be available if linking fails but the file is syntactically valid
 	parseRes parser.Result
 	err      error
@@ -298,7 +294,7 @@ func (r *result) failPartial(parseRes parser.Result, err error) {
 	close(r.ready)
 }
 
-func (r *result) complete(f linker.File) {
+func (r *result) complete(f linker.Result) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -376,7 +372,9 @@ func (e *executor) invalidate(files ...string) []string {
 		if _, err := e.c.Resolver.FindFileByPath(name); err != nil {
 			// if the file doesn't exist anymore, we don't need to
 			// recompile it
-			fmt.Println("invalidated file was deleted, skipping: ", name)
+			// if e.hooks.PostInvalidate != nil {
+			// 	e.hooks.PostInvalidate(name, invalidated[name])
+			// }
 			continue
 		}
 		filenames = append(filenames, name)
@@ -384,15 +382,21 @@ func (e *executor) invalidate(files ...string) []string {
 	return filenames
 }
 
-func (e *executor) invalidateLocked(r *result, blocks map[*result][]*result, seen map[string]struct{}, reason string) bool {
+func (e *executor) invalidateLocked(r *result, blocks map[*result][]*result, seen map[string]struct{}, reason string) {
 	if _, ok := seen[r.name]; ok {
-		return false
+		return
 	}
 	if e.hooks.PreInvalidate != nil {
 		e.hooks.PreInvalidate(r.name, reason)
 	}
 	if e.hooks.PostInvalidate != nil {
-		defer e.hooks.PostInvalidate(r.name)
+		defer func() {
+			if err := recover(); err != nil {
+				panic(err)
+			}
+			_, err := e.c.Resolver.FindFileByPath(r.name)
+			e.hooks.PostInvalidate(r.name, r.res, err == nil)
+		}()
 	}
 	seen[r.name] = struct{}{}
 	if r.res != nil {
@@ -409,8 +413,6 @@ func (e *executor) invalidateLocked(r *result, blocks map[*result][]*result, see
 		// fmt.Printf(" => invalidating %s (depends on %s)\n", dep.name, r.name)
 		e.invalidateLocked(dep, blocks, seen, fmt.Sprintf("file depends on %s", r.name))
 	}
-
-	return true
 }
 
 func (e *executor) compileLocked(ctx context.Context, file string, explicitFile bool) *result {
@@ -571,13 +573,13 @@ func (t *task) release() {
 
 const descriptorProtoPath = "google/protobuf/descriptor.proto"
 
-func (t *task) asFile(ctx context.Context, name string, pr *SearchResult) (linker.File, error) {
+func (t *task) asFile(ctx context.Context, name string, pr *SearchResult) (linker.Result, error) {
 	r := *pr
 	if r.Desc != nil {
 		if r.Desc.Path() != name {
 			return nil, fmt.Errorf("search result for %q returned descriptor for %q", name, r.Desc.Path())
 		}
-		return linker.NewFileRecursive(r.Desc)
+		// return linker.NewFileRecursive(r.Desc)
 	}
 
 	parseRes, err := t.asParseResult(name, r)
@@ -592,7 +594,7 @@ func (t *task) asFile(ctx context.Context, name string, pr *SearchResult) (linke
 		return linkRes, nil
 	}
 
-	var deps []linker.File
+	var deps linker.Files
 	fileDescriptorProto := parseRes.FileDescriptorProto()
 	var wantsDescriptorProto bool
 	imports := fileDescriptorProto.Dependency
@@ -623,9 +625,9 @@ func (t *task) asFile(ctx context.Context, name string, pr *SearchResult) (linke
 	if len(imports) > 0 {
 		t.r.setBlockedOn(imports)
 
-		results := make([]*result, len(fileDescriptorProto.Dependency))
+		results := make([]*result, 0, len(fileDescriptorProto.Dependency))
 		checked := map[string]struct{}{}
-		for i, dep := range fileDescriptorProto.Dependency {
+		for _, dep := range fileDescriptorProto.Dependency {
 			pos := findImportPos(parseRes, dep)
 			if name == dep {
 				// doh! file imports itself
@@ -638,9 +640,9 @@ func (t *task) asFile(ctx context.Context, name string, pr *SearchResult) (linke
 			if err := t.e.checkForDependencyCycle(res, []string{name, dep}, pos, checked); err != nil {
 				return nil, err
 			}
-			results[i] = res
+			results = append(results, res)
 		}
-		deps = make([]linker.File, len(results))
+		deps = make(linker.Files, 0, len(results))
 		var descriptorProtoRes *result
 		if wantsDescriptorProto {
 			descriptorProtoRes = t.e.compile(ctx, descriptorProtoPath)
@@ -651,7 +653,7 @@ func (t *task) asFile(ctx context.Context, name string, pr *SearchResult) (linke
 		t.released = true
 
 		// now we wait for them all to be computed
-		for i, res := range results {
+		for _, res := range results {
 			select {
 			case <-res.ready:
 				if res.err != nil {
@@ -672,7 +674,7 @@ func (t *task) asFile(ctx context.Context, name string, pr *SearchResult) (linke
 					}
 					return nil, res.err
 				}
-				deps[i] = res.res
+				deps = append(deps, res.res)
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			}

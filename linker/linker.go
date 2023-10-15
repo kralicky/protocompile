@@ -232,3 +232,24 @@ func (e *errUndeclaredName) ParentFile() ast.FileDeclNode {
 func (e *errUndeclaredName) Hint() string {
 	return e.hint
 }
+
+func ComputeReflexiveTransitiveClosure(roots Files) Files {
+	seen := map[File]struct{}{}
+	var results Files
+	for _, root := range roots {
+		results = append(results, computeReflexiveTransitiveClosure(root, seen)...)
+	}
+	return results
+}
+
+func computeReflexiveTransitiveClosure(root File, seen map[File]struct{}) Files {
+	if _, ok := seen[root]; ok {
+		return nil
+	}
+	seen[root] = struct{}{}
+	results := Files{root}
+	for _, dep := range root.Dependencies() {
+		results = append(results, computeReflexiveTransitiveClosure(dep, seen)...)
+	}
+	return results
+}

@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strings"
 
+	"slices"
+
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -32,6 +34,8 @@ import (
 // ResolverFromFile.)
 type File interface {
 	protoreflect.FileDescriptor
+	Dependencies() Files
+
 	// FindDescriptorByName returns the given named element that is defined in
 	// this file. If no such element exists, nil is returned.
 	FindDescriptorByName(name protoreflect.FullName) protoreflect.Descriptor
@@ -62,7 +66,7 @@ func NewFile(f protoreflect.FileDescriptor, deps Files) (File, error) {
 	return newFile(f, checkedDeps)
 }
 
-func newFile(f protoreflect.FileDescriptor, deps Files) (File, error) {
+func newFile(f protoreflect.FileDescriptor, deps Files) (*file, error) {
 	descs := map[protoreflect.FullName]protoreflect.Descriptor{}
 	err := walk.Descriptors(f, func(d protoreflect.Descriptor) error {
 		if _, ok := descs[d.FullName()]; ok {
@@ -85,15 +89,19 @@ func newFile(f protoreflect.FileDescriptor, deps Files) (File, error) {
 // If f has any dependencies/imports, they are converted, too, including any and
 // all transitive dependencies.
 //
-// If f already implements File, it is returned unchanged.
+// If f is an instance of *file, it is returned unchanged.
 func NewFileRecursive(f protoreflect.FileDescriptor) (File, error) {
-	if asFile, ok := f.(File); ok {
-		return asFile, nil
+	if fp, ok := f.(*file); ok {
+		return fp, nil
 	}
-	return newFileRecursive(f, map[protoreflect.FileDescriptor]File{})
+	file, err := newFileRecursive(f, map[protoreflect.FileDescriptor]*file{})
+	if err != nil {
+		return nil, err
+	}
+	return file, nil
 }
 
-func newFileRecursive(fd protoreflect.FileDescriptor, seen map[protoreflect.FileDescriptor]File) (File, error) {
+func newFileRecursive(fd protoreflect.FileDescriptor, seen map[protoreflect.FileDescriptor]*file) (*file, error) {
 	if res, ok := seen[fd]; ok {
 		if res == nil {
 			return nil, fmt.Errorf("import cycle encountered: file %s transitively imports itself", fd.Path())
@@ -101,13 +109,13 @@ func newFileRecursive(fd protoreflect.FileDescriptor, seen map[protoreflect.File
 		return res, nil
 	}
 
-	if f, ok := fd.(File); ok {
-		seen[fd] = f
-		return f, nil
-	}
+	// if f, ok := fd.(File); ok {
+	// 	seen[fd] = f
+	// 	return f, nil
+	// }
 
 	seen[fd] = nil
-	deps := make([]File, fd.Imports().Len())
+	deps := make(Files, fd.Imports().Len())
 	for i := 0; i < fd.Imports().Len(); i++ {
 		imprt := fd.Imports().Get(i)
 		dep, err := newFileRecursive(imprt, seen)
@@ -131,6 +139,10 @@ type file struct {
 	deps  Files
 }
 
+func (f *file) Dependencies() Files {
+	return f.deps
+}
+
 func (f *file) FindDescriptorByName(name protoreflect.FullName) protoreflect.Descriptor {
 	return f.descs[name]
 }
@@ -148,6 +160,112 @@ var _ File = (*file)(nil)
 // Files represents a set of protobuf files. It is a slice of File values, but
 // also provides a method for easily looking up files by path and name.
 type Files []File
+type SortedFiles []File
+
+func (f Files) Sort() SortedFiles {
+	if len(f) < 2 {
+		return (SortedFiles)(f)
+	}
+	slices.SortFunc(f, compareFiles)
+	return (SortedFiles)(f)
+}
+
+// Efficiently merges two sorted Files lists. If 'a' has enough capacity to hold
+// the merged result, the merge is done in-place. Otherwise, a new slice is
+// allocated. The new slice is returned.
+func MergeFiles(a, b SortedFiles) SortedFiles {
+	if cap(a) >= len(a)+len(b) {
+		oldLen := len(a)
+		a = append(a, b...)
+
+		i, j, k := oldLen-1, len(b)-1, len(a)-1
+		for i >= 0 && j >= 0 {
+			switch compareFiles(a[i], b[j]) {
+			case -1: // a[i] < b[j]
+				a[k] = a[i]
+				i--
+			case 1: // a[i] > b[j]
+				a[k] = b[j]
+				j--
+			case 0: // a[i] == b[j]
+				// duplicate, overwrite the value in a with the value in b
+				a[k] = b[j]
+				i--
+				j--
+			}
+			k--
+		}
+		for j >= 0 {
+			a[k] = b[j]
+			j--
+			k--
+		}
+		return a
+	}
+
+	out := make(SortedFiles, len(a)+len(b))
+	i, j, k := 0, 0, 0
+	for i < len(a) && j < len(b) {
+		switch compareFiles(a[i], b[j]) {
+		case -1: // a[i] < b[j]
+			out[k] = a[i]
+			i++
+		case 1: // a[i] > b[j]
+			out[k] = b[j]
+			j++
+		case 0: // a[i] == b[j]
+			// duplicate, overwrite the value in a with the value in b
+			out[k] = b[j]
+			i++
+			j++
+		}
+		k++
+	}
+	for i < len(a) {
+		out[k] = a[i]
+		i++
+		k++
+	}
+	for j < len(b) {
+		out[k] = b[j]
+		j++
+		k++
+	}
+	return out[:k]
+}
+
+func compareFiles(a, b File) int {
+	return strings.Compare(a.Path(), b.Path())
+}
+
+func (f *SortedFiles) Put(newFile File) bool {
+	i, exists := slices.BinarySearchFunc(*f, newFile, compareFiles)
+	if exists {
+		(*f)[i] = newFile
+	} else {
+		*f = slices.Insert(*f, i, newFile)
+	}
+	return !exists
+}
+
+func (f *SortedFiles) Delete(file File) {
+	i, exists := slices.BinarySearchFunc(*f, file, compareFiles)
+	if exists {
+		*f = slices.Delete(*f, i, i+1)
+	}
+}
+
+// FindFileByPath finds a file in f that has the given path and name. If f
+// contains no such file, nil is returned.
+func (f SortedFiles) FindFileByPath(path string) File {
+	idx, ok := slices.BinarySearchFunc(f, path, func(file File, path string) int {
+		return strings.Compare(file.Path(), path)
+	})
+	if ok {
+		return f[idx]
+	}
+	return nil
+}
 
 // FindFileByPath finds a file in f that has the given path and name. If f
 // contains no such file, nil is returned.
@@ -170,7 +288,11 @@ func (f Files) FindFileByPath(path string) File {
 //
 // Also see ResolverFromFile.
 func (f Files) AsResolver() Resolver {
-	return filesResolver(f)
+	return newFilesResolver(f)
+}
+
+func (f SortedFiles) AsResolver() Resolver {
+	return newFilesResolver(f)
 }
 
 // Resolver is an interface that can resolve various kinds of queries about
@@ -268,18 +390,25 @@ func (r fileResolver) FindExtensionByNumber(message protoreflect.FullName, field
 	})
 }
 
-type filesResolver []File
+type filesSliceType[T File] interface {
+	~[]T
+	FindFileByPath(string) T
+}
+type filesResolver[S filesSliceType[T], T File] []T
 
-func (r filesResolver) FindFileByPath(path string) (protoreflect.FileDescriptor, error) {
-	for _, f := range r {
-		if f.Path() == path {
-			return f, nil
-		}
+func newFilesResolver[S filesSliceType[T], T File](files S) filesResolver[S, T] {
+	return filesResolver[S, T](files)
+}
+
+func (r filesResolver[S, T]) FindFileByPath(path string) (protoreflect.FileDescriptor, error) {
+	var f File = S(r).FindFileByPath(path)
+	if f != nil {
+		return f, nil
 	}
 	return nil, protoregistry.NotFound
 }
 
-func (r filesResolver) FindDescriptorByName(name protoreflect.FullName) (protoreflect.Descriptor, error) {
+func (r filesResolver[S, T]) FindDescriptorByName(name protoreflect.FullName) (protoreflect.Descriptor, error) {
 	for _, f := range r {
 		result := f.FindDescriptorByName(name)
 		if result != nil {
@@ -289,7 +418,7 @@ func (r filesResolver) FindDescriptorByName(name protoreflect.FullName) (protore
 	return nil, protoregistry.NotFound
 }
 
-func (r filesResolver) FindMessageByName(message protoreflect.FullName) (protoreflect.MessageType, error) {
+func (r filesResolver[S, T]) FindMessageByName(message protoreflect.FullName) (protoreflect.MessageType, error) {
 	for _, f := range r {
 		d := f.FindDescriptorByName(message)
 		if d != nil {
@@ -302,12 +431,12 @@ func (r filesResolver) FindMessageByName(message protoreflect.FullName) (protore
 	return nil, protoregistry.NotFound
 }
 
-func (r filesResolver) FindMessageByURL(url string) (protoreflect.MessageType, error) {
+func (r filesResolver[S, T]) FindMessageByURL(url string) (protoreflect.MessageType, error) {
 	name := messageNameFromURL(url)
 	return r.FindMessageByName(protoreflect.FullName(name))
 }
 
-func (r filesResolver) FindExtensionByName(field protoreflect.FullName) (protoreflect.ExtensionType, error) {
+func (r filesResolver[S, T]) FindExtensionByName(field protoreflect.FullName) (protoreflect.ExtensionType, error) {
 	for _, f := range r {
 		d := f.FindDescriptorByName(field)
 		if d != nil {
@@ -323,7 +452,7 @@ func (r filesResolver) FindExtensionByName(field protoreflect.FullName) (protore
 	return nil, protoregistry.NotFound
 }
 
-func (r filesResolver) FindExtensionByNumber(message protoreflect.FullName, field protoreflect.FieldNumber) (protoreflect.ExtensionType, error) {
+func (r filesResolver[S, T]) FindExtensionByNumber(message protoreflect.FullName, field protoreflect.FieldNumber) (protoreflect.ExtensionType, error) {
 	for _, f := range r {
 		ext := findExtension(f, message, field)
 		if ext != nil {

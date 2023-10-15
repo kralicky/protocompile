@@ -85,6 +85,10 @@ var _ protoreflect.FileDescriptor = (*result)(nil)
 var _ Result = (*result)(nil)
 var _ protoutil.DescriptorProtoWrapper = (*result)(nil)
 
+func (r *result) Dependencies() Files {
+	return r.deps
+}
+
 func (r *result) RemoveAST() {
 	r.Result = parser.ResultWithoutAST(r.FileDescriptorProto())
 	r.optionQualifiedNames = nil
