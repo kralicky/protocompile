@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"runtime"
 	"strings"
 	"sync"
@@ -105,9 +106,11 @@ type Compiler struct {
 type CompilerHooks struct {
 	// If not nil, called before a file is invalidated.
 	// Will be called before any dependencies have been invalidated.
+	// This is called for all files, including those that contained errors
+	// and were not fully linked (for which PostInvalidate will not be called).
 	PreInvalidate func(path string, reason string)
 	// If not nil, called after a file (and all its dependencies) have been
-	// invalidated.
+	// invalidated. This is only called for fully linked files without errors.
 	// The previous result is guaranteed to be equal to a result that was
 	// returned in the single most recent call to Compile; for all other purposes
 	// it should be treated as opaque.
@@ -141,7 +144,7 @@ const (
 )
 
 type CompileResult struct {
-	linker.SortedFiles
+	linker.Files
 	UnlinkedParserResults map[string]parser.Result
 }
 
@@ -206,7 +209,7 @@ func (c *Compiler) Compile(ctx context.Context, files ...string) (CompileResult,
 
 	e.mu.Lock()
 	for _, f := range needsRecompile {
-		results = append(results, e.compileLocked(ctx, f, true))
+		results = append(results, e.compileLocked(ctx, f, true, nil))
 	}
 	e.mu.Unlock()
 
@@ -237,16 +240,21 @@ func (c *Compiler) Compile(ctx context.Context, files ...string) (CompileResult,
 
 	if err := h.Error(); err != nil {
 		return CompileResult{
-			SortedFiles:           descs.Sort(),
+			Files:                 descs,
 			UnlinkedParserResults: unlinked,
 		}, err
 	}
 	// this should probably never happen; if any task returned an
 	// error, h.Error() should be non-nil
 	return CompileResult{
-		SortedFiles:           descs.Sort(),
+		Files:                 descs,
 		UnlinkedParserResults: unlinked,
 	}, firstError
+}
+
+type block struct {
+	ImportedAs      string
+	EffectiveImport string
 }
 
 type result struct {
@@ -258,16 +266,18 @@ type result struct {
 	explicitFile bool
 
 	// produces a linker.File or error, only available when ready is closed
-	res linker.Result
+	res linker.File
 	// parser result, may be available if linking fails but the file is syntactically valid
 	parseRes parser.Result
 	err      error
 
 	mu sync.Mutex
 	// the results that are dependencies of this result; this result is
-	// blocked, waiting on these dependencies to complete
-	blockedOn     []string
-	lastBlockedOn []string
+	// blocked, waiting on these dependencies to complete.
+	// note that this is the *inverse* of this result's dependencies - the set of
+	// files that depend on this file.
+	blockedOn     []block
+	lastBlockedOn []block
 }
 
 func (r *result) fail(err error) {
@@ -290,11 +300,15 @@ func (r *result) failPartial(parseRes parser.Result, err error) {
 	r.res = nil
 	r.parseRes = parseRes
 
+	// for i := range r.blockedOn {
+	// 	r.blockedOn[i].EffectiveImport = parseRes.FileDescriptorProto()
+	// }
+
 	r.lastBlockedOn, r.blockedOn = r.blockedOn, nil
 	close(r.ready)
 }
 
-func (r *result) complete(f linker.Result) {
+func (r *result) complete(f linker.File) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -303,18 +317,21 @@ func (r *result) complete(f linker.Result) {
 	if parseRes, ok := f.(parser.Result); ok {
 		r.parseRes = parseRes
 	}
+	// for i := range r.blockedOn {
+	// 	r.blockedOn[i].EffectiveImport = f.Path()
+	// }
 
 	r.lastBlockedOn, r.blockedOn = r.blockedOn, nil
 	close(r.ready)
 }
 
-func (r *result) setBlockedOn(deps []string) {
+func (r *result) setBlockedOn(blocks []block) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.blockedOn = deps
+	r.blockedOn = blocks
 }
 
-func (r *result) getBlockedOn() []string {
+func (r *result) getBlockedOn() []block {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.blockedOn
@@ -338,11 +355,13 @@ type executor struct {
 	hooks CompilerHooks
 }
 
-func (e *executor) compile(ctx context.Context, file string) *result {
+type ImportContext parser.Result
+
+func (e *executor) compile(ctx context.Context, file string, whence ImportContext) *result {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	return e.compileLocked(ctx, file, false)
+	return e.compileLocked(ctx, file, false, whence)
 }
 
 func (e *executor) invalidate(files ...string) []string {
@@ -354,7 +373,17 @@ func (e *executor) invalidate(files ...string) []string {
 	blocks := map[*result][]*result{}
 	for _, res := range e.results {
 		for _, dep := range res.lastBlockedOn {
-			blocks[e.results[dep]] = append(blocks[e.results[dep]], res)
+			if dep.EffectiveImport == "" {
+				// this dependency was imported under a different name that could not be resolved,
+				// so the relationship was never recorded
+				continue
+			}
+			blockedDep, ok := e.results[dep.EffectiveImport]
+			if !ok {
+				slog.Error("bug: detected an inconsistency in dependency graph", "file", res.name, "res", res, "dep", dep, "results", e.results)
+				panic("bug: detected an inconsistency in dependency graph")
+			}
+			blocks[blockedDep] = append(blocks[blockedDep], res)
 		}
 	}
 	for _, file := range files {
@@ -369,7 +398,7 @@ func (e *executor) invalidate(files ...string) []string {
 
 	filenames := make([]string, 0, len(invalidated))
 	for name := range invalidated {
-		if _, err := e.c.Resolver.FindFileByPath(name); err != nil {
+		if _, err := e.c.Resolver.FindFileByPath(name, nil); err != nil {
 			// if the file doesn't exist anymore, we don't need to
 			// recompile it
 			// if e.hooks.PostInvalidate != nil {
@@ -386,20 +415,21 @@ func (e *executor) invalidateLocked(r *result, blocks map[*result][]*result, see
 	if _, ok := seen[r.name]; ok {
 		return
 	}
+	seen[r.name] = struct{}{}
+
 	if e.hooks.PreInvalidate != nil {
 		e.hooks.PreInvalidate(r.name, reason)
 	}
-	if e.hooks.PostInvalidate != nil {
-		defer func() {
-			if err := recover(); err != nil {
-				panic(err)
-			}
-			_, err := e.c.Resolver.FindFileByPath(r.name)
-			e.hooks.PostInvalidate(r.name, r.res, err == nil)
-		}()
-	}
-	seen[r.name] = struct{}{}
 	if r.res != nil {
+		if e.hooks.PostInvalidate != nil {
+			defer func() {
+				if err := recover(); err != nil {
+					panic(err)
+				}
+				_, err := e.c.Resolver.FindFileByPath(r.name, nil)
+				e.hooks.PostInvalidate(r.name, r.res, err == nil)
+			}()
+		}
 		// if an error occurred, r.res will be nil. we can skip deleting
 		// the file in that case, since the link error should cause the
 		// partially updated symbol table to be discarded.
@@ -415,7 +445,7 @@ func (e *executor) invalidateLocked(r *result, blocks map[*result][]*result, see
 	}
 }
 
-func (e *executor) compileLocked(ctx context.Context, file string, explicitFile bool) *result {
+func (e *executor) compileLocked(ctx context.Context, file string, explicitFile bool, whence ImportContext) *result {
 	r := e.results[file]
 	if r != nil {
 		return r
@@ -451,7 +481,7 @@ func (e *executor) compileLocked(ctx context.Context, file string, explicitFile 
 				e.hooks.PostCompile(file)
 			}
 		}()
-		e.doCompile(ctx, file, r)
+		e.doCompile(ctx, file, r, whence)
 	}()
 	return r
 }
@@ -502,13 +532,13 @@ func (e *executor) hasOverrideDescriptorProto() bool {
 			// ignore a panic here; just assume no custom descriptor.proto
 			_ = recover()
 		}()
-		res, err := e.c.Resolver.FindFileByPath(descriptorProtoPath)
+		res, err := e.c.Resolver.FindFileByPath(descriptorProtoPath, nil)
 		e.descriptorProtoIsCustom = err == nil && res.Desc != standardImports[descriptorProtoPath]
 	})
 	return e.descriptorProtoIsCustom
 }
 
-func (e *executor) doCompile(ctx context.Context, file string, r *result) {
+func (e *executor) doCompile(ctx context.Context, file string, r *result, whence ImportContext) {
 	t := task{e: e, h: e.h.SubHandler(), r: r}
 	if err := e.s.Acquire(ctx, 1); err != nil {
 		r.fail(err)
@@ -520,10 +550,14 @@ func (e *executor) doCompile(ctx context.Context, file string, r *result) {
 		e.hooks.PreCompile(file)
 	}
 
-	sr, err := e.c.Resolver.FindFileByPath(file)
+	sr, err := e.c.Resolver.FindFileByPath(file, whence)
 	if err != nil {
 		r.fail(errFailedToResolve{err: err, path: file})
 		return
+	}
+	if sr.EffectiveImportPath != "" && sr.EffectiveImportPath != file {
+		file = sr.EffectiveImportPath // todo?
+		r.name = sr.EffectiveImportPath
 	}
 
 	defer func() {
@@ -573,13 +607,13 @@ func (t *task) release() {
 
 const descriptorProtoPath = "google/protobuf/descriptor.proto"
 
-func (t *task) asFile(ctx context.Context, name string, pr *SearchResult) (linker.Result, error) {
+func (t *task) asFile(ctx context.Context, name string, pr *SearchResult) (linker.File, error) {
 	r := *pr
 	if r.Desc != nil {
 		if r.Desc.Path() != name {
 			return nil, fmt.Errorf("search result for %q returned descriptor for %q", name, r.Desc.Path())
 		}
-		// return linker.NewFileRecursive(r.Desc)
+		return linker.NewFileRecursive(r.Desc)
 	}
 
 	parseRes, err := t.asParseResult(name, r)
@@ -623,11 +657,17 @@ func (t *task) asFile(ctx context.Context, name string, pr *SearchResult) (linke
 
 	var overrideDescriptorProto linker.File
 	if len(imports) > 0 {
-		t.r.setBlockedOn(imports)
+		effectiveImports := make([]*string, len(imports))
+		blocks := make([]block, len(imports))
+		for i, imp := range imports {
+			blocks[i].ImportedAs = imp
+			effectiveImports[i] = &blocks[i].EffectiveImport
+		}
+		t.r.setBlockedOn(blocks)
 
-		results := make([]*result, 0, len(fileDescriptorProto.Dependency))
+		results := make([]*result, len(imports))
 		checked := map[string]struct{}{}
-		for _, dep := range fileDescriptorProto.Dependency {
+		for i, dep := range imports {
 			pos := findImportPos(parseRes, dep)
 			if name == dep {
 				// doh! file imports itself
@@ -635,17 +675,18 @@ func (t *task) asFile(ctx context.Context, name string, pr *SearchResult) (linke
 				return nil, t.h.Error()
 			}
 
-			res := t.e.compile(ctx, dep)
+			res := t.e.compile(ctx, dep, parseRes)
 			// check for dependency cycle to prevent deadlock
 			if err := t.e.checkForDependencyCycle(res, []string{name, dep}, pos, checked); err != nil {
 				return nil, err
 			}
-			results = append(results, res)
+			results[i] = res
+			*effectiveImports[i] = res.name
 		}
-		deps = make(linker.Files, 0, len(results))
+		deps = make(linker.Files, len(results))
 		var descriptorProtoRes *result
 		if wantsDescriptorProto {
-			descriptorProtoRes = t.e.compile(ctx, descriptorProtoPath)
+			descriptorProtoRes = t.e.compile(ctx, descriptorProtoPath, nil)
 		}
 
 		// release our semaphore so dependencies can be processed w/out risk of deadlock
@@ -653,7 +694,7 @@ func (t *task) asFile(ctx context.Context, name string, pr *SearchResult) (linke
 		t.released = true
 
 		// now we wait for them all to be computed
-		for _, res := range results {
+		for i, res := range results {
 			select {
 			case <-res.ready:
 				if res.err != nil {
@@ -674,7 +715,7 @@ func (t *task) asFile(ctx context.Context, name string, pr *SearchResult) (linke
 					}
 					return nil, res.err
 				}
-				deps = append(deps, res.res)
+				deps[i] = res.res
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			}
@@ -712,19 +753,19 @@ func (e *executor) checkForDependencyCycle(res *result, sequence []string, pos a
 	for _, dep := range deps {
 		// is this a cycle?
 		for _, file := range sequence {
-			if file == dep {
-				handleImportCycle(e.h, pos, sequence, dep)
+			if file == dep.EffectiveImport {
+				handleImportCycle(e.h, pos, sequence, dep.EffectiveImport)
 				return e.h.Error()
 			}
 		}
 
 		e.mu.Lock()
-		depRes := e.results[dep]
+		depRes := e.results[dep.EffectiveImport]
 		e.mu.Unlock()
 		if depRes == nil {
 			continue
 		}
-		if err := e.checkForDependencyCycle(depRes, append(sequence, dep), pos, checked); err != nil {
+		if err := e.checkForDependencyCycle(depRes, append(sequence, dep.EffectiveImport), pos, checked); err != nil {
 			return err
 		}
 	}
@@ -812,6 +853,10 @@ func needsSourceInfo(parseRes parser.Result, mode SourceInfoMode) bool {
 }
 
 func (t *task) asParseResult(name string, r SearchResult) (parser.Result, error) {
+	if r.EffectiveImportPath != "" {
+		name = r.EffectiveImportPath
+	}
+
 	if r.ParseResult != nil {
 		if r.ParseResult.FileDescriptorProto().GetName() != name {
 			return nil, fmt.Errorf("search result for %q returned descriptor for %q", name, r.ParseResult.FileDescriptorProto().GetName())

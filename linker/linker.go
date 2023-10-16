@@ -31,7 +31,7 @@ import (
 
 // Link handles linking a parsed descriptor proto into a fully-linked descriptor.
 // If the given parser.Result has imports, they must all be present in the given
-// dependencies.
+// dependencies, in the exact order they are present in the parsed descriptor.
 //
 // The symbols value is optional and may be nil. If it is not nil, it must be the
 // same instance used to create and link all of the given result's dependencies
@@ -48,13 +48,37 @@ func Link(parsed parser.Result, dependencies Files, symbols *Symbols, handler *r
 	if symbols == nil {
 		symbols = NewSymbolTable()
 	}
-	prefix := parsed.FileDescriptorProto().GetPackage()
+	fd := parsed.FileDescriptorProto()
+	prefix := fd.GetPackage()
 	if prefix != "" {
 		prefix += "."
 	}
 
-	for _, imp := range parsed.FileDescriptorProto().Dependency {
-		dep := dependencies.FindFileByPath(imp)
+	filteredDependencies := dependencies
+	if len(fd.Dependency) != len(filteredDependencies) {
+		if len(fd.Dependency) == len(filteredDependencies)-1 {
+			// there may be an implicit dependency on google/protobuf/descriptor.proto
+			for i, dep := range filteredDependencies {
+				if dep == nil {
+					// the dependency didn't link
+					continue
+				}
+				if dep.Path() == "google/protobuf/descriptor.proto" {
+					filteredDependencies = append(filteredDependencies[:i], filteredDependencies[i+1:]...)
+					goto dependencies_ok
+				}
+			}
+		}
+		panic(fmt.Sprintf("bug: dependencies length mismatch: descriptor has %v, want %v", fd.Dependency, filteredDependencies))
+	}
+dependencies_ok:
+
+	for i, imp := range fd.Dependency {
+		dep := filteredDependencies[i]
+		if dep != nil {
+			fd.Dependency[i] = dep.Path()
+		}
+
 		if dep == nil {
 			// handle unresolvable import paths
 			// first, find the import node for this path
@@ -78,7 +102,7 @@ func Link(parsed parser.Result, dependencies Files, symbols *Symbols, handler *r
 
 	r := &result{
 		Result:               parsed,
-		deps:                 dependencies,
+		deps:                 dependencies, // the unfiltered dependencies
 		descriptors:          art.New(),
 		usedImports:          map[string]struct{}{},
 		prefix:               prefix,
@@ -247,9 +271,9 @@ func computeReflexiveTransitiveClosure(root File, seen map[File]struct{}) Files 
 		return nil
 	}
 	seen[root] = struct{}{}
-	results := Files{root}
+	results := Files{}
 	for _, dep := range root.Dependencies() {
 		results = append(results, computeReflexiveTransitiveClosure(dep, seen)...)
 	}
-	return results
+	return append(results, root)
 }

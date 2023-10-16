@@ -59,7 +59,7 @@ func TestFields(t *testing.T) {
 			}
 			results, err := compiler.Compile(context.Background(), testFileName)
 			require.NoError(t, err)
-			fd := results.SortedFiles[0]
+			fd := results.Files[0]
 
 			checkAttributes(t, protocFd, fd, fmt.Sprintf("%q", testFileName))
 		})
@@ -85,7 +85,7 @@ func TestUnescape(t *testing.T) {
 		},
 	}
 	compiler := protocompile.Compiler{
-		Resolver: protocompile.WithStandardImports(protocompile.ResolverFunc(func(path string) (protocompile.SearchResult, error) {
+		Resolver: protocompile.WithStandardImports(protocompile.ResolverFunc(func(path string, _ protocompile.ImportContext) (protocompile.SearchResult, error) {
 			return protocompile.SearchResult{Proto: fileProto}, nil
 		})),
 	}

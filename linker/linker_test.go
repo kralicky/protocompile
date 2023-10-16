@@ -51,9 +51,9 @@ func TestSimpleLink(t *testing.T) {
 		return
 	}
 
-	res, ok := fds.SortedFiles[0].(linker.Result)
+	res, ok := fds.Files[0].(linker.Result)
 	require.True(t, ok)
-	fdset := prototest.LoadDescriptorSet(t, "../internal/testdata/desc_test_complex.protoset", linker.ResolverFromFile(fds.SortedFiles[0]))
+	fdset := prototest.LoadDescriptorSet(t, "../internal/testdata/desc_test_complex.protoset", linker.ResolverFromFile(fds.Files[0]))
 	prototest.CheckFiles(t, res, fdset, true)
 }
 
@@ -70,9 +70,9 @@ func TestMultiFileLink(t *testing.T) {
 			continue
 		}
 
-		res, ok := fds.SortedFiles[0].(linker.Result)
+		res, ok := fds.Files[0].(linker.Result)
 		require.True(t, ok)
-		fdset := prototest.LoadDescriptorSet(t, "../internal/testdata/all.protoset", linker.ResolverFromFile(fds.SortedFiles[0]))
+		fdset := prototest.LoadDescriptorSet(t, "../internal/testdata/all.protoset", linker.ResolverFromFile(fds.Files[0]))
 		prototest.CheckFiles(t, res, fdset, true)
 	}
 }
@@ -91,7 +91,7 @@ func TestProto3Optional(t *testing.T) {
 
 	fdset := prototest.LoadDescriptorSet(t, "../internal/testdata/desc_test_proto3_optional.protoset", compileResults.AsResolver())
 
-	res, ok := compileResults.SortedFiles[0].(linker.Result)
+	res, ok := compileResults.Files[0].(linker.Result)
 	require.True(t, ok)
 	prototest.CheckFiles(t, res, fdset, true)
 }
@@ -2071,7 +2071,7 @@ func removePrefixIndent(s string) string {
 	return strings.Join(lines, "\n")
 }
 
-func compile(t *testing.T, input map[string]string) (linker.SortedFiles, error) {
+func compile(t *testing.T, input map[string]string) (linker.Files, error) {
 	t.Helper()
 	acc := func(filename string) (io.ReadCloser, error) {
 		f, ok := input[filename]
@@ -2094,7 +2094,7 @@ func compile(t *testing.T, input map[string]string) (linker.SortedFiles, error) 
 	if err != nil {
 		return nil, err
 	}
-	return res.SortedFiles, nil
+	return res.Files, nil
 }
 
 func TestProto3Enums(t *testing.T) {
@@ -2174,7 +2174,7 @@ func TestLinkerSymbolCollisionNoSource(t *testing.T) {
 			},
 		},
 	}
-	resolver := protocompile.WithStandardImports(protocompile.ResolverFunc(func(s string) (protocompile.SearchResult, error) {
+	resolver := protocompile.WithStandardImports(protocompile.ResolverFunc(func(s string, _ protocompile.ImportContext) (protocompile.SearchResult, error) {
 		if s == "foo.proto" {
 			return protocompile.SearchResult{Proto: fdProto}, nil
 		}
@@ -2319,7 +2319,7 @@ func TestSyntheticMapEntryUsageNoSource(t *testing.T) {
 			fdProto.MessageType[0].Field = tc.fields
 			fdProto.MessageType = append(fdProto.MessageType, tc.others...)
 
-			resolver := protocompile.ResolverFunc(func(s string) (protocompile.SearchResult, error) {
+			resolver := protocompile.ResolverFunc(func(s string, _ protocompile.ImportContext) (protocompile.SearchResult, error) {
 				if s == "foo.proto" {
 					return protocompile.SearchResult{Proto: fdProto}, nil
 				}
@@ -2365,7 +2365,7 @@ func TestSyntheticOneofCollisions(t *testing.T) {
 			},
 			nil,
 		),
-		Resolver: protocompile.ResolverFunc(func(filename string) (protocompile.SearchResult, error) {
+		Resolver: protocompile.ResolverFunc(func(filename string, _ protocompile.ImportContext) (protocompile.SearchResult, error) {
 			f, ok := input[filename]
 			if !ok {
 				return protocompile.SearchResult{}, fmt.Errorf("file not found: %s", filename)
@@ -2532,7 +2532,7 @@ func TestCustomJSONNameWarnings(t *testing.T) {
 		},
 	}
 	for i, tc := range testCases {
-		resolver := protocompile.ResolverFunc(func(filename string) (protocompile.SearchResult, error) {
+		resolver := protocompile.ResolverFunc(func(filename string, _ protocompile.ImportContext) (protocompile.SearchResult, error) {
 			if filename == "test.proto" {
 				return protocompile.SearchResult{Source: strings.NewReader(removePrefixIndent(tc.source))}, nil
 			}

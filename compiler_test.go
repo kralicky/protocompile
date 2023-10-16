@@ -51,7 +51,7 @@ func TestParseFilesMessageComments(t *testing.T) {
 	}
 	comments := ""
 	expected := " Comment for TestMessage\n"
-	for _, fd := range files.SortedFiles {
+	for _, fd := range files.Files {
 		msg := fd.Messages().ByName("TestMessage")
 		if msg != nil {
 			si := fd.SourceLocations().ByDescriptor(msg)
@@ -82,7 +82,7 @@ func TestParseFilesWithImportsNoImportPath(t *testing.T) {
 	if !assert.Nil(t, err, "%v", err) {
 		t.FailNow()
 	}
-	assert.Equal(t, len(relFilePaths), len(protos.SortedFiles))
+	assert.Equal(t, len(relFilePaths), len(protos.Files))
 }
 
 func TestParseFilesWithDependencies(t *testing.T) {
@@ -99,7 +99,7 @@ func TestParseFilesWithDependencies(t *testing.T) {
 			}
 		`,
 	}
-	baseResolver := ResolverFunc(func(f string) (SearchResult, error) {
+	baseResolver := ResolverFunc(func(f string, _ ImportContext) (SearchResult, error) {
 		s, ok := contents[f]
 		if !ok {
 			return SearchResult{}, os.ErrNotExist
@@ -118,11 +118,11 @@ func TestParseFilesWithDependencies(t *testing.T) {
 		t.Parallel()
 		// Create a dependency-aware compiler.
 		compiler := Compiler{
-			Resolver: ResolverFunc(func(f string) (SearchResult, error) {
+			Resolver: ResolverFunc(func(f string, whence ImportContext) (SearchResult, error) {
 				if f == "desc_test_wellknowntypes.proto" {
 					return SearchResult{Desc: wktDesc}, nil
 				}
-				return baseResolver.FindFileByPath(f)
+				return baseResolver.FindFileByPath(f, whence)
 			}),
 		}
 		_, err := compiler.Compile(ctx, "test.proto")
@@ -132,11 +132,11 @@ func TestParseFilesWithDependencies(t *testing.T) {
 		t.Parallel()
 		// Create a dependency-aware compiler.
 		compiler := Compiler{
-			Resolver: WithStandardImports(ResolverFunc(func(f string) (SearchResult, error) {
+			Resolver: WithStandardImports(ResolverFunc(func(f string, whence ImportContext) (SearchResult, error) {
 				if f == "desc_test_wellknowntypes.proto" {
 					return SearchResult{Proto: wktDescProto}, nil
 				}
-				return baseResolver.FindFileByPath(f)
+				return baseResolver.FindFileByPath(f, whence)
 			})),
 		}
 		_, err := compiler.Compile(ctx, "test.proto")
@@ -157,7 +157,7 @@ func TestParseFilesWithDependencies(t *testing.T) {
 		t.Parallel()
 		// Create a dependency-aware parser that should never be called.
 		compiler := Compiler{
-			Resolver: ResolverFunc(func(f string) (SearchResult, error) {
+			Resolver: ResolverFunc(func(f string, _ ImportContext) (SearchResult, error) {
 				switch f {
 				case "test.proto":
 					return SearchResult{Source: strings.NewReader(`syntax = "proto3";`)}, nil
@@ -220,8 +220,8 @@ message Foo {
 	fds, err := compiler.Compile(ctx, "test.proto")
 	assert.Nil(t, err)
 
-	field := fds.SortedFiles[0].Messages().Get(0).Fields().Get(0)
-	comment := fds.SortedFiles[0].SourceLocations().ByDescriptor(field).LeadingComments
+	field := fds.Files[0].Messages().Get(0).Fields().Get(0)
+	comment := fds.Files[0].SourceLocations().ByDescriptor(field).LeadingComments
 	assert.Equal(t, " leading comments\n", comment)
 }
 
@@ -252,12 +252,12 @@ message Foo {
 		t.FailNow()
 	}
 
-	ext := fds.SortedFiles[0].Extensions().ByName("foo")
-	md := fds.SortedFiles[0].Messages().Get(0)
+	ext := fds.Files[0].Extensions().ByName("foo")
+	md := fds.Files[0].Messages().Get(0)
 	fooVal := md.Options().ProtoReflect().Get(ext)
 	assert.Equal(t, "foo", fooVal.String())
 
-	ext = fds.SortedFiles[0].Extensions().ByName("bar")
+	ext = fds.Files[0].Extensions().ByName("bar")
 	barVal := md.Options().ProtoReflect().Get(ext)
 	assert.Equal(t, int64(123), barVal.Int())
 }
@@ -283,7 +283,7 @@ func TestDataRace(t *testing.T) {
 		SourceInfoMode: SourceInfoStandard,
 	}).Compile(context.Background(), "desc_test_complex.proto")
 	require.NoError(t, err)
-	resolvedProto := files.SortedFiles[0].(linker.Result).FileDescriptorProto()
+	resolvedProto := files.Files[0].(linker.Result).FileDescriptorProto()
 
 	descriptor, err := protoregistry.GlobalFiles.FindFileByPath(descriptorProtoPath)
 	require.NoError(t, err)
@@ -298,7 +298,7 @@ func TestDataRace(t *testing.T) {
 	}{
 		{
 			name: "share unresolved descriptor",
-			resolver: WithStandardImports(ResolverFunc(func(name string) (SearchResult, error) {
+			resolver: WithStandardImports(ResolverFunc(func(name string, _ ImportContext) (SearchResult, error) {
 				if name == "desc_test_complex.proto" {
 					return SearchResult{
 						Proto: parseResult.FileDescriptorProto(),
@@ -309,7 +309,7 @@ func TestDataRace(t *testing.T) {
 		},
 		{
 			name: "share resolved descriptor",
-			resolver: WithStandardImports(ResolverFunc(func(name string) (SearchResult, error) {
+			resolver: WithStandardImports(ResolverFunc(func(name string, _ ImportContext) (SearchResult, error) {
 				if name == "desc_test_complex.proto" {
 					return SearchResult{
 						Proto: resolvedProto,
@@ -320,7 +320,7 @@ func TestDataRace(t *testing.T) {
 		},
 		{
 			name: "share unresolved parse result",
-			resolver: WithStandardImports(ResolverFunc(func(name string) (SearchResult, error) {
+			resolver: WithStandardImports(ResolverFunc(func(name string, _ ImportContext) (SearchResult, error) {
 				if name == "desc_test_complex.proto" {
 					return SearchResult{
 						ParseResult: parseResult,
@@ -331,7 +331,7 @@ func TestDataRace(t *testing.T) {
 		},
 		{
 			name: "share google/protobuf/descriptor.proto",
-			resolver: WithStandardImports(ResolverFunc(func(name string) (SearchResult, error) {
+			resolver: WithStandardImports(ResolverFunc(func(name string, _ ImportContext) (SearchResult, error) {
 				// we'll parse our test proto from source, but its implicit dep on
 				// descriptor.proto will use a
 				switch name {
@@ -380,7 +380,7 @@ func TestDataRace(t *testing.T) {
 func TestPanicHandling(t *testing.T) {
 	t.Parallel()
 	c := Compiler{
-		Resolver: ResolverFunc(func(string) (SearchResult, error) {
+		Resolver: ResolverFunc(func(string, ImportContext) (SearchResult, error) {
 			panic(errors.New("mui mui bad"))
 		}),
 	}
@@ -434,7 +434,7 @@ message See {
 }
 
 func mkResolver(contents map[string]string) Resolver {
-	return ResolverFunc(func(name string) (SearchResult, error) {
+	return ResolverFunc(func(name string, _ ImportContext) (SearchResult, error) {
 		if s, ok := contents[name]; ok {
 			return SearchResult{Source: strings.NewReader(s)}, nil
 		}
@@ -459,7 +459,7 @@ func TestIncrementalCompiler(t *testing.T) {
 	res, err := comp.Compile(context.Background(), "a/b/b1.proto", "a/b/b2.proto", "c/c.proto")
 	require.NoError(t, err)
 
-	requireASTsEqual(t, baseResults, res.SortedFiles, "a/b/b1.proto", "a/b/b2.proto", "c/c.proto")
+	requireASTsEqual(t, baseResults, res.Files, "a/b/b1.proto", "a/b/b2.proto", "c/c.proto")
 
 	overlay["a/b/b1.proto"] = `
 syntax = "proto3";
@@ -499,7 +499,7 @@ message See {
 	assert.NoError(t, err)
 }
 
-func buildBaseDescriptors() linker.SortedFiles {
+func buildBaseDescriptors() linker.Files {
 	comp := Compiler{
 		Resolver:       WithStandardImports(mkResolver(baseContents)),
 		SourceInfoMode: SourceInfoExtraComments | SourceInfoExtraOptionLocations,
@@ -511,10 +511,10 @@ func buildBaseDescriptors() linker.SortedFiles {
 		panic(err)
 	}
 
-	return results.SortedFiles
+	return results.Files
 }
 
-func requireASTsEqual(t *testing.T, a, b linker.SortedFiles, filenames ...string) {
+func requireASTsEqual(t *testing.T, a, b linker.Files, filenames ...string) {
 	t.Helper()
 	for _, filename := range filenames {
 		aRes := a.FindFileByPath(filename)

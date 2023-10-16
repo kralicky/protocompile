@@ -40,7 +40,7 @@ type Resolver interface {
 	// FindFileByPath searches for information for the given file path. If no
 	// result is available, it should return a non-nil error, such as
 	// protoregistry.NotFound.
-	FindFileByPath(path string) (SearchResult, error)
+	FindFileByPath(path string, whence ImportContext) (SearchResult, error)
 }
 
 // SearchResult represents information about a proto source file. Only one of
@@ -73,15 +73,19 @@ type SearchResult struct {
 	// additional work. Otherwise, the additional work is to compute an index of
 	// symbols in the file, for efficient lookup.
 	Desc protoreflect.FileDescriptor
+	// If the import path was modified using information from the import context,
+	// set this field to the path that was actually used to find the file.
+	// This will ensure future lookups for this file will use the same path.
+	EffectiveImportPath string
 }
 
 // ResolverFunc is a simple function type that implements Resolver.
-type ResolverFunc func(string) (SearchResult, error)
+type ResolverFunc func(string, ImportContext) (SearchResult, error)
 
 var _ Resolver = ResolverFunc(nil)
 
-func (f ResolverFunc) FindFileByPath(path string) (SearchResult, error) {
-	return f(path)
+func (f ResolverFunc) FindFileByPath(path string, whence ImportContext) (SearchResult, error) {
+	return f(path, whence)
 }
 
 // CompositeResolver is a slice of resolvers, which are consulted in order
@@ -93,13 +97,13 @@ type CompositeResolver []Resolver
 
 var _ Resolver = CompositeResolver(nil)
 
-func (f CompositeResolver) FindFileByPath(path string) (SearchResult, error) {
+func (f CompositeResolver) FindFileByPath(path string, whence ImportContext) (SearchResult, error) {
 	if len(f) == 0 {
 		return SearchResult{}, protoregistry.NotFound
 	}
 	var firstErr error
 	for _, res := range f {
-		r, err := res.FindFileByPath(path)
+		r, err := res.FindFileByPath(path, whence)
 		if err == nil {
 			return r, nil
 		}
@@ -130,7 +134,7 @@ type SourceResolver struct {
 
 var _ Resolver = (*SourceResolver)(nil)
 
-func (r *SourceResolver) FindFileByPath(path string) (SearchResult, error) {
+func (r *SourceResolver) FindFileByPath(path string, _ ImportContext) (SearchResult, error) {
 	if len(r.ImportPaths) == 0 {
 		reader, err := r.accessFile(path)
 		if err != nil {
@@ -181,8 +185,8 @@ func SourceAccessorFromMap(srcs map[string]string) func(string) (io.ReadCloser, 
 // WithStandardImports returns a new resolver that knows about the same standard
 // imports that are included with protoc.
 func WithStandardImports(r Resolver) Resolver {
-	return ResolverFunc(func(name string) (SearchResult, error) {
-		res, err := r.FindFileByPath(name)
+	return ResolverFunc(func(name string, whence ImportContext) (SearchResult, error) {
+		res, err := r.FindFileByPath(name, whence)
 		if err != nil {
 			// error from given resolver? see if it's a known standard file
 			if d, ok := standardImports[name]; ok {

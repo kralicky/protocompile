@@ -1182,8 +1182,14 @@ func (interp *interpreter) interpretField(mc *internal.MessageContext, msg proto
 	}
 
 	for _, interpretedField := range val.msgVal {
+		if interpretedField.node == nil {
+			continue
+		}
 		fields := fld.Message().Fields()
 		fieldDesc := fields.ByNumber(protowire.Number(interpretedField.number))
+		if fieldDesc == nil {
+			continue
+		}
 		interp.descriptorIndex.FieldReferenceNodesToFieldDescriptors[interpretedField.node] = fieldDesc
 	}
 

@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	"slices"
-
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -89,19 +87,19 @@ func newFile(f protoreflect.FileDescriptor, deps Files) (*file, error) {
 // If f has any dependencies/imports, they are converted, too, including any and
 // all transitive dependencies.
 //
-// If f is an instance of *file, it is returned unchanged.
+// If f is an instance of File, it is returned unchanged.
 func NewFileRecursive(f protoreflect.FileDescriptor) (File, error) {
 	if fp, ok := f.(*file); ok {
 		return fp, nil
 	}
-	file, err := newFileRecursive(f, map[protoreflect.FileDescriptor]*file{})
+	file, err := newFileRecursive(f, map[protoreflect.FileDescriptor]File{})
 	if err != nil {
 		return nil, err
 	}
 	return file, nil
 }
 
-func newFileRecursive(fd protoreflect.FileDescriptor, seen map[protoreflect.FileDescriptor]*file) (*file, error) {
+func newFileRecursive(fd protoreflect.FileDescriptor, seen map[protoreflect.FileDescriptor]File) (File, error) {
 	if res, ok := seen[fd]; ok {
 		if res == nil {
 			return nil, fmt.Errorf("import cycle encountered: file %s transitively imports itself", fd.Path())
@@ -109,10 +107,10 @@ func newFileRecursive(fd protoreflect.FileDescriptor, seen map[protoreflect.File
 		return res, nil
 	}
 
-	// if f, ok := fd.(File); ok {
-	// 	seen[fd] = f
-	// 	return f, nil
-	// }
+	if f, ok := fd.(File); ok {
+		seen[fd] = f
+		return f, nil
+	}
 
 	seen[fd] = nil
 	deps := make(Files, fd.Imports().Len())
@@ -160,112 +158,113 @@ var _ File = (*file)(nil)
 // Files represents a set of protobuf files. It is a slice of File values, but
 // also provides a method for easily looking up files by path and name.
 type Files []File
-type SortedFiles []File
 
-func (f Files) Sort() SortedFiles {
-	if len(f) < 2 {
-		return (SortedFiles)(f)
-	}
-	slices.SortFunc(f, compareFiles)
-	return (SortedFiles)(f)
-}
+// type SortedFiles []File
 
-// Efficiently merges two sorted Files lists. If 'a' has enough capacity to hold
-// the merged result, the merge is done in-place. Otherwise, a new slice is
-// allocated. The new slice is returned.
-func MergeFiles(a, b SortedFiles) SortedFiles {
-	if cap(a) >= len(a)+len(b) {
-		oldLen := len(a)
-		a = append(a, b...)
+// func (f Files) Sort() SortedFiles {
+// 	if len(f) < 2 {
+// 		return (SortedFiles)(f)
+// 	}
+// 	slices.SortFunc(f, compareFiles)
+// 	return (SortedFiles)(f)
+// }
 
-		i, j, k := oldLen-1, len(b)-1, len(a)-1
-		for i >= 0 && j >= 0 {
-			switch compareFiles(a[i], b[j]) {
-			case -1: // a[i] < b[j]
-				a[k] = a[i]
-				i--
-			case 1: // a[i] > b[j]
-				a[k] = b[j]
-				j--
-			case 0: // a[i] == b[j]
-				// duplicate, overwrite the value in a with the value in b
-				a[k] = b[j]
-				i--
-				j--
-			}
-			k--
-		}
-		for j >= 0 {
-			a[k] = b[j]
-			j--
-			k--
-		}
-		return a
-	}
+// // Efficiently merges two sorted Files lists. If 'a' has enough capacity to hold
+// // the merged result, the merge is done in-place. Otherwise, a new slice is
+// // allocated. The new slice is returned.
+// func MergeFiles(a, b SortedFiles) SortedFiles {
+// 	if cap(a) >= len(a)+len(b) {
+// 		oldLen := len(a)
+// 		a = append(a, b...)
 
-	out := make(SortedFiles, len(a)+len(b))
-	i, j, k := 0, 0, 0
-	for i < len(a) && j < len(b) {
-		switch compareFiles(a[i], b[j]) {
-		case -1: // a[i] < b[j]
-			out[k] = a[i]
-			i++
-		case 1: // a[i] > b[j]
-			out[k] = b[j]
-			j++
-		case 0: // a[i] == b[j]
-			// duplicate, overwrite the value in a with the value in b
-			out[k] = b[j]
-			i++
-			j++
-		}
-		k++
-	}
-	for i < len(a) {
-		out[k] = a[i]
-		i++
-		k++
-	}
-	for j < len(b) {
-		out[k] = b[j]
-		j++
-		k++
-	}
-	return out[:k]
-}
+// 		i, j, k := oldLen-1, len(b)-1, len(a)-1
+// 		for i >= 0 && j >= 0 {
+// 			switch compareFiles(a[i], b[j]) {
+// 			case -1: // a[i] < b[j]
+// 				a[k] = a[i]
+// 				i--
+// 			case 1: // a[i] > b[j]
+// 				a[k] = b[j]
+// 				j--
+// 			case 0: // a[i] == b[j]
+// 				// duplicate, overwrite the value in a with the value in b
+// 				a[k] = b[j]
+// 				i--
+// 				j--
+// 			}
+// 			k--
+// 		}
+// 		for j >= 0 {
+// 			a[k] = b[j]
+// 			j--
+// 			k--
+// 		}
+// 		return a
+// 	}
 
-func compareFiles(a, b File) int {
-	return strings.Compare(a.Path(), b.Path())
-}
+// 	out := make(SortedFiles, len(a)+len(b))
+// 	i, j, k := 0, 0, 0
+// 	for i < len(a) && j < len(b) {
+// 		switch compareFiles(a[i], b[j]) {
+// 		case -1: // a[i] < b[j]
+// 			out[k] = a[i]
+// 			i++
+// 		case 1: // a[i] > b[j]
+// 			out[k] = b[j]
+// 			j++
+// 		case 0: // a[i] == b[j]
+// 			// duplicate, overwrite the value in a with the value in b
+// 			out[k] = b[j]
+// 			i++
+// 			j++
+// 		}
+// 		k++
+// 	}
+// 	for i < len(a) {
+// 		out[k] = a[i]
+// 		i++
+// 		k++
+// 	}
+// 	for j < len(b) {
+// 		out[k] = b[j]
+// 		j++
+// 		k++
+// 	}
+// 	return out[:k]
+// }
 
-func (f *SortedFiles) Put(newFile File) bool {
-	i, exists := slices.BinarySearchFunc(*f, newFile, compareFiles)
-	if exists {
-		(*f)[i] = newFile
-	} else {
-		*f = slices.Insert(*f, i, newFile)
-	}
-	return !exists
-}
+// func compareFiles(a, b File) int {
+// 	return strings.Compare(a.Path(), b.Path())
+// }
 
-func (f *SortedFiles) Delete(file File) {
-	i, exists := slices.BinarySearchFunc(*f, file, compareFiles)
-	if exists {
-		*f = slices.Delete(*f, i, i+1)
-	}
-}
+// func (f *SortedFiles) Put(newFile File) bool {
+// 	i, exists := slices.BinarySearchFunc(*f, newFile, compareFiles)
+// 	if exists {
+// 		(*f)[i] = newFile
+// 	} else {
+// 		*f = slices.Insert(*f, i, newFile)
+// 	}
+// 	return !exists
+// }
 
-// FindFileByPath finds a file in f that has the given path and name. If f
-// contains no such file, nil is returned.
-func (f SortedFiles) FindFileByPath(path string) File {
-	idx, ok := slices.BinarySearchFunc(f, path, func(file File, path string) int {
-		return strings.Compare(file.Path(), path)
-	})
-	if ok {
-		return f[idx]
-	}
-	return nil
-}
+// func (f *SortedFiles) Delete(file File) {
+// 	i, exists := slices.BinarySearchFunc(*f, file, compareFiles)
+// 	if exists {
+// 		*f = slices.Delete(*f, i, i+1)
+// 	}
+// }
+
+// // FindFileByPath finds a file in f that has the given path and name. If f
+// // contains no such file, nil is returned.
+// func (f SortedFiles) FindFileByPath(path string) File {
+// 	idx, ok := slices.BinarySearchFunc(f, path, func(file File, path string) int {
+// 		return strings.Compare(file.Path(), path)
+// 	})
+// 	if ok {
+// 		return f[idx]
+// 	}
+// 	return nil
+// }
 
 // FindFileByPath finds a file in f that has the given path and name. If f
 // contains no such file, nil is returned.
@@ -291,9 +290,9 @@ func (f Files) AsResolver() Resolver {
 	return newFilesResolver(f)
 }
 
-func (f SortedFiles) AsResolver() Resolver {
-	return newFilesResolver(f)
-}
+// func (f SortedFiles) AsResolver() Resolver {
+// 	return newFilesResolver(f)
+// }
 
 // Resolver is an interface that can resolve various kinds of queries about
 // descriptors. It satisfies the resolver interfaces defined in protodesc

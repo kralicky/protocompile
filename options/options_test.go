@@ -94,9 +94,9 @@ func TestCustomOptionsAreKnown(t *testing.T) {
 			}
 			files, err := compiler.Compile(context.Background(), "test.proto")
 			require.NoError(t, err)
-			require.Equal(t, 1, len(files.SortedFiles))
+			require.Equal(t, 1, len(files.Files))
 			var knownOptionNames []string
-			fileOptions := files.SortedFiles[0].Options().ProtoReflect()
+			fileOptions := files.Files[0].Options().ProtoReflect()
 			assert.Empty(t, fileOptions.GetUnknown())
 			fileOptions.Range(func(fd protoreflect.FieldDescriptor, val protoreflect.Value) bool {
 				if fd.IsExtension() {
@@ -374,10 +374,10 @@ func TestOptionsEncoding(t *testing.T) {
 			}
 			require.NoError(t, err)
 
-			res, ok := fds.SortedFiles[0].(linker.Result)
+			res, ok := fds.Files[0].(linker.Result)
 			require.True(t, ok)
 			descriptorSetFile := fmt.Sprintf("../internal/testdata/%sset", file)
-			fdset := prototest.LoadDescriptorSet(t, descriptorSetFile, linker.ResolverFromFile(fds.SortedFiles[0]))
+			fdset := prototest.LoadDescriptorSet(t, descriptorSetFile, linker.ResolverFromFile(fds.Files[0]))
 			prototest.CheckFiles(t, res, fdset, false)
 
 			canonicalProto := res.CanonicalProto()
@@ -392,7 +392,7 @@ func TestOptionsEncoding(t *testing.T) {
 			protoData, err := proto.Marshal(canonicalProto)
 			require.NoError(t, err)
 			proto.Reset(canonicalProto)
-			uOpts := proto.UnmarshalOptions{Resolver: linker.ResolverFromFile(fds.SortedFiles[0])}
+			uOpts := proto.UnmarshalOptions{Resolver: linker.ResolverFromFile(fds.Files[0])}
 			err = uOpts.Unmarshal(protoData, canonicalProto)
 			require.NoError(t, err)
 			if !proto.Equal(res.FileDescriptorProto(), canonicalProto) {
@@ -432,7 +432,7 @@ func TestInterpretOptionsWithoutAST(t *testing.T) {
 	// Now compile without the AST, to make sure we interpret options the same way
 	compiler = &protocompile.Compiler{
 		Resolver: protocompile.WithStandardImports(protocompile.ResolverFunc(
-			func(name string) (protocompile.SearchResult, error) {
+			func(name string, _ protocompile.ImportContext) (protocompile.SearchResult, error) {
 				var res protocompile.SearchResult
 				data, err := os.ReadFile(filepath.Join("../internal/testdata", name))
 				if err != nil {
@@ -454,7 +454,7 @@ func TestInterpretOptionsWithoutAST(t *testing.T) {
 	filesFromNoAST, err := compiler.Compile(context.Background(), fileNames...)
 	require.NoError(t, err)
 
-	for _, file := range files.SortedFiles {
+	for _, file := range files.Files {
 		fromNoAST := filesFromNoAST.FindFileByPath(file.Path())
 		require.NotNil(t, fromNoAST)
 		fd := file.(linker.Result).FileDescriptorProto()
@@ -465,7 +465,7 @@ func TestInterpretOptionsWithoutAST(t *testing.T) {
 	}
 
 	// Also make sure the canonical bytes are correct
-	for _, file := range filesFromNoAST.SortedFiles {
+	for _, file := range filesFromNoAST.Files {
 		res := file.(linker.Result)
 		canonicalFd := res.CanonicalProto()
 		data, err := proto.Marshal(canonicalFd)

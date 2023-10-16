@@ -34,12 +34,12 @@ func TestStdImports(t *testing.T) {
 			t.Errorf("failed to compile %q: %v", name, err)
 			continue
 		}
-		if len(fds.SortedFiles) != 1 {
-			t.Errorf("Compile returned wrong number of descriptors: expecting 1, got %d", len(fds.SortedFiles))
+		if len(fds.Files) != 1 {
+			t.Errorf("Compile returned wrong number of descriptors: expecting 1, got %d", len(fds.Files))
 			continue
 		}
 		orig := protodesc.ToFileDescriptorProto(fileProto)
-		actual := protodesc.ToFileDescriptorProto(fds.SortedFiles[0])
+		actual := protodesc.ToFileDescriptorProto(fds.Files[0])
 		if !proto.Equal(orig, actual) {
 			t.Errorf("result proto is incorrect:\n expecting %v\n got %v", orig, actual)
 		}
