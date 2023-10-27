@@ -749,7 +749,7 @@ func (l *protoLex) addSourceError(err error) (reporter.ErrorWithPos, bool) {
 }
 
 func (l *protoLex) Error(s string) {
-	_, _ = l.addSourceError(errors.New(s))
+	_, _ = l.addSourceError(NewParseError(errors.New(s)))
 }
 
 func (l *protoLex) errWithCurrentPos(err error, offset int) reporter.ErrorWithPos {

@@ -83,17 +83,24 @@ dependencies_ok:
 			// handle unresolvable import paths
 			// first, find the import node for this path
 			var importNode *ast.ImportNode
-			for _, node := range parsed.AST().Decls {
-				if importNode, _ = node.(*ast.ImportNode); importNode != nil && importNode.Name.AsString() == imp {
-					break
+			if parsedAst := parsed.AST(); parsedAst != nil {
+				for _, node := range parsedAst.Decls {
+					if importNode, _ = node.(*ast.ImportNode); importNode != nil && importNode.Name.AsString() == imp {
+						break
+					}
 				}
-			}
-			if importNode == nil {
-				panic("bug: could not find import node for path: " + imp)
-			}
-			nodeInfo := parsed.AST().NodeInfo(importNode)
-			if err := handler.HandleErrorf(nodeInfo, "could not resolve import %q", imp); err != nil {
-				return nil, err
+				if importNode == nil {
+					panic("bug: could not find import node for path: " + imp)
+				}
+				nodeInfo := parsed.AST().NodeInfo(importNode)
+				if err := handler.HandleErrorf(nodeInfo, "could not resolve import %q", imp); err != nil {
+					return nil, err
+				}
+			} else {
+				// no ast, log an error with no source position
+				if err := handler.HandleErrorf(ast.NoSourcePosInfo{}, "could not resolve import %q", imp); err != nil {
+					return nil, err
+				}
 			}
 		} else if err := symbols.Import(dep, handler); err != nil {
 			return nil, err

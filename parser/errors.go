@@ -14,9 +14,41 @@
 
 package parser
 
-import "errors"
+import (
+	"errors"
+	"runtime"
+)
 
 // ErrNoSyntax is a sentinel error that may be passed to a warning reporter.
 // The error the reporter receives will be wrapped with source position that
 // indicates the file that had no syntax statement.
 var ErrNoSyntax = errors.New("no syntax specified; defaulting to proto2 syntax")
+
+func NewParseError(base error) ParseError {
+	if _, ok := base.(*parseError); ok {
+		runtime.Breakpoint()
+	}
+	return &parseError{
+		base: base,
+	}
+}
+
+type ParseError interface {
+	error
+
+	isParseError()
+}
+
+type parseError struct {
+	base error
+}
+
+func (*parseError) isParseError() {}
+
+func (e *parseError) Error() string {
+	return e.base.Error()
+}
+
+func (e *parseError) Unwrap() error {
+	return e.base
+}
