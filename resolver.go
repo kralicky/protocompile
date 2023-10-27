@@ -22,7 +22,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 
@@ -40,7 +39,7 @@ type Resolver interface {
 	// FindFileByPath searches for information for the given file path. If no
 	// result is available, it should return a non-nil error, such as
 	// protoregistry.NotFound.
-	FindFileByPath(path string, whence ImportContext) (SearchResult, error)
+	FindFileByPath(path UnresolvedPath, whence ImportContext) (SearchResult, error)
 }
 
 // SearchResult represents information about a proto source file. Only one of
@@ -49,6 +48,13 @@ type Resolver interface {
 // so it uses a descriptor if present and only falls back to source if nothing
 // else is available.
 type SearchResult struct {
+	// A unique path derived from the unresolved path and the import context.
+	// If the import path was modified using information from the import context,
+	// set this field to the path that was actually used to find the file.
+	// This will ensure future lookups for this file will use the same path.
+	// Required if the import context is non-empty, otherwise the path was
+	// already known to be resolved.
+	ResolvedPath ResolvedPath
 	// Represents source code for the file. This should be nil if source code
 	// is not available. If no field below is set, then the compiler will parse
 	// the source code into an AST.
@@ -67,24 +73,20 @@ type SearchResult struct {
 	// search result, since the AST has greater fidelity with regard to source
 	// positions (even if the descriptor proto includes source code info).
 	ParseResult parser.Result
-	// A fully linked descriptor that represents the file. If this field is set,
-	// then the compiler has little or no additional work to do for this file as
-	// it is already compiled. If this value implements linker.File, there is no
-	// additional work. Otherwise, the additional work is to compute an index of
-	// symbols in the file, for efficient lookup.
-	Desc protoreflect.FileDescriptor
-	// If the import path was modified using information from the import context,
-	// set this field to the path that was actually used to find the file.
-	// This will ensure future lookups for this file will use the same path.
-	EffectiveImportPath string
+	// // A fully linked descriptor that represents the file. If this field is set,
+	// // then the compiler has little or no additional work to do for this file as
+	// // it is already compiled. If this value implements linker.File, there is no
+	// // additional work. Otherwise, the additional work is to compute an index of
+	// // symbols in the file, for efficient lookup.
+	// Desc protoreflect.FileDescriptor
 }
 
 // ResolverFunc is a simple function type that implements Resolver.
-type ResolverFunc func(string, ImportContext) (SearchResult, error)
+type ResolverFunc func(UnresolvedPath, ImportContext) (SearchResult, error)
 
 var _ Resolver = ResolverFunc(nil)
 
-func (f ResolverFunc) FindFileByPath(path string, whence ImportContext) (SearchResult, error) {
+func (f ResolverFunc) FindFileByPath(path UnresolvedPath, whence ImportContext) (SearchResult, error) {
 	return f(path, whence)
 }
 
@@ -97,7 +99,7 @@ type CompositeResolver []Resolver
 
 var _ Resolver = CompositeResolver(nil)
 
-func (f CompositeResolver) FindFileByPath(path string, whence ImportContext) (SearchResult, error) {
+func (f CompositeResolver) FindFileByPath(path UnresolvedPath, whence ImportContext) (SearchResult, error) {
 	if len(f) == 0 {
 		return SearchResult{}, protoregistry.NotFound
 	}
@@ -129,23 +131,37 @@ type SourceResolver struct {
 	// This function must be thread-safe as a single compilation operation
 	// could result in concurrent invocations of this function from
 	// multiple goroutines.
-	Accessor func(path string) (io.ReadCloser, error)
+	Accessor func(path ResolvedPath) (io.ReadCloser, error)
 }
 
 var _ Resolver = (*SourceResolver)(nil)
 
-func (r *SourceResolver) FindFileByPath(path string, _ ImportContext) (SearchResult, error) {
+func (r *SourceResolver) FindFileByPath(path UnresolvedPath, _ ImportContext) (SearchResult, error) {
 	if len(r.ImportPaths) == 0 {
-		reader, err := r.accessFile(path)
+		reader, err := r.accessFile(ResolvedPath(path))
 		if err != nil {
 			return SearchResult{}, err
 		}
-		return SearchResult{Source: reader}, nil
+		return SearchResult{
+			ResolvedPath: ResolvedPath(path),
+			Source:       reader,
+		}, nil
 	}
 
 	var e error
 	for _, importPath := range r.ImportPaths {
-		reader, err := r.accessFile(filepath.Join(importPath, path))
+		// is the file fully-qualified with respect to the import path?
+		if strings.HasPrefix(string(path), importPath) {
+			reader, err := r.accessFile(ResolvedPath(path))
+			if err == nil {
+				return SearchResult{
+					ResolvedPath: ResolvedPath(path),
+					Source:       reader,
+				}, nil
+			}
+		}
+		resolved := ResolvedPath(filepath.Join(importPath, string(path)))
+		reader, err := r.accessFile(resolved)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				e = err
@@ -153,16 +169,19 @@ func (r *SourceResolver) FindFileByPath(path string, _ ImportContext) (SearchRes
 			}
 			return SearchResult{}, err
 		}
-		return SearchResult{Source: reader}, nil
+		return SearchResult{
+			ResolvedPath: resolved,
+			Source:       reader,
+		}, nil
 	}
 	return SearchResult{}, e
 }
 
-func (r *SourceResolver) accessFile(path string) (io.ReadCloser, error) {
+func (r *SourceResolver) accessFile(path ResolvedPath) (io.ReadCloser, error) {
 	if r.Accessor != nil {
 		return r.Accessor(path)
 	}
-	return os.Open(path)
+	return os.Open(string(path))
 }
 
 // SourceAccessorFromMap returns a function that can be used as the Accessor
@@ -172,9 +191,9 @@ func (r *SourceResolver) accessFile(path string) (io.ReadCloser, error) {
 // The given map is used directly and not copied. Since accessor functions
 // must be thread-safe, this means that the provided map must not be mutated
 // once this accessor is provided to a compile operation.
-func SourceAccessorFromMap(srcs map[string]string) func(string) (io.ReadCloser, error) {
-	return func(path string) (io.ReadCloser, error) {
-		src, ok := srcs[path]
+func SourceAccessorFromMap(srcs map[string]string) func(ResolvedPath) (io.ReadCloser, error) {
+	return func(path ResolvedPath) (io.ReadCloser, error) {
+		src, ok := srcs[string(path)]
 		if !ok {
 			return nil, os.ErrNotExist
 		}
@@ -185,12 +204,15 @@ func SourceAccessorFromMap(srcs map[string]string) func(string) (io.ReadCloser, 
 // WithStandardImports returns a new resolver that knows about the same standard
 // imports that are included with protoc.
 func WithStandardImports(r Resolver) Resolver {
-	return ResolverFunc(func(name string, whence ImportContext) (SearchResult, error) {
+	return ResolverFunc(func(name UnresolvedPath, whence ImportContext) (SearchResult, error) {
 		res, err := r.FindFileByPath(name, whence)
 		if err != nil {
 			// error from given resolver? see if it's a known standard file
-			if d, ok := standardImports[name]; ok {
-				return SearchResult{Desc: d}, nil
+			if d, ok := standardImports[string(name)]; ok {
+				return SearchResult{
+					ResolvedPath: ResolvedPath(name),
+					Proto:        d,
+				}, nil
 			}
 		}
 		return res, err

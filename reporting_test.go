@@ -60,13 +60,13 @@ func TestErrorReporting(t *testing.T) {
 	}
 
 	testCases := []struct {
-		fileNames    []string
+		fileNames    []ResolvedPath
 		files        map[string]string
 		expectedErrs [][]string
 	}{
 		{
 			// multiple syntax errors
-			fileNames: []string{"test.proto"},
+			fileNames: []ResolvedPath{"test.proto"},
 			files: map[string]string{
 				"test.proto": `
 					syntax = "proto";
@@ -88,7 +88,7 @@ func TestErrorReporting(t *testing.T) {
 		},
 		{
 			// multiple validation errors
-			fileNames: []string{"test.proto"},
+			fileNames: []ResolvedPath{"test.proto"},
 			files: map[string]string{
 				"test.proto": `
 					syntax = "proto3";
@@ -112,7 +112,7 @@ func TestErrorReporting(t *testing.T) {
 		},
 		{
 			// multiple link errors
-			fileNames: []string{"test.proto"},
+			fileNames: []ResolvedPath{"test.proto"},
 			files: map[string]string{
 				"test.proto": `
 					syntax = "proto3";
@@ -139,7 +139,7 @@ func TestErrorReporting(t *testing.T) {
 		},
 		{
 			// syntax errors across multiple files
-			fileNames: []string{"test1.proto", "test2.proto"},
+			fileNames: []ResolvedPath{"test1.proto", "test2.proto"},
 			files: map[string]string{
 				"test1.proto": `
 					syntax = "proto3";
@@ -172,7 +172,7 @@ func TestErrorReporting(t *testing.T) {
 		},
 		{
 			// link errors across multiple files
-			fileNames: []string{"test1.proto", "test2.proto"},
+			fileNames: []ResolvedPath{"test1.proto", "test2.proto"},
 			files: map[string]string{
 				"test1.proto": `
 					syntax = "proto3";

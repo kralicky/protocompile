@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"path/filepath"
 	"testing"
 	"unicode/utf8"
 
@@ -57,7 +58,7 @@ func TestFields(t *testing.T) {
 					ImportPaths: []string{"../internal/testdata"},
 				}),
 			}
-			results, err := compiler.Compile(context.Background(), testFileName)
+			results, err := compiler.Compile(context.Background(), protocompile.ResolvedPath(filepath.Join("../internal/testdata", testFileName)))
 			require.NoError(t, err)
 			fd := results.Files[0]
 
@@ -85,8 +86,11 @@ func TestUnescape(t *testing.T) {
 		},
 	}
 	compiler := protocompile.Compiler{
-		Resolver: protocompile.WithStandardImports(protocompile.ResolverFunc(func(path string, _ protocompile.ImportContext) (protocompile.SearchResult, error) {
-			return protocompile.SearchResult{Proto: fileProto}, nil
+		Resolver: protocompile.WithStandardImports(protocompile.ResolverFunc(func(path protocompile.UnresolvedPath, _ protocompile.ImportContext) (protocompile.SearchResult, error) {
+			return protocompile.SearchResult{
+				ResolvedPath: protocompile.ResolvedPath(path),
+				Proto:        fileProto,
+			}, nil
 		})),
 	}
 	result, err := compiler.Compile(context.Background(), "foo.proto")

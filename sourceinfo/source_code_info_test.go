@@ -173,7 +173,7 @@ func TestSourceCodeInfoOptions(t *testing.T) {
 			}),
 			SourceInfoMode: mode,
 		}
-		fds, err := compiler.Compile(context.Background(), filename)
+		fds, err := compiler.Compile(context.Background(), protocompile.ResolvedPath(filename))
 		if pe, ok := err.(protocompile.PanicError); ok {
 			t.Fatalf("panic! %v\n%v", pe, pe.Stack)
 		}

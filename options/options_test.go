@@ -367,7 +367,7 @@ func TestOptionsEncoding(t *testing.T) {
 					ImportPaths: []string{importPath},
 				}),
 			}
-			fds, err := compiler.Compile(context.Background(), fileToCompile)
+			fds, err := compiler.Compile(context.Background(), protocompile.ResolvedPath(fileToCompile))
 			var panicErr protocompile.PanicError
 			if errors.As(err, &panicErr) {
 				t.Logf("panic! %v\n%s", panicErr.Value, panicErr.Stack)
@@ -420,7 +420,7 @@ func TestInterpretOptionsWithoutAST(t *testing.T) {
 	t.Parallel()
 
 	// First compile from source, so we interpret options with an AST
-	fileNames := []string{"desc_test_options.proto", "desc_test_comments.proto", "desc_test_complex.proto"}
+	fileNames := []protocompile.ResolvedPath{"desc_test_options.proto", "desc_test_comments.proto", "desc_test_complex.proto"}
 	compiler := &protocompile.Compiler{
 		Resolver: protocompile.WithStandardImports(&protocompile.SourceResolver{
 			ImportPaths: []string{"../internal/testdata"},
@@ -432,13 +432,13 @@ func TestInterpretOptionsWithoutAST(t *testing.T) {
 	// Now compile without the AST, to make sure we interpret options the same way
 	compiler = &protocompile.Compiler{
 		Resolver: protocompile.WithStandardImports(protocompile.ResolverFunc(
-			func(name string, _ protocompile.ImportContext) (protocompile.SearchResult, error) {
+			func(name protocompile.UnresolvedPath, _ protocompile.ImportContext) (protocompile.SearchResult, error) {
 				var res protocompile.SearchResult
-				data, err := os.ReadFile(filepath.Join("../internal/testdata", name))
+				data, err := os.ReadFile(filepath.Join("../internal/testdata", string(name)))
 				if err != nil {
 					return res, err
 				}
-				fileNode, err := parser.Parse(name, bytes.NewReader(data), reporter.NewHandler(nil))
+				fileNode, err := parser.Parse(string(name), bytes.NewReader(data), reporter.NewHandler(nil))
 				if err != nil {
 					return res, err
 				}

@@ -65,7 +65,7 @@ func TestMultiFileLink(t *testing.T) {
 				ImportPaths: []string{"../internal/testdata"},
 			}),
 		}
-		fds, err := compiler.Compile(context.Background(), name)
+		fds, err := compiler.Compile(context.Background(), protocompile.ResolvedPath(filepath.Join("../internal/testdata", name)))
 		if !assert.Nil(t, err) {
 			continue
 		}
@@ -2073,16 +2073,16 @@ func removePrefixIndent(s string) string {
 
 func compile(t *testing.T, input map[string]string) (linker.Files, error) {
 	t.Helper()
-	acc := func(filename string) (io.ReadCloser, error) {
-		f, ok := input[filename]
+	acc := func(filename protocompile.ResolvedPath) (io.ReadCloser, error) {
+		f, ok := input[string(filename)]
 		if !ok {
 			return nil, fmt.Errorf("file not found: %s", filename)
 		}
 		return io.NopCloser(strings.NewReader(f)), nil
 	}
-	names := make([]string, 0, len(input))
+	names := make([]protocompile.ResolvedPath, 0, len(input))
 	for k := range input {
-		names = append(names, k)
+		names = append(names, protocompile.ResolvedPath(k))
 	}
 
 	compiler := protocompile.Compiler{
@@ -2126,7 +2126,7 @@ func TestProto3Enums(t *testing.T) {
 			passProtoc, err := testByProtoc(t, testFiles, fileNames)
 			require.NoError(t, err)
 			// parse the protos with protocompile
-			acc := func(filename string) (io.ReadCloser, error) {
+			acc := func(filename protocompile.ResolvedPath) (io.ReadCloser, error) {
 				var data string
 				switch filename {
 				case "f1.proto":
@@ -2174,9 +2174,12 @@ func TestLinkerSymbolCollisionNoSource(t *testing.T) {
 			},
 		},
 	}
-	resolver := protocompile.WithStandardImports(protocompile.ResolverFunc(func(s string, _ protocompile.ImportContext) (protocompile.SearchResult, error) {
+	resolver := protocompile.WithStandardImports(protocompile.ResolverFunc(func(s protocompile.UnresolvedPath, _ protocompile.ImportContext) (protocompile.SearchResult, error) {
 		if s == "foo.proto" {
-			return protocompile.SearchResult{Proto: fdProto}, nil
+			return protocompile.SearchResult{
+				ResolvedPath: protocompile.ResolvedPath(s),
+				Proto:        fdProto,
+			}, nil
 		}
 		return protocompile.SearchResult{}, protoregistry.NotFound
 	}))
@@ -2319,9 +2322,12 @@ func TestSyntheticMapEntryUsageNoSource(t *testing.T) {
 			fdProto.MessageType[0].Field = tc.fields
 			fdProto.MessageType = append(fdProto.MessageType, tc.others...)
 
-			resolver := protocompile.ResolverFunc(func(s string, _ protocompile.ImportContext) (protocompile.SearchResult, error) {
+			resolver := protocompile.ResolverFunc(func(s protocompile.UnresolvedPath, _ protocompile.ImportContext) (protocompile.SearchResult, error) {
 				if s == "foo.proto" {
-					return protocompile.SearchResult{Proto: fdProto}, nil
+					return protocompile.SearchResult{
+						ResolvedPath: protocompile.ResolvedPath(s),
+						Proto:        fdProto,
+					}, nil
 				}
 				return protocompile.SearchResult{}, protoregistry.NotFound
 			})
@@ -2365,12 +2371,15 @@ func TestSyntheticOneofCollisions(t *testing.T) {
 			},
 			nil,
 		),
-		Resolver: protocompile.ResolverFunc(func(filename string, _ protocompile.ImportContext) (protocompile.SearchResult, error) {
-			f, ok := input[filename]
+		Resolver: protocompile.ResolverFunc(func(filename protocompile.UnresolvedPath, _ protocompile.ImportContext) (protocompile.SearchResult, error) {
+			f, ok := input[string(filename)]
 			if !ok {
 				return protocompile.SearchResult{}, fmt.Errorf("file not found: %s", filename)
 			}
-			return protocompile.SearchResult{Source: strings.NewReader(removePrefixIndent(f))}, nil
+			return protocompile.SearchResult{
+				ResolvedPath: protocompile.ResolvedPath(filename),
+				Source:       strings.NewReader(removePrefixIndent(f)),
+			}, nil
 		}),
 	}
 	_, err := compiler.Compile(context.Background(), "foo1.proto", "foo2.proto")
@@ -2532,9 +2541,12 @@ func TestCustomJSONNameWarnings(t *testing.T) {
 		},
 	}
 	for i, tc := range testCases {
-		resolver := protocompile.ResolverFunc(func(filename string, _ protocompile.ImportContext) (protocompile.SearchResult, error) {
+		resolver := protocompile.ResolverFunc(func(filename protocompile.UnresolvedPath, _ protocompile.ImportContext) (protocompile.SearchResult, error) {
 			if filename == "test.proto" {
-				return protocompile.SearchResult{Source: strings.NewReader(removePrefixIndent(tc.source))}, nil
+				return protocompile.SearchResult{
+					ResolvedPath: protocompile.ResolvedPath(filename),
+					Source:       strings.NewReader(removePrefixIndent(tc.source)),
+				}, nil
 			}
 			return protocompile.SearchResult{}, fmt.Errorf("file not found: %s", filename)
 		})
