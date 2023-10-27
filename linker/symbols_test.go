@@ -202,7 +202,7 @@ func parseAndLink(t *testing.T, contents string) Result {
 	require.NoError(t, err)
 	dep, err := protoregistry.GlobalFiles.FindFileByPath("google/protobuf/descriptor.proto")
 	require.NoError(t, err)
-	depAsFile, err := NewFileRecursive(dep)
+	depAsFile, err := NewFile(dep, nil)
 	require.NoError(t, err)
 	depFiles := Files{depAsFile}
 	linkResult, err := Link(parseResult, depFiles, nil, h)
@@ -580,7 +580,7 @@ func TestDelete(t *testing.T) {
 		require.NoError(t, err)
 		dep, err := protoregistry.GlobalFiles.FindFileByPath("google/protobuf/descriptor.proto")
 		require.NoError(t, err)
-		depAsFile, err := NewFileRecursive(dep)
+		depAsFile, err := NewFile(dep, nil)
 		require.NoError(t, err)
 		depFiles := Files{depAsFile}
 		depFiles = append(depFiles, prevDeps...)

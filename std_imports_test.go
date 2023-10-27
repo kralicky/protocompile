@@ -38,10 +38,9 @@ func TestStdImports(t *testing.T) {
 			t.Errorf("Compile returned wrong number of descriptors: expecting 1, got %d", len(fds.Files))
 			continue
 		}
-		orig := protodesc.ToFileDescriptorProto(fileProto)
 		actual := protodesc.ToFileDescriptorProto(fds.Files[0])
-		if !proto.Equal(orig, actual) {
-			t.Errorf("result proto is incorrect:\n expecting %v\n got %v", orig, actual)
+		if !proto.Equal(fileProto, actual) {
+			t.Errorf("result proto is incorrect:\n expecting %v\n got %v", fileProto, actual)
 		}
 	}
 }

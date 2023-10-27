@@ -16,8 +16,10 @@ package protocompile
 
 import (
 	"github.com/bufbuild/protocompile/internal"
+	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/descriptorpb"
 	_ "google.golang.org/protobuf/types/known/anypb" // link in packages that include the standard protos included with protoc.
 	_ "google.golang.org/protobuf/types/known/apipb"
 	_ "google.golang.org/protobuf/types/known/durationpb"
@@ -34,7 +36,7 @@ import (
 // All files that are included with protoc are also included with this package
 // so that clients do not need to explicitly supply a copy of these protos (just
 // like callers of protoc do not need to supply them).
-var standardImports map[string]protoreflect.FileDescriptor
+var standardImports map[string]*descriptorpb.FileDescriptorProto
 
 var wellKnownMessages = map[protoreflect.FullName]bool{}
 
@@ -54,13 +56,13 @@ func init() {
 		"google/protobuf/wrappers.proto",
 	}
 
-	standardImports = map[string]protoreflect.FileDescriptor{}
+	standardImports = map[string]*descriptorpb.FileDescriptorProto{}
 	for _, fn := range standardFilenames {
 		fd, err := protoregistry.GlobalFiles.FindFileByPath(fn)
 		if err != nil {
 			panic(err.Error())
 		}
-		standardImports[fn] = fd
+		standardImports[fn] = protodesc.ToFileDescriptorProto(fd)
 
 		msgs := fd.Messages()
 		for i := 0; i < msgs.Len(); i++ {
