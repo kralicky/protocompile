@@ -14,8 +14,6 @@
 
 package ast
 
-import "fmt"
-
 // ExtensionRangeNode represents an extension range declaration in an extendable
 // message. Example:
 //
@@ -44,40 +42,18 @@ func (e *ExtensionRangeNode) msgElement() {}
 //   - opts: The node corresponding to options that apply to each of the ranges.
 //   - semicolon The token corresponding to the ";" rune that ends the declaration.
 func NewExtensionRangeNode(keyword *KeywordNode, ranges []*RangeNode, commas []*RuneNode, opts *CompactOptionsNode, semicolon *RuneNode) *ExtensionRangeNode {
-	if keyword == nil {
-		panic("keyword is nil")
-	}
-	if semicolon == nil {
-		panic("semicolon is nil")
-	}
-	if len(ranges) == 0 {
-		panic("must have at least one range")
-	}
-	if len(commas) != len(ranges)-1 {
-		panic(fmt.Sprintf("%d ranges requires %d commas, not %d", len(ranges), len(ranges)-1, len(commas)))
-	}
-	numChildren := len(ranges)*2 + 1
+	var trailingNodes []Node
 	if opts != nil {
-		numChildren++
+		trailingNodes = []Node{opts, semicolon}
+	} else {
+		trailingNodes = []Node{semicolon}
 	}
-	children := make([]Node, 0, numChildren)
-	children = append(children, keyword)
-	for i, rng := range ranges {
-		if i > 0 {
-			if commas[i-1] == nil {
-				panic(fmt.Sprintf("commas[%d] is nil", i-1))
-			}
-			children = append(children, commas[i-1])
-		}
-		if rng == nil {
-			panic(fmt.Sprintf("ranges[%d] is nil", i))
-		}
-		children = append(children, rng)
-	}
-	if opts != nil {
-		children = append(children, opts)
-	}
-	children = append(children, semicolon)
+	children := createCommaSeparatedNodes(
+		[]Node{keyword},
+		ranges,
+		commas,
+		trailingNodes,
+	)
 	return &ExtensionRangeNode{
 		compositeNode: compositeNode{
 			children: children,
@@ -234,33 +210,12 @@ func (*ReservedNode) enumElement() {}
 //     The length of commas must be one less than the length of ranges.
 //   - semicolon The token corresponding to the ";" rune that ends the declaration.
 func NewReservedRangesNode(keyword *KeywordNode, ranges []*RangeNode, commas []*RuneNode, semicolon *RuneNode) *ReservedNode {
-	if keyword == nil {
-		panic("keyword is nil")
-	}
-	if semicolon == nil {
-		panic("semicolon is nil")
-	}
-	if len(ranges) == 0 {
-		panic("must have at least one range")
-	}
-	if len(commas) != len(ranges)-1 {
-		panic(fmt.Sprintf("%d ranges requires %d commas, not %d", len(ranges), len(ranges)-1, len(commas)))
-	}
-	children := make([]Node, 0, len(ranges)*2+1)
-	children = append(children, keyword)
-	for i, rng := range ranges {
-		if i > 0 {
-			if commas[i-1] == nil {
-				panic(fmt.Sprintf("commas[%d] is nil", i-1))
-			}
-			children = append(children, commas[i-1])
-		}
-		if rng == nil {
-			panic(fmt.Sprintf("ranges[%d] is nil", i))
-		}
-		children = append(children, rng)
-	}
-	children = append(children, semicolon)
+	children := createCommaSeparatedNodes(
+		[]Node{keyword},
+		ranges,
+		commas,
+		[]Node{semicolon},
+	)
 	return &ReservedNode{
 		compositeNode: compositeNode{
 			children: children,
@@ -280,33 +235,12 @@ func NewReservedRangesNode(keyword *KeywordNode, ranges []*RangeNode, commas []*
 //     The length of commas must be one less than the length of names.
 //   - semicolon The token corresponding to the ";" rune that ends the declaration.
 func NewReservedNamesNode(keyword *KeywordNode, names []StringValueNode, commas []*RuneNode, semicolon *RuneNode) *ReservedNode {
-	if keyword == nil {
-		panic("keyword is nil")
-	}
-	if semicolon == nil {
-		panic("semicolon is nil")
-	}
-	if len(names) == 0 {
-		panic("must have at least one name")
-	}
-	if len(commas) != len(names)-1 {
-		panic(fmt.Sprintf("%d names requires %d commas, not %d", len(names), len(names)-1, len(commas)))
-	}
-	children := make([]Node, 0, len(names)*2+1)
-	children = append(children, keyword)
-	for i, name := range names {
-		if i > 0 {
-			if commas[i-1] == nil {
-				panic(fmt.Sprintf("commas[%d] is nil", i-1))
-			}
-			children = append(children, commas[i-1])
-		}
-		if name == nil {
-			panic(fmt.Sprintf("names[%d] is nil", i))
-		}
-		children = append(children, name)
-	}
-	children = append(children, semicolon)
+	children := createCommaSeparatedNodes(
+		[]Node{keyword},
+		names,
+		commas,
+		[]Node{semicolon},
+	)
 	return &ReservedNode{
 		compositeNode: compositeNode{
 			children: children,

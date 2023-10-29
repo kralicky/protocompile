@@ -1,0 +1,51 @@
+syntax = "proto2";
+
+package testprotos;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "github.com/bufbuild/protocompile/internal/testprotos";
+
+extend google.protobuf.FieldOptions {
+  optional bool   syntax  = 20001;
+  optional bool   import  = 20002;
+  optional bool   public  = 20003;
+  optional bool   weak    = 20004;
+  optional bool   package = 20005;
+  optional string string  = 20006;
+  optional Foo    foo     = 20007;
+  optional int32  a       = 20008;
+}
+
+message Foo {
+  optional string bar = 1 [
+    (syntax)  = true,
+    (import)  = true,
+    (foo).bar = "bar",
+    (a)       = 1
+  ];
+  optional string baz = 2 [
+    (syntax) = true,
+    (foo)    = {
+      bar: "bar"
+    },
+    (weak) = true,
+    (a)    = 1
+  ];
+}
+
+message KeywordCollisionOptions {
+  optional uint64 id = 1 [
+    (syntax)  = true,
+    (import)  = true,
+    (public)  = true,
+    weak      = true,
+    (weak)    = true,
+    (package) = true,
+    (foo)     = {
+      bar: "bar"
+    },
+    (a)      = 1,
+    (string) = "string"
+  ];
+}

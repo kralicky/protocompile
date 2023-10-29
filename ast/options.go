@@ -326,33 +326,12 @@ type CompactOptionsNode struct {
 // non-nil. The commas arg must have a length that is one less than the
 // length of opts. The opts arg must not be empty.
 func NewCompactOptionsNode(openBracket *RuneNode, opts []*OptionNode, commas []*RuneNode, closeBracket *RuneNode) *CompactOptionsNode {
-	if openBracket == nil {
-		panic("openBracket is nil")
-	}
-	if closeBracket == nil {
-		panic("closeBracket is nil")
-	}
-	if len(opts) == 0 {
-		panic("must have at least one part")
-	}
-	if len(commas) != len(opts)-1 {
-		panic(fmt.Sprintf("%d opts requires %d commas, not %d", len(opts), len(opts)-1, len(commas)))
-	}
-	children := make([]Node, 0, len(opts)*2+1)
-	children = append(children, openBracket)
-	for i, opt := range opts {
-		if i > 0 {
-			if commas[i-1] == nil {
-				panic(fmt.Sprintf("commas[%d] is nil", i-1))
-			}
-			children = append(children, commas[i-1])
-		}
-		if opt == nil {
-			panic(fmt.Sprintf("opts[%d] is nil", i))
-		}
-		children = append(children, opt)
-	}
-	children = append(children, closeBracket)
+	children := createCommaSeparatedNodes(
+		[]Node{openBracket},
+		opts,
+		commas,
+		[]Node{closeBracket},
+	)
 
 	return &CompactOptionsNode{
 		compositeNode: compositeNode{

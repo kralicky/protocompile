@@ -84,7 +84,9 @@ DECLS:
 		case *ast.PackageNode:
 			if lastSeenImport == nil {
 				// as a backup in case there are no imports
-				r.importInsertionPoint = file.NodeInfo(decl).End()
+				r.importInsertionPoint = ast.SourcePos{
+					Line: file.NodeInfo(decl).End().Line + 1,
+				}
 			}
 		case *ast.ImportNode:
 			lastSeenImport = decl
@@ -105,6 +107,10 @@ DECLS:
 }
 
 func (r *result) ImportInsertionPoint() ast.SourcePos {
+	if r.file == nil {
+		return ast.SourcePos{}
+	}
+
 	if r.importInsertionPoint == (ast.SourcePos{}) {
 		return r.file.NodeInfo(r.file.Syntax).End()
 	}
@@ -848,6 +854,8 @@ func (r *result) MessageNode(m *descriptorpb.DescriptorProto) ast.MessageDeclNod
 	if r.nodes == nil {
 		return ast.NewNoSourceNode(r.proto.GetName())
 	}
+	// if you get a panic here like "interface is nil, not ast.MessageDeclNode",
+	// it's a race condition
 	return r.nodes[m].(ast.MessageDeclNode)
 }
 

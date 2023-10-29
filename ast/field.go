@@ -351,6 +351,10 @@ type OneofNode struct {
 	CloseBrace *RuneNode
 }
 
+func (n *OneofNode) GetElements() []OneofElement {
+	return n.Decls
+}
+
 func (*OneofNode) msgElement() {}
 
 // NewOneofNode creates a new *OneofNode. All arguments must be non-nil. While

@@ -404,34 +404,12 @@ type ArrayLiteralNode struct {
 // one less than the length of the vals arg. However, vals may be empty, in
 // which case commas must also be empty.
 func NewArrayLiteralNode(openBracket *RuneNode, vals []ValueNode, commas []*RuneNode, closeBracket *RuneNode) *ArrayLiteralNode {
-	if openBracket == nil {
-		panic("openBracket is nil")
-	}
-	if closeBracket == nil {
-		panic("closeBracket is nil")
-	}
-	if len(vals) == 0 && len(commas) != 0 {
-		panic("vals is empty but commas is not")
-	}
-	if len(vals) > 0 && len(commas) != len(vals)-1 {
-		panic(fmt.Sprintf("%d vals requires %d commas, not %d", len(vals), len(vals)-1, len(commas)))
-	}
-	children := make([]Node, 0, len(vals)*2+1)
-	children = append(children, openBracket)
-	for i, val := range vals {
-		if i > 0 {
-			if commas[i-1] == nil {
-				panic(fmt.Sprintf("commas[%d] is nil", i-1))
-			}
-			children = append(children, commas[i-1])
-		}
-		if val == nil {
-			panic(fmt.Sprintf("vals[%d] is nil", i))
-		}
-		children = append(children, val)
-	}
-	children = append(children, closeBracket)
-
+	children := createCommaSeparatedNodes(
+		[]Node{openBracket},
+		vals,
+		commas,
+		[]Node{closeBracket},
+	)
 	return &ArrayLiteralNode{
 		compositeNode: compositeNode{
 			children: children,
@@ -463,6 +441,10 @@ type MessageLiteralNode struct {
 	// item in this slice may be nil to indicate absence of a separator.
 	Seps  []*RuneNode
 	Close *RuneNode // should be '}' or '>', depending on Open
+}
+
+func (n *MessageLiteralNode) GetElements() []*MessageFieldNode {
+	return n.Elements
 }
 
 // NewMessageLiteralNode creates a new *MessageLiteralNode. The openSym and

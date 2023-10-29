@@ -100,6 +100,10 @@ type MessageBody struct {
 	CloseBrace *RuneNode
 }
 
+func (m *MessageBody) GetElements() []MessageElement {
+	return m.Decls
+}
+
 func populateMessageBody(m *MessageBody, openBrace *RuneNode, decls []MessageElement, closeBrace *RuneNode) {
 	m.OpenBrace = openBrace
 	m.Decls = decls
@@ -146,6 +150,10 @@ type ExtendNode struct {
 	OpenBrace  *RuneNode
 	Decls      []ExtendElement
 	CloseBrace *RuneNode
+}
+
+func (e *ExtendNode) GetElements() []ExtendElement {
+	return e.Decls
 }
 
 func (*ExtendNode) fileElement() {}

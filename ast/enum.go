@@ -45,6 +45,10 @@ func (e *EnumNode) GetName() Node {
 	return e.Name
 }
 
+func (e *EnumNode) GetElements() []EnumElement {
+	return e.Decls
+}
+
 // NewEnumNode creates a new *EnumNode. All arguments must be non-nil. While
 // it is technically allowed for decls to be nil or empty, the resulting node
 // will not be a valid enum, which must have at least one value.
@@ -147,6 +151,11 @@ func NewEnumValueNode(name *IdentNode, equals *RuneNode, number IntValueNode, op
 	}
 	if semicolon == nil {
 		panic("semicolon is nil")
+	}
+	if semicolon.Rune != ';' {
+		if !extendedSyntaxEnabled || semicolon.Rune != ',' {
+			panic(fmt.Sprintf("unexpected rune %q, expected ';'", semicolon.Rune))
+		}
 	}
 	numChildren := 4
 	if opts != nil {

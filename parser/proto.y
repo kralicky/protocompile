@@ -121,6 +121,7 @@ import (
 %type <mtdElement>   methodElement
 %type <mtdElements>  methodElements methodBody
 %type <mtdMsgType>   methodMessageType
+%type <b>            commaOrSemicolon optionalTrailingComma
 
 // same for terminals
 %token <s>   _STRING_LIT
@@ -461,11 +462,14 @@ messageLiteral : messageLiteralWithBraces
 		$$ = ast.NewMessageLiteralNode($1, nil, nil, $2)
 	}
 
-listLiteral : '[' listElements ']' {
+listLiteral : '[' listElements optionalTrailingComma ']' {
 		if $2 == nil {
-			$$ = ast.NewArrayLiteralNode($1, nil, nil, $3)
+			$$ = ast.NewArrayLiteralNode($1, nil, nil, $4)
 		} else {
-			$$ = ast.NewArrayLiteralNode($1, $2.vals, $2.commas, $3)
+			if $3 != nil {
+				$2.commas = append($2.commas, $3)
+			}
+			$$ = ast.NewArrayLiteralNode($1, $2.vals, $2.commas, $4)
 		}
 	}
 	| '[' ']' {
@@ -487,11 +491,14 @@ listElements : listElement {
 listElement : scalarValue
 	| messageLiteral
 
-listOfMessagesLiteral : '[' messageLiterals ']' {
+listOfMessagesLiteral : '[' messageLiterals optionalTrailingComma ']' {
 		if $2 == nil {
-			$$ = ast.NewArrayLiteralNode($1, nil, nil, $3)
+			$$ = ast.NewArrayLiteralNode($1, nil, nil, $4)
 		} else {
-			$$ = ast.NewArrayLiteralNode($1, $2.vals, $2.commas, $3)
+			if $3 != nil {
+				$2.commas = append($2.commas, $3)
+			}
+			$$ = ast.NewArrayLiteralNode($1, $2.vals, $2.commas, $4)
 		}
 	}
 	| '[' ']' {
@@ -556,8 +563,11 @@ fieldCardinality : _REQUIRED
 	| _OPTIONAL
 	| _REPEATED
 
-compactOptions: '[' compactOptionDecls ']' {
-		$$ = ast.NewCompactOptionsNode($1, $2.options, $2.commas, $3)
+compactOptions: '[' compactOptionDecls optionalTrailingComma ']' {
+		if $3 != nil {
+			$2.commas = append($2.commas, $3)
+		}
+		$$ = ast.NewCompactOptionsNode($1, $2.options, $2.commas, $4)
 	}
 
 compactOptionDecls : compactOption {
@@ -659,11 +669,17 @@ mapKeyType : _INT32
 	| _BOOL
 	| _STRING
 
-extensionRangeDecl : _EXTENSIONS tagRanges ';' {
-		$$ = ast.NewExtensionRangeNode($1.ToKeyword(), $2.ranges, $2.commas, nil, $3)
+extensionRangeDecl : _EXTENSIONS tagRanges optionalTrailingComma ';' {
+		if $3 != nil {
+			$2.commas = append($2.commas, $3)
+		}
+		$$ = ast.NewExtensionRangeNode($1.ToKeyword(), $2.ranges, $2.commas, nil, $4)
 	}
-	| _EXTENSIONS tagRanges compactOptions ';' {
-		$$ = ast.NewExtensionRangeNode($1.ToKeyword(), $2.ranges, $2.commas, $3, $4)
+	| _EXTENSIONS tagRanges optionalTrailingComma compactOptions ';' {
+		if $3 != nil {
+			$2.commas = append($2.commas, $3)
+		}
+		$$ = ast.NewExtensionRangeNode($1.ToKeyword(), $2.ranges, $2.commas, $4, $5)
 	}
 
 tagRanges : tagRange {
@@ -711,18 +727,27 @@ enumValueNumber : _INT_LIT {
 		$$ = ast.NewNegativeIntLiteralNode($1, $2)
 	}
 
-msgReserved : _RESERVED tagRanges ';' {
-		$$ = ast.NewReservedRangesNode($1.ToKeyword(), $2.ranges, $2.commas, $3)
+msgReserved : _RESERVED tagRanges optionalTrailingComma ';' {
+		if $3 != nil {
+			$2.commas = append($2.commas, $3)
+		}
+		$$ = ast.NewReservedRangesNode($1.ToKeyword(), $2.ranges, $2.commas, $4)
 	}
 	| reservedNames
 
-enumReserved : _RESERVED enumValueRanges ';' {
-		$$ = ast.NewReservedRangesNode($1.ToKeyword(), $2.ranges, $2.commas, $3)
+enumReserved : _RESERVED enumValueRanges optionalTrailingComma ';' {
+		if $3 != nil {
+			$2.commas = append($2.commas, $3)
+		}
+		$$ = ast.NewReservedRangesNode($1.ToKeyword(), $2.ranges, $2.commas, $4)
 	}
 	| reservedNames
 
-reservedNames : _RESERVED fieldNames ';' {
-		$$ = ast.NewReservedNamesNode($1.ToKeyword(), $2.names, $2.commas, $3)
+reservedNames : _RESERVED fieldNames optionalTrailingComma ';' {
+		if $3 != nil {
+			$2.commas = append($2.commas, $3)
+		}
+		$$ = ast.NewReservedNamesNode($1.ToKeyword(), $2.names, $2.commas, $4)
 	}
 
 fieldNames : stringLit {
@@ -774,12 +799,13 @@ enumElement : optionDecl {
 		$$ = nil
 	}
 
-enumValueDecl : enumValueName '=' enumValueNumber ';' {
+enumValueDecl : enumValueName '=' enumValueNumber commaOrSemicolon {
 		$$ = ast.NewEnumValueNode($1, $2, $3, nil, $4)
 	}
-	|  enumValueName '=' enumValueNumber compactOptions ';' {
+	|  enumValueName '=' enumValueNumber compactOptions commaOrSemicolon {
 		$$ = ast.NewEnumValueNode($1, $2, $3, $4, $5)
 	}
+
 
 messageDecl : _MESSAGE identifier '{' messageBody '}' {
 		$$ = ast.NewMessageNode($1.ToKeyword(), $2, $3, $4, $5)
@@ -1279,5 +1305,22 @@ identifier : _NAME
 	| _RPC
 	| _STREAM
 	| _RETURNS
+
+
+// ======== extended syntax rules ========
+
+optionalTrailingComma : ',' {
+		$$ = $1
+	}
+	| {
+		$$ = nil
+	}
+
+// extended syntax: allow using ',' in addition to ';',
+commaOrSemicolon : ';' | ',' {
+		$$ = $1
+	}
+
+// =======================================
 
 %%

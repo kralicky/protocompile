@@ -1,0 +1,39 @@
+syntax = "proto2";
+package extsyntax;
+
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.ExtensionRangeOptions {
+  optional string         label = 1000;
+  optional int32          test  = 1001;
+  optional TrailingCommas msg   = 1002;
+}
+
+message TrailingCommas {
+  optional int32 a = 1 [default = 2, ];
+  optional int32 b = 2 [
+    json_name  = "b",
+    deprecated = true,
+  ];
+
+  extensions 249, 300 to 350, 500 to 550, 20000 to max [
+    (label) = "jazz",
+
+    (msg) = {
+      a: 1,
+      b: 2,
+    },
+
+    (test) = 123,
+  ];
+  reserved 5 to 10, 12 to 15, 18, ;
+
+  reserved "A", "B", "C", ;
+}
+
+enum CommaDelimitedEnums {
+  Semicolon = 1;
+  Comma     = 2,
+  reserved 5 to 10, 12 to 15, 18, ;
+  reserved "C", "B", "A", ;
+}
