@@ -43,7 +43,7 @@ type OptionIndex map[*ast.OptionNode]*OptionSourceInfo
 type OptionDescriptorIndex struct {
 	UninterpretedNameDescriptorsToFieldDescriptors map[*descriptorpb.UninterpretedOption_NamePart]protoreflect.FieldDescriptor
 	FieldReferenceNodesToFieldDescriptors          map[ast.Node]protoreflect.FieldDescriptor
-	OptionsToMessageDescriptors                    map[*descriptorpb.UninterpretedOption]protoreflect.MessageDescriptor
+	OptionsToFieldDescriptors                      map[*descriptorpb.UninterpretedOption]protoreflect.FieldDescriptor
 	TypeReferenceURLsToMessageDescriptors          map[*ast.FieldReferenceNode]protoreflect.MessageDescriptor
 }
 
@@ -51,7 +51,7 @@ func NewOptionDescriptorIndex() OptionDescriptorIndex {
 	return OptionDescriptorIndex{
 		UninterpretedNameDescriptorsToFieldDescriptors: make(map[*descriptorpb.UninterpretedOption_NamePart]protoreflect.FieldDescriptor),
 		FieldReferenceNodesToFieldDescriptors:          make(map[ast.Node]protoreflect.FieldDescriptor),
-		OptionsToMessageDescriptors:                    make(map[*descriptorpb.UninterpretedOption]protoreflect.MessageDescriptor),
+		OptionsToFieldDescriptors:                      make(map[*descriptorpb.UninterpretedOption]protoreflect.FieldDescriptor),
 		TypeReferenceURLsToMessageDescriptors:          make(map[*ast.FieldReferenceNode]protoreflect.MessageDescriptor),
 	}
 }

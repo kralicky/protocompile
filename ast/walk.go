@@ -25,7 +25,9 @@ import (
 // If a visitor returns an error while walking the tree, the entire
 // operation is aborted and that error is returned.
 func Walk(root Node, v Visitor, opts ...WalkOption) error {
-	var wOpts walkOptions
+	wOpts := walkOptions{
+		depthLimit: 32,
+	}
 	for _, opt := range opts {
 		opt(&wOpts)
 	}
@@ -42,6 +44,7 @@ type walkOptions struct {
 
 	hasRangeRequirement bool
 	start, end          Token
+	depthLimit          int
 
 	hasIntersectionRequirement bool
 	intersects                 Token
@@ -86,7 +89,18 @@ func WithIntersection(intersects Token) WalkOption {
 	}
 }
 
+func WithDepthLimit(limit int) WalkOption {
+	return func(options *walkOptions) {
+		options.depthLimit = limit
+	}
+}
+
 func walk(root Node, v Visitor, opts walkOptions) (err error) {
+	if opts.depthLimit == 0 {
+		return fmt.Errorf("maximum depth limit reached")
+	}
+	opts.depthLimit--
+
 	if opts.before != nil {
 		if err := opts.before(root); err != nil {
 			return err
