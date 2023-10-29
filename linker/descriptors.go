@@ -222,8 +222,8 @@ func (o *result) FindOptionNameFieldDescriptor(name *descriptorpb.UninterpretedO
 	return o.optsDescIndex.UninterpretedNameDescriptorsToFieldDescriptors[name]
 }
 
-func (o *result) FindOptionMessageDescriptor(option *descriptorpb.UninterpretedOption) protoreflect.MessageDescriptor {
-	return o.optsDescIndex.OptionsToMessageDescriptors[option]
+func (o *result) FindOptionFieldDescriptor(option *descriptorpb.UninterpretedOption) protoreflect.FieldDescriptor {
+	return o.optsDescIndex.OptionsToFieldDescriptors[option]
 }
 
 func (o *result) FindFieldDescriptorByFieldReferenceNode(node *ast.FieldReferenceNode) protoreflect.FieldDescriptor {

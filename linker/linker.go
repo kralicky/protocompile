@@ -185,7 +185,7 @@ type Result interface {
 
 	FindOptionSourceInfo(*ast.OptionNode) *sourceinfo.OptionSourceInfo
 	FindOptionNameFieldDescriptor(name *descriptorpb.UninterpretedOption_NamePart) protoreflect.FieldDescriptor
-	FindOptionMessageDescriptor(option *descriptorpb.UninterpretedOption) protoreflect.MessageDescriptor
+	FindOptionFieldDescriptor(option *descriptorpb.UninterpretedOption) protoreflect.FieldDescriptor
 	FindFieldDescriptorByFieldReferenceNode(node *ast.FieldReferenceNode) protoreflect.FieldDescriptor
 	RangeFieldReferenceNodesWithDescriptors(func(node ast.Node, desc protoreflect.FieldDescriptor) bool)
 	FindMessageDescriptorByTypeReferenceURLNode(node *ast.FieldReferenceNode) protoreflect.MessageDescriptor

@@ -348,6 +348,7 @@ func (interp *interpreter) interpretFieldOptions(fqn string, fld *descriptorpb.F
 		if strings.HasPrefix(name, "[") && strings.HasSuffix(name, "]") {
 			return interp.reporter.HandleErrorf(interp.nodeInfo(optNode.GetValue()), "%s: option json_name value cannot start with '[' and end with ']'; that is reserved for representing extensions", scope)
 		}
+		interp.descriptorIndex.OptionsToFieldDescriptors[opt] = resolveDescriptor[protoreflect.FieldDescriptor](interp.resolver, fqn)
 		fld.JsonName = proto.String(jsonName)
 	}
 
@@ -355,6 +356,7 @@ func (interp *interpreter) interpretFieldOptions(fqn string, fld *descriptorpb.F
 	if index, err := interp.processDefaultOption(scope, fqn, fld, uo); err != nil && !interp.lenient {
 		return err
 	} else if index >= 0 {
+		interp.descriptorIndex.OptionsToFieldDescriptors[uo[index]] = resolveDescriptor[protoreflect.FieldDescriptor](interp.resolver, fqn)
 		// attribute source code info
 		optNode := interp.file.OptionNode(uo[index])
 		if on, ok := optNode.(*ast.OptionNode); ok {
@@ -1128,7 +1130,7 @@ func (interp *interpreter) interpretField(mc *internal.MessageContext, msg proto
 	}
 	interp.descriptorIndex.UninterpretedNameDescriptorsToFieldDescriptors[nm] = fld
 	interp.descriptorIndex.FieldReferenceNodesToFieldDescriptors[node] = fld
-	interp.descriptorIndex.OptionsToMessageDescriptors[opt] = fld.Message()
+	interp.descriptorIndex.OptionsToFieldDescriptors[opt] = fld
 
 	if len(opt.GetName()) > nameIndex+1 {
 		nextnm := opt.GetName()[nameIndex+1]
