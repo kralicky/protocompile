@@ -179,7 +179,7 @@ type Result interface {
 	// interpreting options (which is done after linking).
 	PopulateSourceCodeInfo(sourceinfo.OptionIndex, sourceinfo.OptionDescriptorIndex)
 
-	FindDescriptorsByPrefix(ctx context.Context, prefix string) ([]protoreflect.Descriptor, error)
+	FindDescriptorsByPrefix(ctx context.Context, prefix string, filter ...func(protoreflect.Descriptor) bool) ([]protoreflect.Descriptor, error)
 
 	FindReferences(to protoreflect.Descriptor) []ast.SourcePosInfo
 

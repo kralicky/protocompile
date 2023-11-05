@@ -191,7 +191,7 @@ func (r *result) FindOptionSourceInfo(node *ast.OptionNode) *sourceinfo.OptionSo
 	return r.optsIndex[node]
 }
 
-func (r *result) FindDescriptorsByPrefix(ctx context.Context, prefix string) (results []protoreflect.Descriptor, err error) {
+func (r *result) FindDescriptorsByPrefix(ctx context.Context, prefix string, filter ...func(protoreflect.Descriptor) bool) (results []protoreflect.Descriptor, err error) {
 	r.descriptors.ForEachPrefix(art.Key(prefix), func(node art.Node) (cont bool) {
 		if ctx.Err() != nil {
 			err = ctx.Err()
@@ -203,6 +203,11 @@ func (r *result) FindDescriptorsByPrefix(ctx context.Context, prefix string) (re
 				return true
 			}
 			if desc, ok := value.(protoreflect.Descriptor); ok {
+				if len(filter) > 0 {
+					if !filter[0](desc) {
+						return true
+					}
+				}
 				results = append(results, desc)
 			}
 		}
