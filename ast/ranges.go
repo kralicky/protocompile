@@ -42,6 +42,9 @@ func (e *ExtensionRangeNode) msgElement() {}
 //   - opts: The node corresponding to options that apply to each of the ranges.
 //   - semicolon The token corresponding to the ";" rune that ends the declaration.
 func NewExtensionRangeNode(keyword *KeywordNode, ranges []*RangeNode, commas []*RuneNode, opts *CompactOptionsNode, semicolon *RuneNode) *ExtensionRangeNode {
+	if len(ranges) == 0 {
+		panic("must have at least one range")
+	}
 	var trailingNodes []Node
 	if opts != nil {
 		trailingNodes = []Node{opts, semicolon}
@@ -210,6 +213,9 @@ func (*ReservedNode) enumElement() {}
 //     The length of commas must be one less than the length of ranges.
 //   - semicolon The token corresponding to the ";" rune that ends the declaration.
 func NewReservedRangesNode(keyword *KeywordNode, ranges []*RangeNode, commas []*RuneNode, semicolon *RuneNode) *ReservedNode {
+	if len(ranges) == 0 {
+		panic("must have at least one range")
+	}
 	children := createCommaSeparatedNodes(
 		[]Node{keyword},
 		ranges,
@@ -235,6 +241,9 @@ func NewReservedRangesNode(keyword *KeywordNode, ranges []*RangeNode, commas []*
 //     The length of commas must be one less than the length of names.
 //   - semicolon The token corresponding to the ";" rune that ends the declaration.
 func NewReservedNamesNode(keyword *KeywordNode, names []StringValueNode, commas []*RuneNode, semicolon *RuneNode) *ReservedNode {
+	if len(names) == 0 {
+		panic("must have at least one name")
+	}
 	children := createCommaSeparatedNodes(
 		[]Node{keyword},
 		names,

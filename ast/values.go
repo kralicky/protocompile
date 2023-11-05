@@ -404,6 +404,9 @@ type ArrayLiteralNode struct {
 // one less than the length of the vals arg. However, vals may be empty, in
 // which case commas must also be empty.
 func NewArrayLiteralNode(openBracket *RuneNode, vals []ValueNode, commas []*RuneNode, closeBracket *RuneNode) *ArrayLiteralNode {
+	if len(vals) == 0 && len(commas) != 0 {
+		panic("vals is empty but commas is not")
+	}
 	children := createCommaSeparatedNodes(
 		[]Node{openBracket},
 		vals,

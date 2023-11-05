@@ -412,20 +412,23 @@ messageLiteralFieldEntry : messageLiteralField {
 	}
 
 messageLiteralField : messageLiteralFieldName ':' value {
-		if $1 != nil {
+		if $3 != nil {
 			$$ = ast.NewMessageFieldNode($1, $2, $3)
-		} else {
-			$$ = nil
 		}
 	}
 	| messageLiteralFieldName messageValue {
-		if $1 != nil {
-			$$ = ast.NewMessageFieldNode($1, nil, $2)
-		} else {
-			$$ = nil
-		}
+		$$ = ast.NewMessageFieldNode($1, nil, $2)
 	}
 	| error ':' value {
+		$$ = nil
+	}
+	| messageLiteralFieldName ':' error {
+		$$ = nil
+	}
+	| error ':' error {
+		$$ = nil
+	}
+	| error error {
 		$$ = nil
 	}
 

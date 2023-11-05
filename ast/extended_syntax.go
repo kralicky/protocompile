@@ -20,9 +20,6 @@ func createCommaSeparatedNodes[T Node](
 			panic(fmt.Sprintf("trailingNodes[%d] is nil", i))
 		}
 	}
-	if len(nodes) == 0 {
-		panic("must have at least one node")
-	}
 	if !extendedSyntaxEnabled {
 		if len(commas) != len(nodes)-1 {
 			panic(fmt.Sprintf("%d nodes requires %d commas, not %d", len(nodes), len(nodes)-1, len(commas)))
@@ -47,7 +44,7 @@ func createCommaSeparatedNodes[T Node](
 		}
 		children = append(children, node)
 	}
-	if extendedSyntaxEnabled && len(commas) == len(nodes) {
+	if extendedSyntaxEnabled && len(nodes) > 0 && len(commas) == len(nodes) {
 		children = append(children, commas[len(commas)-1])
 	}
 	children = append(children, trailingNodes...)

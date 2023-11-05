@@ -2,25 +2,30 @@ syntax = "proto2";
 
 package testprotos;
 
+import "github.com/bufbuild/protocompile/internal/testdata/desc_test_complex.proto";
+import "github.com/bufbuild/protocompile/internal/testdata/desc_test_options.proto";
 import "google/protobuf/descriptor.proto";
 
 option go_package = "github.com/bufbuild/protocompile/internal/testprotos";
 
-extend google.protobuf.FieldOptions {
-  optional bool   syntax  = 20001;
-  optional bool   import  = 20002;
-  optional bool   public  = 20003;
-  optional bool   weak    = 20004;
-  optional bool   package = 20005;
-  optional string string  = 20006;
-  optional Foo    foo     = 20007;
-  optional int32  a       = 20008;
-}
-
 message Foo {
-  optional string bar = 1 [
-    (syntax)  = true,
-    (import)  = true,
+  option (.foo.bar.rept) = {
+    foo: "abc"
+    s    <name: "foo", id: 123>
+    array: [
+      1,
+      2,
+      3
+    ]
+    r: [
+      <name: "f">,
+      {name: "s"},
+      {id: 456}
+    ]
+  };
+  optional string bar = 1 [ // a
+    (syntax)  = true, // b
+    (import)  = true, // c
     (foo).bar = "bar",
     (a)       = 1
   ];
@@ -32,6 +37,17 @@ message Foo {
     (weak) = true,
     (a)    = 1
   ];
+}
+
+extend google.protobuf.FieldOptions {
+  optional bool   syntax  = 20001;
+  optional bool   import  = 20002;
+  optional bool   public  = 20003;
+  optional bool   weak    = 20004;
+  optional bool   package = 20005;
+  optional string string  = 20006;
+  optional Foo    foo     = 20007;
+  optional int32  a       = 20008;
 }
 
 message KeywordCollisionOptions {
@@ -48,4 +64,33 @@ message KeywordCollisionOptions {
     (a)      = 1,
     (string) = "string"
   ];
+}
+
+enum LooooooongNumber {
+  A = 0;
+  B = 1                                                              [(testprotos.evfubarstr) = "foo"];
+  C = 2;
+  D = 3;
+  E = 4;
+  F = 5                                                              [(testprotos.evfubarstr) = "baz"];
+  G = 6                                                              [(testprotos.evfubarstr) = "qux"];
+  H = 7                                                              [(testprotos.evfubarstr) = "quux"];
+  I = 8                                                              [(testprotos.evfubarstr) = "corge"];
+  J = 9                                                              [(testprotos.evfubarstr) = "grault"];
+  K = 10;
+  L = 11;
+  M = 12;
+  N = 13;
+  O = 14;
+  P = 15;
+  Q = 16                                                             [(testprotos.evfubarstr) = "garply"];
+  R = 17;
+  S = 18                                                             [(testprotos.evfubarstr) = "waldo"];
+  T = 19;
+  U = 20                                                             [(testprotos.evfubarstr) = "fred"];
+  V = 21;
+  W = 22;
+  X = 23;
+  Y = 24;
+  Z = 00000000000000000000000000000000000000000000000000000000000100;
 }
