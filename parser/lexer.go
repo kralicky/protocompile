@@ -498,7 +498,9 @@ func (l *protoLex) readStringLiteral(quote rune) (string, error) {
 	var buf bytes.Buffer
 	var escapeError reporter.ErrorWithPos
 	var noMoreErrors bool
+	var errCount int
 	reportErr := func(msg, badEscape string) {
+		errCount++
 		if noMoreErrors {
 			return
 		}
@@ -518,7 +520,16 @@ func (l *protoLex) readStringLiteral(quote rune) (string, error) {
 		// we've now consumed the bad escape and lexer position is after it, so we need
 		// to back up to the beginning of the escape to report the correct position
 		escapeError = l.errWithCurrentPos(err, -len(badEscape))
+
+		if errCount > 10 {
+			noMoreErrors = true
+		}
 	}
+	defer func() {
+		if noMoreErrors && errCount > 10 {
+			l.addSourceError(fmt.Errorf("too many errors (%d) encountered while parsing string literal", errCount))
+		}
+	}()
 	for {
 		c, _, err := l.input.readRune()
 		if err != nil {
