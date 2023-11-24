@@ -22,7 +22,9 @@ import (
 	"unicode/utf8"
 
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
 
@@ -33,6 +35,103 @@ import (
 	"github.com/bufbuild/protocompile/sourceinfo"
 	art "github.com/plar/go-adaptive-radix-tree"
 )
+
+var (
+	// These "noOp*" values are all descriptors. The protoreflect.Descriptor
+	// interface and its sub-interfaces are all marked with an unexported
+	// method so that they cannot be implemented outside of the google.golang.org/protobuf
+	// module. So, to provide implementations from this package, we must embed
+	// them. If we simply left the embedded interface field nil, then if/when
+	// new methods are added to the interfaces, it could induce panics in this
+	// package or users of this module (since trying to invoke one of these new
+	// methods would end up trying to call a method on a nil interface value).
+	//
+	// So instead of leaving the embedded interface fields nil, we embed an actual
+	// value. While new methods are unlikely to return the correct value (since
+	// the calls will be delegated to these no-op instances), it is a less
+	// dangerous latent bug than inducing a nil-dereference panic.
+
+	noOpFile      protoreflect.FileDescriptor
+	noOpMessage   protoreflect.MessageDescriptor
+	noOpOneof     protoreflect.OneofDescriptor
+	noOpField     protoreflect.FieldDescriptor
+	noOpEnum      protoreflect.EnumDescriptor
+	noOpEnumValue protoreflect.EnumValueDescriptor
+	noOpExtension protoreflect.ExtensionDescriptor
+	noOpService   protoreflect.ServiceDescriptor
+	noOpMethod    protoreflect.MethodDescriptor
+)
+
+func init() {
+	noOpFile, _ = protodesc.NewFile(
+		&descriptorpb.FileDescriptorProto{
+			Name:       proto.String("no-op.proto"),
+			Syntax:     proto.String("proto2"),
+			Dependency: []string{"google/protobuf/descriptor.proto"},
+			MessageType: []*descriptorpb.DescriptorProto{
+				{
+					Name: proto.String("NoOpMsg"),
+					Field: []*descriptorpb.FieldDescriptorProto{
+						{
+							Name:       proto.String("no_op"),
+							Type:       descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
+							Label:      descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+							Number:     proto.Int32(1),
+							JsonName:   proto.String("noOp"),
+							OneofIndex: proto.Int32(0),
+						},
+					},
+					OneofDecl: []*descriptorpb.OneofDescriptorProto{
+						{
+							Name: proto.String("no_op_oneof"),
+						},
+					},
+				},
+			},
+			EnumType: []*descriptorpb.EnumDescriptorProto{
+				{
+					Name: proto.String("NoOpEnum"),
+					Value: []*descriptorpb.EnumValueDescriptorProto{
+						{
+							Name:   proto.String("NO_OP"),
+							Number: proto.Int32(0),
+						},
+					},
+				},
+			},
+			Extension: []*descriptorpb.FieldDescriptorProto{
+				{
+					Extendee: proto.String(".google.protobuf.FileOptions"),
+					Name:     proto.String("no_op"),
+					Type:     descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
+					Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+					Number:   proto.Int32(50000),
+				},
+			},
+			Service: []*descriptorpb.ServiceDescriptorProto{
+				{
+					Name: proto.String("NoOpService"),
+					Method: []*descriptorpb.MethodDescriptorProto{
+						{
+							Name:       proto.String("NoOp"),
+							InputType:  proto.String(".NoOpMsg"),
+							OutputType: proto.String(".NoOpMsg"),
+						},
+					},
+				},
+			},
+		},
+		protoregistry.GlobalFiles,
+	)
+	noOpMessage = noOpFile.Messages().Get(0)
+	noOpOneof = noOpMessage.Oneofs().Get(0)
+	noOpField = noOpMessage.Fields().Get(0)
+	noOpEnum = noOpFile.Enums().Get(0)
+	noOpEnumValue = noOpEnum.Values().Get(0)
+	noOpExtension = noOpFile.Extensions().Get(0)
+	noOpService = noOpFile.Services().Get(0)
+	noOpMethod = noOpService.Methods().Get(0)
+}
 
 // This file contains implementations of protoreflect.Descriptor. Note that
 // this is a hack since those interfaces have a "doNotImplement" tag
@@ -478,100 +577,11 @@ func (s *srcLocs) ByDescriptor(d protoreflect.Descriptor) protoreflect.SourceLoc
 	if d.ParentFile() != s.file {
 		return protoreflect.SourceLocation{}
 	}
-	path, ok := computePath(d)
+	path, ok := internal.ComputePath(d)
 	if !ok {
 		return protoreflect.SourceLocation{}
 	}
 	return s.ByPath(path)
-}
-
-func computePath(d protoreflect.Descriptor) (protoreflect.SourcePath, bool) {
-	_, ok := d.(protoreflect.FileDescriptor)
-	if ok {
-		return nil, true
-	}
-	var path protoreflect.SourcePath
-	for {
-		p := d.Parent()
-		switch d := d.(type) {
-		case protoreflect.FileDescriptor:
-			return reverse(path), true
-		case protoreflect.MessageDescriptor:
-			path = append(path, int32(d.Index()))
-			switch p.(type) {
-			case protoreflect.FileDescriptor:
-				path = append(path, internal.FileMessagesTag)
-			case protoreflect.MessageDescriptor:
-				path = append(path, internal.MessageNestedMessagesTag)
-			default:
-				return nil, false
-			}
-		case protoreflect.FieldDescriptor:
-			path = append(path, int32(d.Index()))
-			switch p.(type) {
-			case protoreflect.FileDescriptor:
-				if d.IsExtension() {
-					path = append(path, internal.FileExtensionsTag)
-				} else {
-					return nil, false
-				}
-			case protoreflect.MessageDescriptor:
-				if d.IsExtension() {
-					path = append(path, internal.MessageExtensionsTag)
-				} else {
-					path = append(path, internal.MessageFieldsTag)
-				}
-			default:
-				return nil, false
-			}
-		case protoreflect.OneofDescriptor:
-			path = append(path, int32(d.Index()))
-			if _, ok := p.(protoreflect.MessageDescriptor); ok {
-				path = append(path, internal.MessageOneofsTag)
-			} else {
-				return nil, false
-			}
-		case protoreflect.EnumDescriptor:
-			path = append(path, int32(d.Index()))
-			switch p.(type) {
-			case protoreflect.FileDescriptor:
-				path = append(path, internal.FileEnumsTag)
-			case protoreflect.MessageDescriptor:
-				path = append(path, internal.MessageEnumsTag)
-			default:
-				return nil, false
-			}
-		case protoreflect.EnumValueDescriptor:
-			path = append(path, int32(d.Index()))
-			if _, ok := p.(protoreflect.EnumDescriptor); ok {
-				path = append(path, internal.EnumValuesTag)
-			} else {
-				return nil, false
-			}
-		case protoreflect.ServiceDescriptor:
-			path = append(path, int32(d.Index()))
-			if _, ok := p.(protoreflect.FileDescriptor); ok {
-				path = append(path, internal.FileServicesTag)
-			} else {
-				return nil, false
-			}
-		case protoreflect.MethodDescriptor:
-			path = append(path, int32(d.Index()))
-			if _, ok := p.(protoreflect.ServiceDescriptor); ok {
-				path = append(path, internal.ServiceMethodsTag)
-			} else {
-				return nil, false
-			}
-		}
-		d = p
-	}
-}
-
-func reverse(p protoreflect.SourcePath) protoreflect.SourcePath {
-	for i, j := 0, len(p)-1; i < j; i, j = i+1, j-1 {
-		p[i], p[j] = p[j], p[i]
-	}
-	return p
 }
 
 type msgDescriptors struct {
@@ -627,7 +637,7 @@ var _ protoreflect.MessageDescriptor = (*msgDescriptor)(nil)
 var _ protoutil.DescriptorProtoWrapper = (*msgDescriptor)(nil)
 
 func (r *result) createMessageDescriptor(md *descriptorpb.DescriptorProto, parent protoreflect.Descriptor, index int, fqn string) *msgDescriptor {
-	ret := &msgDescriptor{file: r, parent: parent, index: index, proto: md, fqn: fqn}
+	ret := &msgDescriptor{MessageDescriptor: noOpMessage, file: r, parent: parent, index: index, proto: md, fqn: fqn}
 	r.descriptors.Insert(art.Key(fqn), ret)
 
 	prefix := fqn + "."
@@ -865,7 +875,7 @@ var _ protoreflect.EnumDescriptor = (*enumDescriptor)(nil)
 var _ protoutil.DescriptorProtoWrapper = (*enumDescriptor)(nil)
 
 func (r *result) createEnumDescriptor(ed *descriptorpb.EnumDescriptorProto, parent protoreflect.Descriptor, index int, fqn string) *enumDescriptor {
-	ret := &enumDescriptor{file: r, parent: parent, index: index, proto: ed, fqn: fqn}
+	ret := &enumDescriptor{EnumDescriptor: noOpEnum, file: r, parent: parent, index: index, proto: ed, fqn: fqn}
 	r.descriptors.Insert(art.Key(fqn), ret)
 
 	// Unlike all other elements, the fully-qualified name of enum values
@@ -1016,7 +1026,7 @@ var _ protoreflect.EnumValueDescriptor = (*enValDescriptor)(nil)
 var _ protoutil.DescriptorProtoWrapper = (*enValDescriptor)(nil)
 
 func (r *result) createEnumValueDescriptor(ed *descriptorpb.EnumValueDescriptorProto, parent *enumDescriptor, index int, fqn string) *enValDescriptor {
-	ret := &enValDescriptor{file: r, parent: parent, index: index, proto: ed, fqn: fqn}
+	ret := &enValDescriptor{EnumValueDescriptor: noOpEnumValue, file: r, parent: parent, index: index, proto: ed, fqn: fqn}
 	r.descriptors.Insert(art.Key(fqn), ret)
 	return ret
 }
@@ -1103,7 +1113,7 @@ type extTypeDescriptor struct {
 var _ protoutil.DescriptorProtoWrapper = &extTypeDescriptor{}
 
 func (r *result) createExtTypeDescriptor(fd *descriptorpb.FieldDescriptorProto, parent protoreflect.Descriptor, index int, fqn string) *extTypeDescriptor {
-	ret := &fldDescriptor{file: r, parent: parent, index: index, proto: fd, fqn: fqn}
+	ret := &fldDescriptor{FieldDescriptor: noOpExtension, file: r, parent: parent, index: index, proto: fd, fqn: fqn}
 	r.descriptors.Insert(art.Key(fqn), ret)
 	return &extTypeDescriptor{ExtensionTypeDescriptor: dynamicpb.NewExtensionType(ret).TypeDescriptor(), field: ret}
 }
@@ -1186,7 +1196,7 @@ var _ protoreflect.FieldDescriptor = (*fldDescriptor)(nil)
 var _ protoutil.DescriptorProtoWrapper = (*fldDescriptor)(nil)
 
 func (r *result) createFieldDescriptor(fd *descriptorpb.FieldDescriptorProto, parent *msgDescriptor, index int, fqn string) *fldDescriptor {
-	ret := &fldDescriptor{file: r, parent: parent, index: index, proto: fd, fqn: fqn}
+	ret := &fldDescriptor{FieldDescriptor: noOpField, file: r, parent: parent, index: index, proto: fd, fqn: fqn}
 	r.descriptors.Insert(art.Key(fqn), ret)
 	return ret
 }
@@ -1663,7 +1673,7 @@ var _ protoreflect.OneofDescriptor = (*oneofDescriptor)(nil)
 var _ protoutil.DescriptorProtoWrapper = (*oneofDescriptor)(nil)
 
 func (r *result) createOneofDescriptor(ood *descriptorpb.OneofDescriptorProto, parent *msgDescriptor, index int, fqn string) *oneofDescriptor {
-	ret := &oneofDescriptor{file: r, parent: parent, index: index, proto: ood, fqn: fqn}
+	ret := &oneofDescriptor{OneofDescriptor: noOpOneof, file: r, parent: parent, index: index, proto: ood, fqn: fqn}
 	r.descriptors.Insert(art.Key(fqn), ret)
 
 	var fields []*fldDescriptor
@@ -1774,7 +1784,7 @@ var _ protoreflect.ServiceDescriptor = (*svcDescriptor)(nil)
 var _ protoutil.DescriptorProtoWrapper = (*svcDescriptor)(nil)
 
 func (r *result) createServiceDescriptor(sd *descriptorpb.ServiceDescriptorProto, index int, fqn string) *svcDescriptor {
-	ret := &svcDescriptor{file: r, index: index, proto: sd, fqn: fqn}
+	ret := &svcDescriptor{ServiceDescriptor: noOpService, file: r, index: index, proto: sd, fqn: fqn}
 	r.descriptors.Insert(art.Key(fqn), ret)
 
 	prefix := fqn + "."
@@ -1872,7 +1882,7 @@ var _ protoreflect.MethodDescriptor = (*mtdDescriptor)(nil)
 var _ protoutil.DescriptorProtoWrapper = (*mtdDescriptor)(nil)
 
 func (r *result) createMethodDescriptor(mtd *descriptorpb.MethodDescriptorProto, parent *svcDescriptor, index int, fqn string) *mtdDescriptor {
-	ret := &mtdDescriptor{file: r, parent: parent, index: index, proto: mtd, fqn: fqn}
+	ret := &mtdDescriptor{MethodDescriptor: noOpMethod, file: r, parent: parent, index: index, proto: mtd, fqn: fqn}
 	r.descriptors.Insert(art.Key(fqn), ret)
 	return ret
 }

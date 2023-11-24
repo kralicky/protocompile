@@ -49,6 +49,16 @@ import (
 	"github.com/bufbuild/protocompile/sourceinfo"
 )
 
+const (
+	// featuresFieldName is the name of a field in every options message.
+	featuresFieldName = "features"
+)
+
+var (
+	featureSetType = (*descriptorpb.FeatureSet)(nil).ProtoReflect().Type()
+	featureSetName = featureSetType.Descriptor().FullName()
+)
+
 type interpreter struct {
 	file                    file
 	resolver                linker.Resolver
@@ -146,15 +156,9 @@ func interpretOptions(lenient bool, file file, res linker.Resolver, handler *rep
 	if prefix != "" {
 		prefix += "."
 	}
-	opts := fd.GetOptions()
-	if opts != nil {
-		if len(opts.UninterpretedOption) > 0 {
-			remain, err := interp.interpretOptions(fd.GetName(), fd, opts, opts.UninterpretedOption)
-			if err != nil {
-				return nil, sourceinfo.OptionDescriptorIndex{}, err
-			}
-			opts.UninterpretedOption = remain
-		}
+	err := interpretElementOptions(&interp, fd.GetName(), targetTypeFile, fd)
+	if err != nil {
+		return nil, sourceinfo.OptionDescriptorIndex{}, err
 	}
 	for _, md := range fd.GetMessageType() {
 		fqn := prefix + md.GetName()
@@ -176,23 +180,15 @@ func interpretOptions(lenient bool, file file, res linker.Resolver, handler *rep
 	}
 	for _, sd := range fd.GetService() {
 		fqn := prefix + sd.GetName()
-		opts := sd.GetOptions()
-		if len(opts.GetUninterpretedOption()) > 0 {
-			remain, err := interp.interpretOptions(fqn, sd, opts, opts.UninterpretedOption)
-			if err != nil {
-				return nil, sourceinfo.OptionDescriptorIndex{}, err
-			}
-			opts.UninterpretedOption = remain
+		err := interpretElementOptions(&interp, fqn, targetTypeService, sd)
+		if err != nil {
+			return nil, sourceinfo.OptionDescriptorIndex{}, err
 		}
 		for _, mtd := range sd.GetMethod() {
 			mtdFqn := fqn + "." + mtd.GetName()
-			opts := mtd.GetOptions()
-			if len(opts.GetUninterpretedOption()) > 0 {
-				remain, err := interp.interpretOptions(mtdFqn, mtd, opts, opts.UninterpretedOption)
-				if err != nil {
-					return nil, sourceinfo.OptionDescriptorIndex{}, err
-				}
-				opts.UninterpretedOption = remain
+			err := interpretElementOptions(&interp, mtdFqn, targetTypeMethod, mtd)
+			if err != nil {
+				return nil, sourceinfo.OptionDescriptorIndex{}, err
 			}
 		}
 	}
@@ -252,15 +248,9 @@ func (interp *interpreter) nodeInfo(n ast.Node) ast.NodeInfo {
 }
 
 func (interp *interpreter) interpretMessageOptions(fqn string, md *descriptorpb.DescriptorProto) error {
-	opts := md.GetOptions()
-	if opts != nil {
-		if len(opts.UninterpretedOption) > 0 {
-			remain, err := interp.interpretOptions(fqn, md, opts, opts.UninterpretedOption)
-			if err != nil {
-				return err
-			}
-			opts.UninterpretedOption = remain
-		}
+	err := interpretElementOptions(interp, fqn, targetTypeMessage, md)
+	if err != nil {
+		return err
 	}
 	for _, fld := range md.GetField() {
 		fldFqn := fqn + "." + fld.GetName()
@@ -270,13 +260,9 @@ func (interp *interpreter) interpretMessageOptions(fqn string, md *descriptorpb.
 	}
 	for _, ood := range md.GetOneofDecl() {
 		oodFqn := fqn + "." + ood.GetName()
-		opts := ood.GetOptions()
-		if len(opts.GetUninterpretedOption()) > 0 {
-			remain, err := interp.interpretOptions(oodFqn, ood, opts, opts.UninterpretedOption)
-			if err != nil {
-				return err
-			}
-			opts.UninterpretedOption = remain
+		err := interpretElementOptions(interp, oodFqn, targetTypeOneof, ood)
+		if err != nil {
+			return err
 		}
 	}
 	for _, fld := range md.GetExtension() {
@@ -287,13 +273,9 @@ func (interp *interpreter) interpretMessageOptions(fqn string, md *descriptorpb.
 	}
 	for _, er := range md.GetExtensionRange() {
 		erFqn := fmt.Sprintf("%s.%d-%d", fqn, er.GetStart(), er.GetEnd())
-		opts := er.GetOptions()
-		if len(opts.GetUninterpretedOption()) > 0 {
-			remain, err := interp.interpretOptions(erFqn, er, opts, opts.UninterpretedOption)
-			if err != nil {
-				return err
-			}
-			opts.UninterpretedOption = remain
+		err := interpretElementOptions(interp, erFqn, targetTypeExtensionRange, er)
+		if err != nil {
+			return err
 		}
 	}
 	for _, nmd := range md.GetNestedType() {
@@ -308,16 +290,68 @@ func (interp *interpreter) interpretMessageOptions(fqn string, md *descriptorpb.
 			return err
 		}
 	}
+
+	// We also copy features for map fields down to their synthesized key and value fields.
+	for _, fld := range md.GetField() {
+		entryName := internal.InitCap(internal.JSONName(fld.GetName())) + "Entry"
+		if fld.GetLabel() != descriptorpb.FieldDescriptorProto_LABEL_REPEATED ||
+			fld.GetType() != descriptorpb.FieldDescriptorProto_TYPE_MESSAGE &&
+				fld.GetTypeName() != "."+fqn+"."+entryName {
+			// can't be a map field
+			continue
+		}
+		if fld.Options == nil || fld.Options.Features == nil {
+			// no features to propagate
+			continue
+		}
+		for _, nmd := range md.GetNestedType() {
+			if nmd.GetName() == entryName {
+				// found the entry message
+				if !nmd.GetOptions().GetMapEntry() {
+					break // not a map
+				}
+				for _, mapField := range nmd.Field {
+					if mapField.Options == nil {
+						mapField.Options = &descriptorpb.FieldOptions{}
+					}
+					features := proto.Clone(fld.Options.Features).(*descriptorpb.FeatureSet) //nolint:errcheck
+					if mapField.Options.Features != nil {
+						proto.Merge(features, mapField.Options.Features)
+					}
+					mapField.Options.Features = features
+				}
+				break
+			}
+		}
+	}
+
 	return nil
 }
 
 func (interp *interpreter) interpretFieldOptions(fqn string, fld *descriptorpb.FieldDescriptorProto) error {
 	opts := fld.GetOptions()
+
+	// First process pseudo-options
+	if len(opts.GetUninterpretedOption()) > 0 {
+		if err := interp.interpretFieldPseudoOptions(fqn, fld, opts); err != nil {
+			return err
+		}
+	}
+
+	// Must re-check length of uninterpreted options since above step could remove some.
 	if len(opts.GetUninterpretedOption()) == 0 {
+		// If no options to interpret, clear out options.
+		fld.Options = nil
 		return nil
 	}
-	uo := opts.UninterpretedOption
+
+	// Then process actual options.
+	return interpretElementOptions(interp, fqn, targetTypeField, fld)
+}
+
+func (interp *interpreter) interpretFieldPseudoOptions(fqn string, fld *descriptorpb.FieldDescriptorProto, opts *descriptorpb.FieldOptions) error {
 	scope := fmt.Sprintf("field %s", fqn)
+	uo := opts.UninterpretedOption
 
 	// process json_name pseudo-option
 	index, err := internal.FindOption(interp.file, interp.reporter, scope, uo, "json_name")
@@ -365,14 +399,7 @@ func (interp *interpreter) interpretFieldOptions(fqn string, fld *descriptorpb.F
 		uo = internal.RemoveOption(uo, index)
 	}
 
-	if len(uo) == 0 {
-		// no real options, only pseudo-options above? clear out options
-		fld.Options = nil
-	} else if remain, err := interp.interpretOptions(fqn, fld, opts, uo); err != nil {
-		return err
-	} else {
-		opts.UninterpretedOption = remain
-	}
+	opts.UninterpretedOption = uo
 	return nil
 }
 
@@ -483,25 +510,15 @@ func encodeDefaultBytes(b []byte) string {
 }
 
 func (interp *interpreter) interpretEnumOptions(fqn string, ed *descriptorpb.EnumDescriptorProto) error {
-	opts := ed.GetOptions()
-	if opts != nil {
-		if len(opts.UninterpretedOption) > 0 {
-			remain, err := interp.interpretOptions(fqn, ed, opts, opts.UninterpretedOption)
-			if err != nil {
-				return err
-			}
-			opts.UninterpretedOption = remain
-		}
+	err := interpretElementOptions(interp, fqn, targetTypeEnum, ed)
+	if err != nil {
+		return err
 	}
 	for _, evd := range ed.GetValue() {
 		evdFqn := fqn + "." + evd.GetName()
-		opts := evd.GetOptions()
-		if len(opts.GetUninterpretedOption()) > 0 {
-			remain, err := interp.interpretOptions(evdFqn, evd, opts, opts.UninterpretedOption)
-			if err != nil {
-				return err
-			}
-			opts.UninterpretedOption = remain
+		err := interpretElementOptions(interp, evdFqn, targetTypeEnumValue, evd)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -819,12 +836,35 @@ type optionsContainer interface {
 	AddOptionBytes(pm proto.Message, opts []byte)
 }
 
+func interpretElementOptions[Elem elementType[OptsStruct, Opts], OptsStruct any, Opts optionsType[OptsStruct]](
+	interp *interpreter,
+	fqn string,
+	target *targetType[Elem, OptsStruct, Opts],
+	elem Elem,
+) error {
+	opts := elem.GetOptions()
+	uo := opts.GetUninterpretedOption()
+	if len(uo) > 0 {
+		remain, err := interp.interpretOptions(fqn, target.t, elem, opts, uo)
+		if err != nil {
+			return err
+		}
+		target.setUninterpretedOptions(opts, remain)
+	}
+	return nil
+}
+
 // interpretOptions processes the options in uninterpreted, which are interpreted as fields
-// of the given opts message. On success, it will usually return nil, nil. But if the current
+// of the given opts message. The first return value is the features to use for child elements.
+// On success, the latter two return values will usually be nil, nil. But if the current
 // operation is lenient, it may return a non-nil slice of uninterpreted options on success.
-// In such a case, the returned value is the remaining slice of options which could not be
-// interpreted.
-func (interp *interpreter) interpretOptions(fqn string, element, opts proto.Message, uninterpreted []*descriptorpb.UninterpretedOption) ([]*descriptorpb.UninterpretedOption, error) {
+// In such a case, the returned slice contains the options which could not be interpreted.
+func (interp *interpreter) interpretOptions(
+	fqn string,
+	targetType descriptorpb.FieldOptions_OptionTargetType,
+	element, opts proto.Message,
+	uninterpreted []*descriptorpb.UninterpretedOption,
+) ([]*descriptorpb.UninterpretedOption, error) {
 	optsDesc := opts.ProtoReflect().Descriptor()
 	optsFqn := string(optsDesc.FullName())
 	var msg protoreflect.Message
@@ -847,6 +887,7 @@ func (interp *interpreter) interpretOptions(fqn string, element, opts proto.Mess
 	}
 	var remain []*descriptorpb.UninterpretedOption
 	results := make([]*interpretedOption, 0, len(uninterpreted))
+	var featuresInfo []*interpretedOption
 	for _, uo := range uninterpreted {
 		node := interp.file.OptionNode(uo)
 		if !uo.Name[0].GetIsExtension() && uo.Name[0].GetNamePart() == "uninterpreted_option" {
@@ -878,9 +919,17 @@ func (interp *interpreter) interpretOptions(fqn string, element, opts proto.Mess
 		}
 		res.unknown = !isKnownField(optsDesc, res)
 		results = append(results, res)
-		if optn, ok := node.(*ast.OptionNode); ok {
-			interp.index[optn] = res.toSourceInfo()
+		if !uo.Name[0].GetIsExtension() && uo.Name[0].GetNamePart() == featuresFieldName {
+			featuresInfo = append(featuresInfo, res)
 		}
+		if optn, ok := node.(*ast.OptionNode); ok {
+			si := res.toSourceInfo()
+			interp.index[optn] = si
+		}
+	}
+
+	if err := interp.validateFeatures(targetType, msg, featuresInfo); err != nil && !interp.lenient {
+		return nil, err
 	}
 
 	if interp.lenient {
@@ -918,7 +967,9 @@ func (interp *interpreter) interpretOptions(fqn string, element, opts proto.Mess
 	if err := cloneInto(opts, msg.Interface(), interp.resolver); err != nil {
 		node := interp.file.Node(element)
 		return nil, interp.reporter.HandleError(reporter.Error(interp.nodeInfo(node), err))
+		return nil, interp.reporter.HandleError(reporter.Error(interp.nodeInfo(node), err))
 	}
+
 	if interp.container != nil {
 		b, err := interp.toOptionBytes(mc, results)
 		if err != nil {
@@ -928,6 +979,109 @@ func (interp *interpreter) interpretOptions(fqn string, element, opts proto.Mess
 	}
 
 	return nil, nil
+}
+
+func (interp *interpreter) validateFeatures(
+	targetType descriptorpb.FieldOptions_OptionTargetType,
+	opts protoreflect.Message,
+	featuresInfo []*interpretedOption,
+) error {
+	fld := opts.Descriptor().Fields().ByName(featuresFieldName)
+	if fld == nil {
+		// no features to resolve
+		return nil
+	}
+	if fld.IsList() || fld.Message() == nil || fld.Message().FullName() != featureSetName {
+		// features field doesn't look right... abort
+		// TODO: should this return an error?
+		return nil
+	}
+	features := opts.Get(fld).Message()
+	var err error
+	features.Range(func(featureField protoreflect.FieldDescriptor, _ protoreflect.Value) bool {
+		opts, ok := featureField.Options().(*descriptorpb.FieldOptions)
+		if !ok {
+			return true
+		}
+		targetTypes := opts.GetTargets()
+		var allowed bool
+		for _, allowedType := range targetTypes {
+			if allowedType == targetType {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			allowedTypes := make([]string, len(targetTypes))
+			for i, t := range opts.Targets {
+				allowedTypes[i] = targetTypeString(t)
+			}
+			pos := interp.positionOfFeature(featuresInfo, fld.Number(), featureField.Number())
+			if len(opts.Targets) == 1 && opts.Targets[0] == descriptorpb.FieldOptions_TARGET_TYPE_UNKNOWN {
+				err = interp.reporter.HandleErrorf(pos, "feature field %q may not be used explicitly", featureField.Name())
+			} else {
+				err = interp.reporter.HandleErrorf(pos, "feature %q is allowed on [%s], not on %s", featureField.Name(), strings.Join(allowedTypes, ","), targetTypeString(targetType))
+			}
+		}
+		return err == nil
+	})
+	return err
+}
+
+func (interp *interpreter) positionOfFeature(featuresInfo []*interpretedOption, fieldNumbers ...protoreflect.FieldNumber) ast.SourceSpan {
+	if interp.file.AST() == nil {
+		return ast.UnknownSpan(interp.file.FileDescriptorProto().GetName())
+	}
+	for _, info := range featuresInfo {
+		matched, remainingNumbers, node := matchInterpretedOption(info, fieldNumbers)
+		if !matched {
+			continue
+		}
+		if len(remainingNumbers) > 0 {
+			node = findInterpretedFieldForFeature(&(info.interpretedField), remainingNumbers)
+		}
+		if node != nil {
+			return interp.file.FileNode().NodeInfo(node)
+		}
+	}
+	return ast.UnknownSpan(interp.file.FileDescriptorProto().GetName())
+}
+
+func matchInterpretedOption(info *interpretedOption, path []protoreflect.FieldNumber) (bool, []protoreflect.FieldNumber, ast.Node) {
+	for i := 0; i < len(path) && i < len(info.pathPrefix); i++ {
+		if info.pathPrefix[i] != int32(path[i]) {
+			return false, nil, nil
+		}
+	}
+	if len(path) <= len(info.pathPrefix) {
+		// no more path elements to match
+		node := info.node
+		if optsNode, ok := node.(*ast.OptionNode); ok {
+			// Do we need to check this? It should always be true...
+			if len(optsNode.Name.Parts) == len(info.pathPrefix)+1 {
+				node = optsNode.Name.Parts[len(path)-1]
+			}
+		}
+		return true, nil, node
+	}
+	if info.number != int32(path[len(info.pathPrefix)]) {
+		return false, nil, nil
+	}
+	return true, path[len(info.pathPrefix)+1:], info.node
+}
+
+func findInterpretedFieldForFeature(opt *interpretedField, path []protoreflect.FieldNumber) ast.Node {
+	if len(path) == 0 {
+		return opt.node
+	}
+	for _, fld := range opt.value.msgVal {
+		if fld.number == int32(path[0]) {
+			if res := findInterpretedFieldForFeature(fld, path[1:]); res != nil {
+				return res
+			}
+		}
+	}
+	return nil
 }
 
 // isKnownField returns true if the given option is for a known field of the
@@ -992,6 +1146,10 @@ func wireTypeForKind(kind protoreflect.Kind) protowire.Type {
 	}
 }
 
+func targetTypeString(t descriptorpb.FieldOptions_OptionTargetType) string {
+	return strings.ToLower(strings.ReplaceAll(strings.TrimPrefix(t.String(), "TARGET_TYPE_"), "_", " "))
+}
+
 func cloneInto(dest proto.Message, src proto.Message, res linker.Resolver) error {
 	if dest.ProtoReflect().Descriptor() == src.ProtoReflect().Descriptor() {
 		proto.Reset(dest)
@@ -1027,8 +1185,8 @@ func (interp *interpreter) toOptionBytes(mc *internal.MessageContext, results []
 		b, err = res.appendOptionBytes(b)
 		if err != nil {
 			if _, ok := err.(reporter.ErrorWithPos); !ok {
-				pos := ast.UnknownSpan(interp.file.AST().Name())
-				err = reporter.Errorf(pos, "%sfailed to encode options: %w", mc, err)
+				span := ast.UnknownSpan(interp.file.AST().Name())
+				err = reporter.Errorf(span, "%sfailed to encode options: %w", mc, err)
 			}
 			if err := interp.reporter.HandleError(err); err != nil {
 				return nil, err
@@ -1159,8 +1317,9 @@ func (interp *interpreter) interpretField(mc *internal.MessageContext, msg proto
 						mc, ood.Name(), fieldName(existingFld))
 				}
 			}
-			fdm = dynamicpb.NewMessage(fld.Message())
-			msg.Set(fld, protoreflect.ValueOfMessage(fdm))
+			fldVal := msg.NewField(fld)
+			fdm = fldVal.Message()
+			msg.Set(fld, fldVal)
 		}
 		// recurse to set next part of name
 		return interp.interpretField(mc, fdm, opt, nameIndex+1, append(pathPrefix, int32(fld.Number())))
@@ -1230,7 +1389,7 @@ func (interp *interpreter) setOptionField(mc *internal.MessageContext, msg proto
 		var firstIndex int
 		for index, item := range sl {
 			mc.OptAggPath = fmt.Sprintf("%s[%d]", origPath, index)
-			value, err := interp.fieldValue(mc, fld, item, insideMsgLiteral)
+			value, err := interp.fieldValue(mc, msg, fld, item, insideMsgLiteral)
 			if err != nil {
 				return interpretedFieldValue{}, 0, err
 			}
@@ -1239,7 +1398,7 @@ func (interp *interpreter) setOptionField(mc *internal.MessageContext, msg proto
 				if index == 0 {
 					firstIndex = mv.Len()
 				}
-				setMapEntry(fld, mv, &value)
+				setMapEntry(fld, msg, mv, &value)
 			} else {
 				lv := msg.Mutable(fld).List()
 				if index == 0 {
@@ -1259,7 +1418,7 @@ func (interp *interpreter) setOptionField(mc *internal.MessageContext, msg proto
 		}, firstIndex, nil
 	}
 
-	value, err := interp.fieldValue(mc, fld, val, insideMsgLiteral)
+	value, err := interp.fieldValue(mc, msg, fld, val, insideMsgLiteral)
 	if err != nil {
 		return interpretedFieldValue{}, 0, err
 	}
@@ -1276,7 +1435,7 @@ func (interp *interpreter) setOptionField(mc *internal.MessageContext, msg proto
 	case fld.IsMap():
 		mv := msg.Mutable(fld).Map()
 		index = mv.Len()
-		setMapEntry(fld, mv, &value)
+		setMapEntry(fld, msg, mv, &value)
 	case fld.IsList():
 		lv := msg.Mutable(fld).List()
 		index = lv.Len()
@@ -1380,7 +1539,7 @@ func (interp *interpreter) setOptionFieldFromProto(mc *internal.MessageContext, 
 	return value, nil
 }
 
-func setMapEntry(fld protoreflect.FieldDescriptor, mapVal protoreflect.Map, value *interpretedFieldValue) {
+func setMapEntry(fld protoreflect.FieldDescriptor, msg protoreflect.Message, mapVal protoreflect.Map, value *interpretedFieldValue) {
 	entry := value.val.Message()
 	keyFld, valFld := fld.MapKey(), fld.MapValue()
 	// if an entry is missing a key or value, we add in an explicit
@@ -1395,8 +1554,27 @@ func setMapEntry(fld protoreflect.FieldDescriptor, mapVal protoreflect.Map, valu
 	}
 	key := entry.Get(keyFld)
 	val := entry.Get(valFld)
-	if dm, ok := val.Interface().(*dynamicpb.Message); ok && (dm == nil || !dm.IsValid()) {
-		val = protoreflect.ValueOfMessage(dynamicpb.NewMessage(valFld.Message()))
+	if fld.MapValue().Kind() == protoreflect.MessageKind {
+		// Replace any nil/invalid values with an empty message
+		dm, valIsDynamic := val.Interface().(*dynamicpb.Message)
+		if (valIsDynamic && dm == nil) || !val.Message().IsValid() {
+			val = protoreflect.ValueOfMessage(dynamicpb.NewMessage(valFld.Message()))
+		}
+		_, containerIsDynamic := msg.Interface().(*dynamicpb.Message)
+		if valIsDynamic && !containerIsDynamic {
+			// This happens because we create dynamic messages to represent map entries,
+			// but the container of the map may expect a non-dynamic, generated type.
+			dest := mapVal.NewValue()
+			_, destIsDynamic := dest.Message().Interface().(*dynamicpb.Message)
+			if !destIsDynamic {
+				// reflection Set methods do not support cases where destination is
+				// generated but source is dynamic (or vice versa). But proto.Merge
+				// *DOES* support that, as long as dest and source use the same
+				// descriptor.
+				proto.Merge(dest.Message().Interface(), val.Message().Interface())
+				val = dest
+			}
+		}
 	}
 	// TODO: error if key is already present
 	mapVal.Set(key.MapKey(), val)
@@ -1582,7 +1760,7 @@ func optionValueKind(opt *descriptorpb.UninterpretedOption) string {
 
 // fieldValue computes a compile-time value (constant or list or message literal) for the given
 // AST node val. The value in val must be assignable to the field fld.
-func (interp *interpreter) fieldValue(mc *internal.MessageContext, fld protoreflect.FieldDescriptor, val ast.ValueNode, insideMsgLiteral bool) (interpretedFieldValue, error) {
+func (interp *interpreter) fieldValue(mc *internal.MessageContext, msg protoreflect.Message, fld protoreflect.FieldDescriptor, val ast.ValueNode, insideMsgLiteral bool) (interpretedFieldValue, error) {
 	k := fld.Kind()
 	switch k {
 	case protoreflect.EnumKind:
@@ -1595,8 +1773,20 @@ func (interp *interpreter) fieldValue(mc *internal.MessageContext, fld protorefl
 	case protoreflect.MessageKind, protoreflect.GroupKind:
 		v := val.Value()
 		if aggs, ok := v.([]*ast.MessageFieldNode); ok {
-			fmd := fld.Message()
-			return interp.messageLiteralValue(mc, aggs, fmd)
+			var childMsg protoreflect.Message
+			switch {
+			case fld.IsList():
+				// List of messages
+				val := msg.NewField(fld)
+				childMsg = val.List().NewElement().Message()
+			case fld.IsMap():
+				// No generated type for map entries, so we use a dynamic type
+				childMsg = dynamicpb.NewMessage(fld.Message())
+			default:
+				// Normal message field
+				childMsg = msg.NewField(fld).Message()
+			}
+			return interp.messageLiteralValue(mc, aggs, childMsg)
 		}
 		return interpretedFieldValue{}, reporter.Errorf(interp.nodeInfo(val), "%vexpecting message, got %s", mc, valueKind(v))
 
@@ -1955,8 +2145,8 @@ func descriptorType(m proto.Message) string {
 	}
 }
 
-func (interp *interpreter) messageLiteralValue(mc *internal.MessageContext, fieldNodes []*ast.MessageFieldNode, fmd protoreflect.MessageDescriptor) (interpretedFieldValue, error) {
-	fdm := dynamicpb.NewMessage(fmd)
+func (interp *interpreter) messageLiteralValue(mc *internal.MessageContext, fieldNodes []*ast.MessageFieldNode, msg protoreflect.Message) (interpretedFieldValue, error) {
+	fmd := msg.Descriptor()
 	origPath := mc.OptAggPath
 	defer func() {
 		mc.OptAggPath = origPath
@@ -1983,8 +2173,8 @@ func (interp *interpreter) messageLiteralValue(mc *internal.MessageContext, fiel
 			urlPrefix := fieldNode.Name.URLPrefix.AsIdentifier()
 			msgName := fieldNode.Name.Name.AsIdentifier()
 			fullURL := fmt.Sprintf("%s/%s", urlPrefix, msgName)
-			// TODO: Support other URLs dynamically -- the caller of protoparse
-			// should be able to provide a fldNode custom resolver that can resolve type
+			// TODO: Support other URLs dynamically -- the caller of protocompile
+			// should be able to provide a custom resolver that can resolve type
 			// URLs into message descriptors. The default resolver would be
 			// implemented as below, only accepting "type.googleapis.com" and
 			// "type.googleprod.com" as hosts/prefixes and using the compiled
@@ -2001,7 +2191,7 @@ func (interp *interpreter) messageLiteralValue(mc *internal.MessageContext, fiel
 				return interpretedFieldValue{}, reporter.Errorf(interp.nodeInfo(fieldNode.Name.URLPrefix), "%vcould not resolve type reference %s", mc, fullURL)
 			}
 			// parse the message value
-			msgVal, err := interp.messageLiteralValue(mc, anyFields, anyMd)
+			msgVal, err := interp.messageLiteralValue(mc, anyFields, dynamicpb.NewMessage(anyMd))
 			if err != nil {
 				return interpretedFieldValue{}, err
 			}
@@ -2013,7 +2203,7 @@ func (interp *interpreter) messageLiteralValue(mc *internal.MessageContext, fiel
 			if typeURLDescriptor == nil || typeURLDescriptor.Kind() != protoreflect.StringKind {
 				return interpretedFieldValue{}, reporter.Errorf(interp.nodeInfo(fieldNode.Name), "%vfailed to set type_url string field on Any: %w", mc, err)
 			}
-			fdm.Set(typeURLDescriptor, protoreflect.ValueOfString(fullURL))
+			msg.Set(typeURLDescriptor, protoreflect.ValueOfString(fullURL))
 			valueDescriptor := fmd.Fields().ByNumber(2)
 			if valueDescriptor == nil || valueDescriptor.Kind() != protoreflect.BytesKind {
 				return interpretedFieldValue{}, reporter.Errorf(interp.nodeInfo(fieldNode.Name), "%vfailed to set value bytes field on Any: %w", mc, err)
@@ -2024,7 +2214,7 @@ func (interp *interpreter) messageLiteralValue(mc *internal.MessageContext, fiel
 			}
 
 			interp.descriptorIndex.TypeReferenceURLsToMessageDescriptors[fieldNode.Name] = anyMd
-			fdm.Set(valueDescriptor, protoreflect.ValueOfBytes(b))
+			msg.Set(valueDescriptor, protoreflect.ValueOfBytes(b))
 		} else {
 			var ffld protoreflect.FieldDescriptor
 			var err error
@@ -2077,7 +2267,7 @@ func (interp *interpreter) messageLiteralValue(mc *internal.MessageContext, fiel
 				// Otherwise it is an error in the text format.
 				return interpretedFieldValue{}, reporter.Errorf(interp.nodeInfo(fieldNode.Val), "syntax error: unexpected value, expecting ':'")
 			}
-			res, index, err := interp.setOptionField(mc, fdm, ffld, fieldNode.Name, fieldNode.Val, true)
+			res, index, err := interp.setOptionField(mc, msg, ffld, fieldNode.Name, fieldNode.Val, true)
 			if err != nil {
 				return interpretedFieldValue{}, err
 			}
@@ -2093,7 +2283,7 @@ func (interp *interpreter) messageLiteralValue(mc *internal.MessageContext, fiel
 		}
 	}
 	return interpretedFieldValue{
-		val:    protoreflect.ValueOfMessage(fdm),
+		val:    protoreflect.ValueOfMessage(msg),
 		msgVal: flds,
 	}, nil
 }

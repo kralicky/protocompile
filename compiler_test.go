@@ -17,6 +17,7 @@ package protocompile
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"runtime"
 	"strings"
@@ -45,9 +46,7 @@ func TestParseFilesMessageComments(t *testing.T) {
 	}
 	ctx := context.Background()
 	files, err := comp.Compile(ctx, "internal/testdata/desc_test1.proto")
-	if !assert.Nil(t, err, "%v", err) {
-		t.FailNow()
-	}
+	require.NoError(t, err)
 	comments := ""
 	expected := " Comment for TestMessage\n"
 	for _, fd := range files.Files {
@@ -131,7 +130,7 @@ func TestParseFilesWithDependencies(t *testing.T) {
 			})),
 		}
 		_, err := compiler.Compile(ctx, "test.proto")
-		assert.Nil(t, err, "%v", err)
+		require.NoError(t, err)
 	})
 	t.Run("DependencyIncludedProto", func(t *testing.T) {
 		t.Parallel()
@@ -148,7 +147,7 @@ func TestParseFilesWithDependencies(t *testing.T) {
 			})),
 		}
 		_, err := compiler.Compile(ctx, "test.proto")
-		assert.Nil(t, err, "%v", err)
+		require.NoError(t, err)
 	})
 
 	// Establish that we *can not* parse the source file if the resolver
@@ -158,7 +157,7 @@ func TestParseFilesWithDependencies(t *testing.T) {
 		// Create a dependency-UNaware parser.
 		compiler := Compiler{Resolver: baseResolver}
 		_, err := compiler.Compile(ctx, "test.proto")
-		assert.NotNil(t, err, "expected parse to fail")
+		require.Error(t, err, "expected parse to fail")
 	})
 
 	t.Run("NoDependencies", func(t *testing.T) {
@@ -183,7 +182,7 @@ func TestParseFilesWithDependencies(t *testing.T) {
 			}),
 		}
 		_, err := compiler.Compile(ctx, "test.proto")
-		assert.Nil(t, err)
+		require.NoError(t, err)
 	})
 }
 
@@ -196,14 +195,10 @@ func findAndLink(t *testing.T, filename string, fdset *descriptorpb.FileDescript
 			for _, dep := range fd.GetDependency() {
 				depDesc, _ := findAndLink(t, dep, fdset, soFar)
 				err := soFar.RegisterFile(depDesc)
-				if !assert.NoError(t, err) {
-					t.FailNow()
-				}
+				require.NoError(t, err)
 			}
 			desc, err := protodesc.NewFile(fd, soFar)
-			if !assert.NoError(t, err) {
-				t.FailNow()
-			}
+			require.NoError(t, err)
 			return desc, fd
 		}
 	}
@@ -229,7 +224,7 @@ message Foo {
 	}
 	ctx := context.Background()
 	fds, err := compiler.Compile(ctx, "test.proto")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	field := fds.Files[0].Messages().Get(0).Fields().Get(0)
 	comment := fds.Files[0].SourceLocations().ByDescriptor(field).LeadingComments
@@ -259,9 +254,7 @@ message Foo {
 	}
 	ctx := context.Background()
 	fds, err := compiler.Compile(ctx, "test.proto")
-	if !assert.Nil(t, err, "%v", err) {
-		t.FailNow()
-	}
+	require.NoError(t, err)
 
 	ext := fds.Files[0].Extensions().ByName("foo")
 	md := fds.Files[0].Messages().Get(0)
@@ -383,6 +376,9 @@ func TestDataRace(t *testing.T) {
 				return err
 			})
 			err := grp.Wait()
+			if panicErr := new(PanicError); errors.As(err, panicErr) {
+				t.Logf(panicErr.Stack)
+			}
 			require.NoError(t, err)
 		})
 	}

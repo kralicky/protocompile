@@ -38,8 +38,8 @@ func TestSymbolsPackages(t *testing.T) {
 	assert.Equal(t, &s.pkgTrie, s.getPackage(""))
 
 	h := reporter.NewHandler(nil)
-	pos := ast.UnknownSpan("foo.proto")
-	pkg, err := s.importPackages(pos, "build.buf.foo.bar.baz", h)
+	span := ast.UnknownSpan("foo.proto")
+	pkg, err := s.importPackages(span, "build.buf.foo.bar.baz", h)
 	require.NoError(t, err)
 	// new package has nothing in it
 	assert.Empty(t, pkg.children)
@@ -54,14 +54,14 @@ func TestSymbolsPackages(t *testing.T) {
 	cur := &s.pkgTrie
 	pkgNames := []protoreflect.FullName{"build", "build.buf", "build.buf.foo", "build.buf.foo.bar", "build.buf.foo.bar.baz"}
 	for _, pkgName := range pkgNames {
-		assert.Equal(t, 1, len(cur.children))
+		assert.Len(t, cur.children, 1)
 		assert.Empty(t, cur.files)
-		assert.Equal(t, 1, len(cur.symbols))
+		assert.Len(t, cur.symbols, 1)
 		assert.Empty(t, cur.exts)
 
 		entry, ok := cur.symbols[pkgName]
 		require.True(t, ok)
-		assert.Equal(t, pos, entry.span)
+		assert.Equal(t, span, entry.span)
 		assert.False(t, entry.isEnumValue)
 		assert.True(t, entry.isPackage)
 
@@ -117,7 +117,7 @@ func TestSymbolsImport(t *testing.T) {
 
 			pkg := s.getPackage("foo.bar")
 			syms := pkg.symbols
-			assert.Equal(t, 6, len(syms))
+			assert.Len(t, syms, 6)
 			assert.Contains(t, syms, protoreflect.FullName("foo.bar.Foo"))
 			assert.Contains(t, syms, protoreflect.FullName("foo.bar.Foo.bar"))
 			assert.Contains(t, syms, protoreflect.FullName("foo.bar.Foo.baz"))
@@ -125,13 +125,13 @@ func TestSymbolsImport(t *testing.T) {
 			assert.Contains(t, syms, protoreflect.FullName("foo.bar.s"))
 			assert.Contains(t, syms, protoreflect.FullName("foo.bar.xtra"))
 			exts := pkg.exts
-			assert.Equal(t, 2, len(exts))
+			assert.Len(t, exts, 2)
 			assert.Contains(t, exts, extNumber{"foo.bar.Foo", 10})
 			assert.Contains(t, exts, extNumber{"foo.bar.Foo", 11})
 
 			pkg = s.getPackage("google.protobuf")
 			exts = pkg.exts
-			assert.Equal(t, 1, len(exts))
+			assert.Len(t, exts, 1)
 			assert.Contains(t, exts, extNumber{"google.protobuf.FieldOptions", 20000})
 		})
 	}
@@ -181,13 +181,13 @@ func TestSymbolExtensions(t *testing.T) {
 
 	pkg := s.getPackage("foo.bar")
 	exts := pkg.exts
-	assert.Equal(t, 2, len(exts))
+	assert.Len(t, exts, 2)
 	assert.Contains(t, exts, extNumber{"foo.bar.Foo", 11})
 	assert.Contains(t, exts, extNumber{"foo.bar.Foo", 12})
 
 	pkg = s.getPackage("google.protobuf")
 	exts = pkg.exts
-	assert.Equal(t, 3, len(exts))
+	assert.Len(t, exts, 3)
 	assert.Contains(t, exts, extNumber{"google.protobuf.FileOptions", 10101})
 	assert.Contains(t, exts, extNumber{"google.protobuf.FieldOptions", 10101})
 	assert.Contains(t, exts, extNumber{"google.protobuf.MessageOptions", 10101})

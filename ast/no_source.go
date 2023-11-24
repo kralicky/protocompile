@@ -20,12 +20,12 @@ func UnknownPos(filename string) SourcePos {
 	return SourcePos{Filename: filename}
 }
 
+// unknownSpan is a placeholder span when only the source file
+// name is known.
 func UnknownSpan(filename string) SourceSpan {
 	return unknownSpan{filename: filename}
 }
 
-// unknownSpan is a placeholder span when only the source file
-// name is known.
 type unknownSpan struct {
 	filename string
 }

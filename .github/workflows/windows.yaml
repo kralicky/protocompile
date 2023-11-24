@@ -13,20 +13,19 @@ permissions:
 jobs:
   ci:
     env:
-      GOMODCACHE: 'd:\gomodcache'
-      GOCACHE: 'd:\gocache'
-      DOWNLOAD_CACHE: 'd:\downloadcache'
+      PROTOC_ARTIFACT_SUFFIX: win64
+      PATH_SEP: ;
     runs-on: windows-latest
     strategy:
       matrix:
-        go-version: [1.18.x,1.19.x]
+        go-version: [1.19.x,1.20.x,1.21.x]
     steps:
       - name: Set git to use LF
         run: |
           git config --global core.autocrlf false
           git config --global core.eol lf
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
       - name: Install Go
@@ -44,4 +43,4 @@ jobs:
           key: ${{ runner.os }}-protocompile-ci-${{ hashFiles('**/go.sum') }}
       - name: Test
         shell: bash
-        run: ./windows/test.bash
+        run: make protoc && go test ./...

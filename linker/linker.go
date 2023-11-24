@@ -108,6 +108,7 @@ dependencies_ok:
 	}
 
 	r := &result{
+		FileDescriptor:       noOpFile,
 		Result:               parsed,
 		deps:                 dependencies, // the unfiltered dependencies
 		descriptors:          art.New(),

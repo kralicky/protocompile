@@ -12,23 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package linker
+package internal
 
-import (
-	"testing"
-
-	"github.com/stretchr/testify/require"
-)
-
-func TestNoOpDescriptors(t *testing.T) {
-	t.Parallel()
-	require.NotNil(t, noOpFile)
-	require.NotNil(t, noOpMessage)
-	require.NotNil(t, noOpOneof)
-	require.NotNil(t, noOpField)
-	require.NotNil(t, noOpEnum)
-	require.NotNil(t, noOpEnumValue)
-	require.NotNil(t, noOpExtension)
-	require.NotNil(t, noOpService)
-	require.NotNil(t, noOpMethod)
-}
+// AllowEditions is set to true in tests to enable editions syntax for testing.
+// This will be removed and editions will be allowed by non-test code once the
+// implementation is complete.
+var AllowEditions = false

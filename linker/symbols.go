@@ -478,7 +478,7 @@ func (s *packageSymbols) checkFileLocked(f protoreflect.FileDescriptor, handler 
 
 func sourceSpanForPackage(fd protoreflect.FileDescriptor) ast.SourceSpan {
 	loc := fd.SourceLocations().ByPath([]int32{internal.FilePackageTag})
-	if isZeroLoc(loc) {
+	if internal.IsZeroLocation(loc) {
 		return ast.UnknownSpan(fd.Path())
 	}
 	return ast.NewSourceSpan(
@@ -500,7 +500,7 @@ func sourceSpanFor(d protoreflect.Descriptor) ast.SourceSpan {
 	if file == nil {
 		return ast.UnknownSpan(unknownFilePath)
 	}
-	path, ok := computePath(d)
+	path, ok := internal.ComputePath(d)
 	if !ok {
 		return ast.UnknownSpan(file.Path())
 	}
@@ -525,9 +525,9 @@ func sourceSpanFor(d protoreflect.Descriptor) ast.SourceSpan {
 		// descriptor, sans name field
 	}
 	loc := file.SourceLocations().ByPath(namePath)
-	if isZeroLoc(loc) {
+	if internal.IsZeroLocation(loc) {
 		loc = file.SourceLocations().ByPath(path)
-		if isZeroLoc(loc) {
+		if internal.IsZeroLocation(loc) {
 			return ast.UnknownSpan(file.Path())
 		}
 	}
@@ -550,16 +550,16 @@ func sourceSpanForNumber(fd protoreflect.FieldDescriptor) ast.SourceSpan {
 	if file == nil {
 		return ast.UnknownSpan(unknownFilePath)
 	}
-	path, ok := computePath(fd)
+	path, ok := internal.ComputePath(fd)
 	if !ok {
 		return ast.UnknownSpan(file.Path())
 	}
 	numberPath := path
 	numberPath = append(numberPath, internal.FieldNumberTag)
 	loc := file.SourceLocations().ByPath(numberPath)
-	if isZeroLoc(loc) {
+	if internal.IsZeroLocation(loc) {
 		loc = file.SourceLocations().ByPath(path)
-		if isZeroLoc(loc) {
+		if internal.IsZeroLocation(loc) {
 			return ast.UnknownSpan(file.Path())
 		}
 	}

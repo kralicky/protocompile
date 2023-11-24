@@ -15,19 +15,34 @@
 package parser
 
 import (
+	"errors"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	"github.com/bufbuild/protocompile/internal"
+	"github.com/bufbuild/protocompile/internal/protoc"
 	"github.com/bufbuild/protocompile/reporter"
 )
+
+func TestMain(m *testing.M) {
+	// Enable just for tests.
+	internal.AllowEditions = true
+	status := m.Run()
+	os.Exit(status)
+}
 
 func TestBasicValidation(t *testing.T) {
 	t.Parallel()
 	testCases := map[string]struct {
-		contents    string
-		expectedErr string
+		contents string
+		// Expected error message - leave empty if input is expected to succeed
+		expectedErr            string
+		expectedDiffWithProtoc bool
 	}{
 		"success_large_negative_integer": {
 			contents: `message Foo { optional double bar = 1 [default = -18446744073709551615]; }`,
@@ -49,6 +64,9 @@ func TestBasicValidation(t *testing.T) {
 			contents:    `syntax = "proto3"; message Foo { option message_set_wire_format = true; extensions 1 to 100; }`,
 			expectedErr: "test.proto:1:34: messages with message-set wire format are not allowed with proto3 syntax",
 		},
+		"success_message_set_wire_format_in_editions": {
+			contents: `edition = "2023"; message Foo { option message_set_wire_format = true; extensions 1 to 100; }`,
+		},
 		"failure_message_set_wire_format_non_ext_field": {
 			contents:    `message Foo { optional double bar = 536870912; option message_set_wire_format = true; }`,
 			expectedErr: "test.proto:1:15: messages with message-set wire format cannot contain non-extension fields",
@@ -56,6 +74,10 @@ func TestBasicValidation(t *testing.T) {
 		"failure_message_set_wire_format_no_extension_range": {
 			contents:    `message Foo { option message_set_wire_format = true; }`,
 			expectedErr: "test.proto:1:15: messages with message-set wire format must contain at least one extension range",
+			// protoc allows this, ostensibly for empty messages?
+			// We disallow it since the Go runtime does not support descriptors that look this way:
+			//   https://github.com/protocolbuffers/protobuf-go/blob/6d0a5dbd95005b70501b4cc2c5124dab07a1f4a0/reflect/protodesc/desc_validate.go#L110-L112
+			expectedDiffWithProtoc: true,
 		},
 		"success_oneof_w_group": {
 			contents: `message Foo { oneof bar { group Baz = 1 [deprecated=true] { optional int32 abc = 1; } } }`,
@@ -126,11 +148,11 @@ func TestBasicValidation(t *testing.T) {
 		},
 		"failure_explicit_map_entry_option": {
 			contents:    `message Foo { option map_entry = true; }`,
-			expectedErr: `test.proto:1:34: message Foo: map_entry option should not be set explicitly; use map type instead`,
+			expectedErr: `test.proto:1:22: message Foo: map_entry option should not be set explicitly; use map type instead`,
 		},
-		"success_explicit_map_entry_option": {
-			// okay if explicit setting is false
-			contents: `message Foo { option map_entry = false; }`,
+		"failure_explicit_map_entry_option_false": {
+			contents:    `message Foo { option map_entry = false; }`,
+			expectedErr: `test.proto:1:22: message Foo: map_entry option should not be set explicitly; use map type instead`,
 		},
 		"failure_proto2_requires_label": {
 			contents:    `syntax = "proto2"; message Foo { string s = 1; }`,
@@ -148,23 +170,45 @@ func TestBasicValidation(t *testing.T) {
 		},
 		"failure_proto3_required": {
 			contents:    `syntax = "proto3"; message Foo { required string s = 1; }`,
-			expectedErr: `test.proto:1:34: field Foo.s: label 'required' is not allowed in proto3`,
+			expectedErr: `test.proto:1:34: field Foo.s: label 'required' is not allowed in proto3 or editions`,
+		},
+		"failure_editions_required": {
+			contents:    `edition = "2023"; message Foo { required string s = 1; }`,
+			expectedErr: `test.proto:1:33: field Foo.s: label 'required' is not allowed in proto3 or editions`,
 		},
 		"failure_extension_required": {
 			contents:    `message Foo { extensions 1 to max; } extend Foo { required string sss = 100; }`,
-			expectedErr: `test.proto:1:51: field sss: extension fields cannot be 'required'`,
+			expectedErr: `test.proto:1:51: extension sss: extension fields cannot be 'required'`,
 		},
 		"failure_proto3_group": {
 			contents:    `syntax = "proto3"; message Foo { optional group Grp = 1 { } }`,
-			expectedErr: `test.proto:1:43: field Foo.grp: groups are not allowed in proto3`,
+			expectedErr: `test.proto:1:43: field Foo.grp: groups are not allowed in proto3 or editions`,
 		},
 		"failure_proto3_extension_range": {
 			contents:    `syntax = "proto3"; message Foo { extensions 1 to max; }`,
 			expectedErr: `test.proto:1:45: message Foo: extension ranges are not allowed in proto3`,
 		},
-		"failure_proto3_detault": {
+		"failure_proto3_default": {
 			contents:    `syntax = "proto3"; message Foo { string s = 1 [default = "abcdef"]; }`,
 			expectedErr: `test.proto:1:48: field Foo.s: default values are not allowed in proto3`,
+		},
+		"failure_editions_group": {
+			contents:    `edition = "2023"; message Foo { optional group Grp = 1 { } }`,
+			expectedErr: `test.proto:1:42: field Foo.grp: groups are not allowed in proto3 or editions`,
+		},
+		"success_editions_extension_range": {
+			contents: `edition = "2023"; message Foo { extensions 1 to max; }`,
+		},
+		"success_editions_default": {
+			contents: `edition = "2023"; message Foo { string s = 1 [default = "abcdef"]; }`,
+		},
+		"failure_editions_optional": {
+			contents:    `edition = "2023"; message Foo { optional string name = 1; }`,
+			expectedErr: `test.proto:1:33: field Foo.name: label 'optional' is not allowed in editions; use option features.field_presence instead`,
+		},
+		"failure_editions_optional_ext": {
+			contents:    `edition = "2023"; import "google/protobuf/descriptor.proto"; extend google.protobuf.MessageOptions { optional string s = 50000; }`,
+			expectedErr: `test.proto:1:102: extension s: label 'optional' is not allowed in editions; use option features.field_presence instead`,
 		},
 		"failure_enum_value_number_duplicate": {
 			contents:    `enum Foo { V1 = 1; V2 = 1; }`,
@@ -174,7 +218,9 @@ func TestBasicValidation(t *testing.T) {
 			contents: `enum Foo { option allow_alias = true; V1 = 1; V2 = 1; }`,
 		},
 		"success_enum_allow_alias_false": {
-			contents: `enum Foo { option allow_alias = false; V1 = 1; V2 = 2; }`,
+			contents:               `enum Foo { option allow_alias = false; V1 = 1; V2 = 2; }`,
+			expectedDiffWithProtoc: true, // strange that protoc disallows this;
+			// TODO: update protocompile to reject explicit allow_alias=false to match protoc
 		},
 		"failure_enum_allow_alias": {
 			contents:    `enum Foo { option allow_alias = true; V1 = 1; V2 = 2; }`,
@@ -259,11 +305,11 @@ func TestBasicValidation(t *testing.T) {
 		},
 		"failure_message_reserved_name_duplicate": {
 			contents:    `message Foo { reserved "foo", "foo"; }`,
-			expectedErr: `test.proto:1:31: name "foo" is reserved multiple times`,
+			expectedErr: `test.proto:1:31: name "foo" is already reserved at test.proto:1:24`,
 		},
 		"failure_message_reserved_name_duplicate2": {
 			contents:    `message Foo { reserved "foo"; reserved "foo"; }`,
-			expectedErr: `test.proto:1:40: name "foo" is reserved multiple times`,
+			expectedErr: `test.proto:1:40: name "foo" is already reserved at test.proto:1:24`,
 		},
 		"failure_message_field_w_reserved_name": {
 			contents:    `message Foo { reserved "foo"; optional string foo = 1; }`,
@@ -291,7 +337,7 @@ func TestBasicValidation(t *testing.T) {
 		},
 		"failure_message_decl_start_w_reserved": {
 			contents:    `enum Foo { reserved = 1; }`,
-			expectedErr: `test.proto:1:21: syntax error: unexpected '=', expecting string literal or int literal or '-'`,
+			expectedErr: `test.proto:1:21: syntax error: unexpected '='`,
 		},
 		"failure_message_decl_start_w_message": {
 			contents:    `syntax = "proto3"; enum message { unset = 0; } message Foo { message bar = 1; }`,
@@ -303,7 +349,7 @@ func TestBasicValidation(t *testing.T) {
 		},
 		"failure_message_decl_start_w_reserved2": {
 			contents:    `syntax = "proto3"; enum reserved { unset = 0; } message Foo { reserved bar = 1; }`,
-			expectedErr: `test.proto:1:72: syntax error: unexpected identifier, expecting string literal or int literal`,
+			expectedErr: `test.proto:1:76: syntax error: unexpected '=', expecting ';' or ','`,
 		},
 		"failure_message_decl_start_w_extend": {
 			contents:    `syntax = "proto3"; enum extend { unset = 0; } message Foo { extend bar = 1; }`,
@@ -377,16 +423,28 @@ func TestBasicValidation(t *testing.T) {
 			expectedErr: `test.proto:1:1: syntax error: unexpected float literal`,
 		},
 		"success_colon_before_list_literal": {
-			contents: `option (opt) = {m: [{key: "a",value: {}}]};`,
+			contents: `import "google/protobuf/descriptor.proto";
+					   extend google.protobuf.FileOptions { optional Opt opt = 10101; }
+					   message Opt { map<string,Opt> m = 1; }
+					   option (opt) = {m: [{key: "a",value: {}}]};`,
 		},
 		"success_no_colon_before_list_literal": {
-			contents: `option (opt) = {m [{key: "a",value: {}}]};`,
+			contents: `import "google/protobuf/descriptor.proto";
+					   extend google.protobuf.FileOptions { optional Opt opt = 10101; }
+					   message Opt { map<string,Opt> m = 1; }
+					   option (opt) = {m [{key: "a",value: {}}]};`,
 		},
 		"success_colon_before_list_literal2": {
-			contents: `option (opt) = {m: []};`,
+			contents: `import "google/protobuf/descriptor.proto";
+					   extend google.protobuf.FileOptions { optional Opt opt = 10101; }
+					   message Opt { map<string,Opt> m = 1; }
+					   option (opt) = {m: []};`,
 		},
 		"success_no_colon_before_list_literal2": {
-			contents: `option (opt) = {m []};`,
+			contents: `import "google/protobuf/descriptor.proto";
+					   extend google.protobuf.FileOptions { optional Opt opt = 10101; }
+					   message Opt { map<string,Opt> m = 1; }
+					   option (opt) = {m []};`,
 		},
 		"failure_duplicate_import": {
 			contents:    `syntax = "proto3"; import "google/protobuf/descriptor.proto"; import "google/protobuf/descriptor.proto";`,
@@ -589,34 +647,51 @@ func TestBasicValidation(t *testing.T) {
 					   message Foo {
 					     reserved "foo", "b_a_r9", " blah ";
 					   }`,
-			expectedErr: `test.proto:3:72: message Foo: reserved name " blah " is not a valid identifier`,
+			expectedErr:            `test.proto:3:72: message Foo: reserved name " blah " is not a valid identifier`,
+			expectedDiffWithProtoc: true, // protoc only warns for invalid reserved names: https://github.com/protocolbuffers/protobuf/issues/6335
 		},
 		"failure_message_invalid_reserved_name2": {
 			contents: `syntax = "proto3";
 					   message Foo {
 					     reserved "foo", "_bar123", "123";
 					   }`,
-			expectedErr: `test.proto:3:73: message Foo: reserved name "123" is not a valid identifier`,
+			expectedErr:            `test.proto:3:73: message Foo: reserved name "123" is not a valid identifier`,
+			expectedDiffWithProtoc: true, // protoc only warns for invalid reserved names: https://github.com/protocolbuffers/protobuf/issues/6335
 		},
 		"failure_message_invalid_reserved_name3": {
 			contents: `syntax = "proto3";
 					   message Foo {
 					     reserved "foo" "_bar123" "@y!!";
 					   }`,
-			expectedErr: `test.proto:3:55: message Foo: reserved name "foo_bar123@y!!" is not a valid identifier`,
+			expectedErr:            `test.proto:3:55: message Foo: reserved name "foo_bar123@y!!" is not a valid identifier`,
+			expectedDiffWithProtoc: true, // protoc only warns for invalid reserved names: https://github.com/protocolbuffers/protobuf/issues/6335
 		},
 		"failure_message_invalid_reserved_name4": {
 			contents: `syntax = "proto3";
 					   message Foo {
 					     reserved "";
 					   }`,
-			expectedErr: `test.proto:3:55: message Foo: reserved name "" is not a valid identifier`,
+			expectedErr:            `test.proto:3:55: message Foo: reserved name "" is not a valid identifier`,
+			expectedDiffWithProtoc: true, // protoc only warns for invalid reserved names: https://github.com/protocolbuffers/protobuf/issues/6335
 		},
-		"success_message_reserved_name": {
+		"success_message_reserved_name_proto2": {
+			contents: `syntax = "proto2";
+					   message Foo {
+					     reserved "foo", "_bar123", "A_B_C_1_2_3";
+					   }`,
+		},
+		"success_message_reserved_name_proto3": {
 			contents: `syntax = "proto3";
 					   message Foo {
 					     reserved "foo", "_bar123", "A_B_C_1_2_3";
 					   }`,
+		},
+		"failure_message_reserved_name_editions": {
+			contents: `edition = "2023";
+					   message Foo {
+					     reserved "foo", "_bar123", "A_B_C_1_2_3";
+					   }`,
+			expectedErr: `test.proto:3:55: must use identifiers, not string literals, to reserved names with editions`,
 		},
 		"failure_enum_invalid_reserved_name": {
 			contents: `syntax = "proto3";
@@ -624,7 +699,8 @@ func TestBasicValidation(t *testing.T) {
 					     BAR = 0;
 					     reserved "foo", "b_a_r9", " blah ";
 					   }`,
-			expectedErr: `test.proto:4:72: enum Foo: reserved name " blah " is not a valid identifier`,
+			expectedErr:            `test.proto:4:72: enum Foo: reserved name " blah " is not a valid identifier`,
+			expectedDiffWithProtoc: true, // protoc only warns for invalid reserved names: https://github.com/protocolbuffers/protobuf/issues/6335
 		},
 		"failure_enum_invalid_reserved_name2": {
 			contents: `syntax = "proto3";
@@ -632,7 +708,8 @@ func TestBasicValidation(t *testing.T) {
 					     BAR = 0;
 					     reserved "foo", "_bar123", "123";
 					   }`,
-			expectedErr: `test.proto:4:73: enum Foo: reserved name "123" is not a valid identifier`,
+			expectedErr:            `test.proto:4:73: enum Foo: reserved name "123" is not a valid identifier`,
+			expectedDiffWithProtoc: true, // protoc only warns for invalid reserved names: https://github.com/protocolbuffers/protobuf/issues/6335
 		},
 		"failure_enum_invalid_reserved_name3": {
 			contents: `syntax = "proto3";
@@ -640,7 +717,8 @@ func TestBasicValidation(t *testing.T) {
 					     BAR = 0;
 					     reserved "foo" "_bar123" "@y!!";
 					   }`,
-			expectedErr: `test.proto:4:55: enum Foo: reserved name "foo_bar123@y!!" is not a valid identifier`,
+			expectedErr:            `test.proto:4:55: enum Foo: reserved name "foo_bar123@y!!" is not a valid identifier`,
+			expectedDiffWithProtoc: true, // protoc only warns for invalid reserved names: https://github.com/protocolbuffers/protobuf/issues/6335
 		},
 		"failure_enum_invalid_reserved_name4": {
 			contents: `syntax = "proto3";
@@ -648,14 +726,156 @@ func TestBasicValidation(t *testing.T) {
 					     BAR = 0;
 					     reserved "";
 					   }`,
-			expectedErr: `test.proto:4:55: enum Foo: reserved name "" is not a valid identifier`,
+			expectedErr:            `test.proto:4:55: enum Foo: reserved name "" is not a valid identifier`,
+			expectedDiffWithProtoc: true, // protoc only warns for invalid reserved names: https://github.com/protocolbuffers/protobuf/issues/6335
 		},
-		"success_enum_reserved_name": {
+		"success_enum_reserved_name_proto2": {
+			contents: `syntax = "proto2";
+					   enum Foo {
+					     BAR = 0;
+					     reserved "foo", "_bar123", "A_B_C_1_2_3";
+					   }`,
+		},
+		"success_enum_reserved_name_proto3": {
 			contents: `syntax = "proto3";
 					   enum Foo {
 					     BAR = 0;
 					     reserved "foo", "_bar123", "A_B_C_1_2_3";
 					   }`,
+		},
+		"failure_enum_reserved_name_editions": {
+			contents: `edition = "2023";
+					   enum Foo {
+					     BAR = 0;
+					     reserved "foo", "_bar123", "A_B_C_1_2_3";
+					   }`,
+			expectedErr: `test.proto:4:55: must use identifiers, not string literals, to reserved names with editions`,
+		},
+		"failure_message_reserved_ident_proto2": {
+			contents: `syntax = "proto2";
+					   message Foo {
+					     reserved foo, _bar123, A_B_C_1_2_3;
+					   }`,
+			expectedErr: `test.proto:3:55: must use string literals, not identifiers, to reserved names with proto2 and proto3`,
+		},
+		"failure_message_reserved_ident_proto3": {
+			contents: `syntax = "proto3";
+					   message Foo {
+					     reserved foo, _bar123, A_B_C_1_2_3;
+					   }`,
+			expectedErr: `test.proto:3:55: must use string literals, not identifiers, to reserved names with proto2 and proto3`,
+		},
+		"success_message_reserved_ident_editions": {
+			contents: `edition = "2023";
+					   message Foo {
+					     reserved foo, _bar123, A_B_C_1_2_3;
+					   }`,
+		},
+		"failure_enum_reserved_ident_proto2": {
+			contents: `syntax = "proto2";
+					   enum Foo {
+					     BAR = 0;
+					     reserved foo, _bar123, A_B_C_1_2_3;
+					   }`,
+			expectedErr: `test.proto:4:55: must use string literals, not identifiers, to reserved names with proto2 and proto3`,
+		},
+		"failure_enum_reserved_ident_proto3": {
+			contents: `syntax = "proto3";
+					   enum Foo {
+					     BAR = 0;
+					     reserved foo, _bar123, A_B_C_1_2_3;
+					   }`,
+			expectedErr: `test.proto:4:55: must use string literals, not identifiers, to reserved names with proto2 and proto3`,
+		},
+		"success_enum_reserved_ident_editions": {
+			contents: `edition = "2023";
+					   enum Foo {
+					     BAR = 0;
+					     reserved foo, _bar123, A_B_C_1_2_3;
+					   }`,
+		},
+		"failure_use_of_packed_with_editions": {
+			contents: `edition = "2023";
+					   message Foo {
+					     repeated bool foo = 1 [packed=false];
+					   }`,
+			expectedErr: `test.proto:3:69: field Foo.foo: packed option is not allowed in editions; use option features.repeated_field_encoding instead`,
+		},
+		"failure_use_of_features_without_editions_file": {
+			contents: `syntax = "proto3";
+					   option features.utf8_validation = VERIFY;
+					   message Foo {
+					     string foo = 1;
+					   }`,
+			expectedErr: `test.proto:2:51: file options: option 'features' may only be used with editions but file uses proto3 syntax`,
+		},
+		"failure_use_of_features_without_editions_message": {
+			contents: `syntax = "proto3";
+					   message Foo {
+					     option features = {};
+					     string foo = 1;
+					   }`,
+			expectedErr: `test.proto:3:53: message Foo: option 'features' may only be used with editions but file uses proto3 syntax`,
+		},
+		"failure_use_of_features_without_editions_field": {
+			contents: `syntax = "proto3";
+					   message Foo {
+					     string foo = 1 [features.field_presence = LEGACY_REQUIRED];
+					   }`,
+			expectedErr: `test.proto:3:62: field Foo.foo: option 'features' may only be used with editions but file uses proto3 syntax`,
+		},
+		"failure_use_of_features_without_editions_oneof": {
+			contents: `syntax = "proto3";
+					   message Foo {
+					     oneof x {
+					       option features = {};
+					       string foo = 1;
+					     }
+					   }`,
+			expectedErr: `test.proto:4:55: oneof Foo.x: option 'features' may only be used with editions but file uses proto3 syntax`,
+		},
+		"failure_use_of_features_without_editions_ext_range": {
+			contents: `syntax = "proto2";
+					   message Foo {
+					     extensions 1 to 100 [features={}];
+					   }`,
+			expectedErr: `test.proto:3:67: message Foo: option 'features' may only be used with editions but file uses proto2 syntax`,
+		},
+		"failure_use_of_features_without_editions_enum": {
+			contents: `syntax = "proto2";
+					   enum Foo {
+					     option features.enum_type = CLOSED;
+					     VALUE = 0;
+					   }`,
+			expectedErr: `test.proto:3:53: enum Foo: option 'features' may only be used with editions but file uses proto2 syntax`,
+		},
+		"failure_use_of_features_without_editions_enum_val": {
+			contents: `syntax = "proto2";
+					   enum Foo {
+					     VALUE = 0 [features={}];
+					   }`,
+			expectedErr: `test.proto:3:57: enum value VALUE: option 'features' may only be used with editions but file uses proto2 syntax`,
+		},
+		"failure_use_of_features_without_editions_service": {
+			contents: `syntax = "proto3";
+					   message Foo {}
+					   service FooService {
+					     option features = {};
+					     rpc Do(Foo) returns (foo);
+					   }
+					   `,
+			expectedErr: `test.proto:4:53: service FooService: option 'features' may only be used with editions but file uses proto3 syntax`,
+		},
+		"failure_use_of_features_without_editions_method": {
+			contents: `syntax = "proto3";
+					   message Foo {}
+					   service FooService {
+					     rpc Do(Foo) returns (foo) {
+					       option features = {};
+					     }
+					   }
+					   `,
+			expectedErr: `test.proto:5:55: method FooService.Do: option 'features' may only be used with editions but file uses proto3 syntax`,
 		},
 	}
 
@@ -676,10 +896,30 @@ func TestBasicValidation(t *testing.T) {
 
 			err := errs.Error()
 			if tc.expectedErr == "" {
+				//nolint:testifylint // we want to continue even if err!=nil
 				assert.NoError(t, err, "should succeed")
-			} else if assert.NotNil(t, err, "should fail") {
-				assert.Equal(t, tc.expectedErr, err.Error(), "bad error message")
+			} else {
+				//nolint:testifylint // we want to continue even if assertion fails
+				assert.EqualError(t, err, tc.expectedErr, "bad error message")
 			}
+
+			expectSuccess := tc.expectedErr == ""
+			if tc.expectedDiffWithProtoc {
+				expectSuccess = !expectSuccess
+			}
+			testByProtoc(t, tc.contents, expectSuccess)
 		})
 	}
+}
+
+func testByProtoc(t *testing.T, fileContents string, expectSuccess bool) {
+	t.Helper()
+	stdout, err := protoc.Compile(map[string]string{"test.proto": fileContents}, nil)
+	if execErr := new(exec.ExitError); errors.As(err, &execErr) {
+		t.Logf("protoc stdout:\n%s\nprotoc stderr:\n%s\n", stdout, execErr.Stderr)
+		require.False(t, expectSuccess)
+		return
+	}
+	require.NoError(t, err)
+	require.True(t, expectSuccess)
 }
