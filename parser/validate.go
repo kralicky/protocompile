@@ -153,16 +153,16 @@ func validateMessage(res *result, isProto3 bool, name protoreflect.FullName, md 
 	for i < len(rsvd) && j < len(exts) {
 		if rsvd[i].start >= exts[j].start && rsvd[i].start < exts[j].end ||
 			exts[j].start >= rsvd[i].start && exts[j].start < rsvd[i].end {
-			var pos ast.SourcePosInfo
+			var span ast.SourceSpan
 			if rsvd[i].start >= exts[j].start && rsvd[i].start < exts[j].end {
 				rangeNodeInfo := res.file.NodeInfo(rsvd[i].node)
-				pos = rangeNodeInfo
+				span = rangeNodeInfo
 			} else {
 				rangeNodeInfo := res.file.NodeInfo(exts[j].node)
-				pos = rangeNodeInfo
+				span = rangeNodeInfo
 			}
 			// ranges overlap
-			if err := handler.HandleErrorf(pos, "%s: extension range %d to %d overlaps reserved range %d to %d", scope, exts[j].start, exts[j].end-1, rsvd[i].start, rsvd[i].end-1); err != nil {
+			if err := handler.HandleErrorf(span, "%s: extension range %d to %d overlaps reserved range %d to %d", scope, exts[j].start, exts[j].end-1, rsvd[i].start, rsvd[i].end-1); err != nil {
 				return err
 			}
 		}

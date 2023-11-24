@@ -1027,7 +1027,7 @@ func (interp *interpreter) toOptionBytes(mc *internal.MessageContext, results []
 		b, err = res.appendOptionBytes(b)
 		if err != nil {
 			if _, ok := err.(reporter.ErrorWithPos); !ok {
-				pos := ast.UnknownPosInfo(interp.file.AST().Name())
+				pos := ast.UnknownSpan(interp.file.AST().Name())
 				err = reporter.Errorf(pos, "%sfailed to encode options: %w", mc, err)
 			}
 			if err := interp.reporter.HandleError(err); err != nil {

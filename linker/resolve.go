@@ -117,16 +117,16 @@ func (r *result) CheckForUnusedImports(handler *reporter.Handler) {
 			if isPublic {
 				continue
 			}
-			pos := ast.UnknownPosInfo(fd.GetName())
+			span := ast.UnknownSpan(fd.GetName())
 			if file != nil {
 				for _, decl := range file.Decls {
 					imp, ok := decl.(*ast.ImportNode)
 					if ok && imp.Name.AsString() == dep {
-						pos = file.NodeInfo(imp)
+						span = file.NodeInfo(imp)
 					}
 				}
 			}
-			handler.HandleWarningWithPos(pos, errUnusedImport(dep))
+			handler.HandleWarningWithPos(span, errUnusedImport(dep))
 		}
 	}
 }
@@ -599,7 +599,7 @@ func (r *result) resolveOptionValue(handler *reporter.Handler, mc *internal.Mess
 	return nil
 }
 
-func (r *result) resolveExtensionName(whence ast.SourcePosInfo, name string, scopes []scope) (protoreflect.FieldDescriptor, error) {
+func (r *result) resolveExtensionName(whence ast.SourceSpan, name string, scopes []scope) (protoreflect.FieldDescriptor, error) {
 	dsc := r.resolve(whence, name, false, scopes)
 	if dsc == nil {
 		return nil, fmt.Errorf("unknown extension %s", name)
@@ -616,7 +616,7 @@ func (r *result) resolveExtensionName(whence ast.SourcePosInfo, name string, sco
 	}
 }
 
-func (r *result) resolve(whence ast.SourcePosInfo, name string, onlyTypes bool, scopes []scope) (resolved protoreflect.Descriptor) {
+func (r *result) resolve(whence ast.SourceSpan, name string, onlyTypes bool, scopes []scope) (resolved protoreflect.Descriptor) {
 	defer func() {
 		if resolved != nil {
 			r.resolvedReferences[resolved] = append(r.resolvedReferences[resolved], whence)

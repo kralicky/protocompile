@@ -742,7 +742,7 @@ func (l *protoLex) addSourceError(err error) (reporter.ErrorWithPos, bool) {
 	ewp, ok := err.(reporter.ErrorWithPos)
 	if !ok {
 		prev := l.prev()
-		ewp = reporter.Error(ast.NewSourcePosInfo(prev, prev), err)
+		ewp = reporter.Error(ast.NewSourceSpan(prev, prev), err)
 	}
 	handlerErr := l.handler.HandleError(ewp)
 	return ewp, handlerErr == nil
@@ -757,5 +757,5 @@ func (l *protoLex) errWithCurrentPos(err error, offset int) reporter.ErrorWithPo
 		return ewp
 	}
 	pos := l.info.SourcePos(l.input.offset() + offset)
-	return reporter.Error(ast.NewSourcePosInfo(pos, pos), err)
+	return reporter.Error(ast.NewSourceSpan(pos, pos), err)
 }

@@ -402,36 +402,39 @@ type Item int
 // ItemInfo provides details about an item's location in the source file and
 // its contents.
 type ItemInfo interface {
-	SourcePosInfo
+	SourceSpan
 	LeadingWhitespace() string
 	RawText() string
 }
 
-type SourcePosInfo interface {
+type SourceSpan interface {
 	fmt.Stringer
 	Start() SourcePos
 	End() SourcePos
 }
 
-func NewSourcePosInfo(start, end SourcePos) SourcePosInfo {
-	return sourcePosInfo{start, end}
+func NewSourceSpan(start SourcePos, end SourcePos) SourceSpan {
+	return sourceSpan{StartPos: start, EndPos: end}
 }
 
-type sourcePosInfo struct {
-	start, end SourcePos
+type sourceSpan struct {
+	StartPos SourcePos
+	EndPos   SourcePos
 }
 
-func (s sourcePosInfo) Start() SourcePos {
-	return s.start
+func (s sourceSpan) Start() SourcePos {
+	return s.StartPos
 }
 
-func (s sourcePosInfo) End() SourcePos {
-	return s.end
+func (s sourceSpan) End() SourcePos {
+	return s.EndPos
 }
 
-func (s sourcePosInfo) String() string {
-	return fmt.Sprintf("%s:%d:%d-%d", s.start.Filename, s.start.Line, s.start.Col, s.end.Col)
+func (s sourceSpan) String() string {
+	return fmt.Sprintf("%s:%d:%d-%d", s.StartPos.Filename, s.StartPos.Line, s.StartPos.Col, s.EndPos.Col)
 }
+
+var _ SourceSpan = sourceSpan{}
 
 // NodeInfo represents the details for a node or token in the source file's AST.
 // It provides access to information about the node's location in the source

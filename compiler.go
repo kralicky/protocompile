@@ -484,8 +484,8 @@ func (e *executor) resolveAndCompile(ctx context.Context, dep UnresolvedPath, ex
 
 	if whence != nil && sr.ResolvedPath == ResolvedPath(whence.FileDescriptorProto().GetName()) {
 		// doh! file imports itself
-		pos := findImportPos(whence, dep)
-		handleImportCycle(e.h, pos, []ResolvedPath{sr.ResolvedPath}, dep)
+		span := findImportSpan(whence, dep)
+		handleImportCycle(e.h, span, []ResolvedPath{sr.ResolvedPath}, dep)
 		return &result{
 			ready: closedChannel,
 			err:   e.h.Error(),
@@ -686,9 +686,9 @@ func (t *task) asFile(ctx context.Context, pr *SearchResult) (linker.File, error
 			res := t.e.resolveAndCompile(ctx, UnresolvedPath(dep), false, parseRes)
 
 			// check for dependency cycle to prevent deadlock
-			pos := findImportPos(parseRes, UnresolvedPath(dep))
+			span := findImportSpan(parseRes, UnresolvedPath(dep))
 
-			if err := t.e.checkForDependencyCycle(res, []ResolvedPath{pr.ResolvedPath, res.resolvedPath}, pos, checked); err != nil {
+			if err := t.e.checkForDependencyCycle(res, []ResolvedPath{pr.ResolvedPath, res.resolvedPath}, span, checked); err != nil {
 				return nil, err
 			}
 			blocks[i].ResolvedPath = res.resolvedPath
@@ -714,7 +714,7 @@ func (t *task) asFile(ctx context.Context, pr *SearchResult) (linker.File, error
 						// it's usually considered immediately fatal. However, if the reason
 						// we were resolving is due to an import, turn this into an error with
 						// source position that pinpoints the import statement and report it.
-						if err := t.h.HandleErrorWithPos(findImportPos(parseRes, rerr.path), rerr); err != nil {
+						if err := t.h.HandleErrorWithPos(findImportSpan(parseRes, rerr.path), rerr); err != nil {
 							return nil, err
 						}
 						continue
@@ -754,7 +754,7 @@ func (t *task) asFile(ctx context.Context, pr *SearchResult) (linker.File, error
 	return t.link(parseRes, deps, overrideDescriptorProto)
 }
 
-func (e *executor) checkForDependencyCycle(res *result, sequence []ResolvedPath, pos ast.SourcePosInfo, checked map[ResolvedPath]struct{}) error {
+func (e *executor) checkForDependencyCycle(res *result, sequence []ResolvedPath, span ast.SourceSpan, checked map[ResolvedPath]struct{}) error {
 	if _, ok := checked[res.resolvedPath]; ok {
 		// already checked this one
 		return nil
@@ -765,7 +765,7 @@ func (e *executor) checkForDependencyCycle(res *result, sequence []ResolvedPath,
 		// is this a cycle?
 		for _, file := range sequence {
 			if file == dep.ResolvedPath {
-				handleImportCycle(e.h, pos, sequence, dep.ImportedAs)
+				handleImportCycle(e.h, span, sequence, dep.ImportedAs)
 				return e.h.Error()
 			}
 		}
@@ -776,14 +776,14 @@ func (e *executor) checkForDependencyCycle(res *result, sequence []ResolvedPath,
 		if depRes == nil {
 			continue
 		}
-		if err := e.checkForDependencyCycle(depRes, append(sequence, dep.ResolvedPath), pos, checked); err != nil {
+		if err := e.checkForDependencyCycle(depRes, append(sequence, dep.ResolvedPath), span, checked); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func handleImportCycle(h *reporter.Handler, pos ast.SourcePosInfo, importSequence []ResolvedPath, dep UnresolvedPath) {
+func handleImportCycle(h *reporter.Handler, span ast.SourceSpan, importSequence []ResolvedPath, dep UnresolvedPath) {
 	var buf bytes.Buffer
 	buf.WriteString("cycle found in imports: ")
 	for _, imp := range importSequence {
@@ -791,13 +791,13 @@ func handleImportCycle(h *reporter.Handler, pos ast.SourcePosInfo, importSequenc
 	}
 	_, _ = fmt.Fprintf(&buf, "%q", dep)
 	// error is saved and returned in caller
-	_ = h.HandleErrorf(pos, buf.String())
+	_ = h.HandleErrorf(span, buf.String())
 }
 
-func findImportPos(res parser.Result, dep UnresolvedPath) ast.SourcePosInfo {
+func findImportSpan(res parser.Result, dep UnresolvedPath) ast.SourceSpan {
 	root := res.AST()
 	if root == nil {
-		return ast.UnknownPosInfo(res.FileNode().Name())
+		return ast.UnknownSpan(res.FileNode().Name())
 	}
 	for _, decl := range root.Decls {
 		if imp, ok := decl.(*ast.ImportNode); ok {
@@ -807,7 +807,7 @@ func findImportPos(res parser.Result, dep UnresolvedPath) ast.SourcePosInfo {
 		}
 	}
 	// this should never happen...
-	return ast.UnknownPosInfo(res.FileNode().Name())
+	return ast.UnknownSpan(res.FileNode().Name())
 }
 
 func (t *task) link(parseRes parser.Result, deps linker.Files, overrideDescriptorProtoRes linker.File) (linker.Result, error) {

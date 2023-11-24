@@ -20,24 +20,25 @@ func UnknownPos(filename string) SourcePos {
 	return SourcePos{Filename: filename}
 }
 
-func UnknownPosInfo(filename string) SourcePosInfo {
-	return NoSourcePosInfo{filename: filename}
+func UnknownSpan(filename string) SourceSpan {
+	return unknownSpan{filename: filename}
 }
 
-// NoSourcePosInfo returns UnknownPos for both Start and End.
-type NoSourcePosInfo struct {
+// unknownSpan is a placeholder span when only the source file
+// name is known.
+type unknownSpan struct {
 	filename string
 }
 
-func (n NoSourcePosInfo) Start() SourcePos {
+func (n unknownSpan) Start() SourcePos {
 	return UnknownPos(n.filename)
 }
 
-func (n NoSourcePosInfo) End() SourcePos {
+func (n unknownSpan) End() SourcePos {
 	return UnknownPos(n.filename)
 }
 
-func (n NoSourcePosInfo) String() string {
+func (n unknownSpan) String() string {
 	return n.filename
 }
 

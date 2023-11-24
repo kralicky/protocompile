@@ -98,7 +98,7 @@ dependencies_ok:
 				}
 			} else {
 				// no ast, log an error with no source position
-				if err := handler.HandleErrorf(ast.NoSourcePosInfo{}, "could not resolve import %q", imp); err != nil {
+				if err := handler.HandleErrorf(ast.UnknownSpan(parsedAst.Name()), "could not resolve import %q", imp); err != nil {
 					return nil, err
 				}
 			}
@@ -114,7 +114,7 @@ dependencies_ok:
 		usedImports:          map[string]struct{}{},
 		prefix:               prefix,
 		optionQualifiedNames: map[ast.IdentValueNode]string{},
-		resolvedReferences:   map[protoreflect.Descriptor][]ast.SourcePosInfo{},
+		resolvedReferences:   map[protoreflect.Descriptor][]ast.SourceSpan{},
 	}
 
 	// First, we put all symbols into a single pool, which lets us ensure there
@@ -181,7 +181,7 @@ type Result interface {
 
 	FindDescriptorsByPrefix(ctx context.Context, prefix string, filter ...func(protoreflect.Descriptor) bool) ([]protoreflect.Descriptor, error)
 
-	FindReferences(to protoreflect.Descriptor) []ast.SourcePosInfo
+	FindReferences(to protoreflect.Descriptor) []ast.SourceSpan
 
 	FindOptionSourceInfo(*ast.OptionNode) *sourceinfo.OptionSourceInfo
 	FindOptionNameFieldDescriptor(name *descriptorpb.UninterpretedOption_NamePart) protoreflect.FieldDescriptor

@@ -31,56 +31,56 @@ var ErrInvalidSource = errors.New("parse failed: invalid proto source")
 type ErrorWithPos interface {
 	error
 	// GetPosition returns the source position that caused the underlying error.
-	GetPosition() ast.SourcePosInfo
+	GetPosition() ast.SourceSpan
 	// Unwrap returns the underlying error.
 	Unwrap() error
 }
 
 // Error creates a new ErrorWithPos from the given error and source position.
-func Error(pos ast.SourcePosInfo, err error) ErrorWithPos {
-	return errorWithSourcePos{pos: pos, underlying: err}
+func Error(span ast.SourceSpan, err error) ErrorWithPos {
+	return errorWithSpan{span: span, underlying: err}
 }
 
 // Errorf creates a new ErrorWithPos whose underlying error is created using the
 // given message format and arguments (via fmt.Errorf).
-func Errorf(pos ast.SourcePosInfo, format string, args ...interface{}) ErrorWithPos {
-	return errorWithSourcePos{pos: pos, underlying: fmt.Errorf(format, args...)}
+func Errorf(span ast.SourceSpan, format string, args ...interface{}) ErrorWithPos {
+	return errorWithSpan{span: span, underlying: fmt.Errorf(format, args...)}
 }
 
-type errorWithSourcePos struct {
+type errorWithSpan struct {
 	underlying error
-	pos        ast.SourcePosInfo
+	span       ast.SourceSpan
 }
 
-func (e errorWithSourcePos) Error() string {
+func (e errorWithSpan) Error() string {
 	sourcePos := e.GetPosition()
 	return fmt.Sprintf("%s: %v", sourcePos, e.underlying)
 }
 
-func (e errorWithSourcePos) GetPosition() ast.SourcePosInfo {
-	return e.pos
+func (e errorWithSpan) GetPosition() ast.SourceSpan {
+	return e.span
 }
 
-func (e errorWithSourcePos) Unwrap() error {
+func (e errorWithSpan) Unwrap() error {
 	return e.underlying
 }
 
-var _ ErrorWithPos = errorWithSourcePos{}
+var _ ErrorWithPos = errorWithSpan{}
 
 // Custom error types that contain additional information for each error.
 
 type AlreadyDefinedError struct {
 	isPkg              bool
-	PreviousDefinition ast.SourcePosInfo
+	PreviousDefinition ast.SourceSpan
 }
 
-func AlreadyDefined(previousDefinition ast.SourcePosInfo) AlreadyDefinedError {
+func AlreadyDefined(previousDefinition ast.SourceSpan) AlreadyDefinedError {
 	return AlreadyDefinedError{
 		PreviousDefinition: previousDefinition,
 	}
 }
 
-func AlreadyDefinedAsPkg(previousDefinition ast.SourcePosInfo) AlreadyDefinedError {
+func AlreadyDefinedAsPkg(previousDefinition ast.SourceSpan) AlreadyDefinedError {
 	return AlreadyDefinedError{
 		isPkg:              true,
 		PreviousDefinition: previousDefinition,

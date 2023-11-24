@@ -69,7 +69,7 @@ type result struct {
 	// A map of descriptors to all resolved references to them. The reference
 	// locations contain the start and end position of the relevant identifier
 	// referencing the descriptor.
-	resolvedReferences map[protoreflect.Descriptor][]ast.SourcePosInfo
+	resolvedReferences map[protoreflect.Descriptor][]ast.SourceSpan
 
 	imports       fileImports
 	messages      msgDescriptors
@@ -216,7 +216,7 @@ func (r *result) FindDescriptorsByPrefix(ctx context.Context, prefix string, fil
 	return
 }
 
-func (r *result) FindReferences(to protoreflect.Descriptor) (results []ast.SourcePosInfo) {
+func (r *result) FindReferences(to protoreflect.Descriptor) (results []ast.SourceSpan) {
 	if r.resolvedReferences == nil {
 		return nil
 	}
