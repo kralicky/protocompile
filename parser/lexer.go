@@ -37,6 +37,16 @@ type runeReader struct {
 	// Enable this check to make input required to be valid UTF-8.
 	// For now, since protoc allows invalid UTF-8, default to false.
 	utf8Strict bool
+
+	savedPos int
+}
+
+func (rr *runeReader) save() {
+	rr.savedPos = rr.pos
+}
+
+func (rr *runeReader) restore() {
+	rr.pos = rr.savedPos
 }
 
 func (rr *runeReader) readRune() (r rune, size int, err error) {
@@ -194,9 +204,47 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 			return _ERROR
 		}
 
-		if strings.ContainsRune("\n\r\t\f\v ", c) {
+		if strings.ContainsRune("\r\t\f\v ", c) {
 			// skip whitespace
-			l.maybeNewLine(c)
+			continue
+		}
+		if c == '\n' {
+			if l.prevSym != nil {
+				insertSemicolon := false
+				switch prev := l.prevSym.(type) {
+				case *ast.KeywordNode:
+					insertSemicolon = false
+				case *ast.RuneNode:
+					insertSemicolon = prev.Rune == ']'
+				case *ast.StringLiteralNode:
+					// handle compound string literals
+					insertSemicolon = !l.matchNextRune('"', '\'')
+				case *ast.UintLiteralNode:
+					// handle the case where compact options are on the next line following
+					// an integer literal
+					insertSemicolon = !l.matchNextRune('[')
+				case *ast.IdentNode:
+					// only if the ident is not followed immediately by a dot, equals, or
+					// left bracket
+					if _, ok := keywords[prev.Val]; ok {
+						// keywords are parsed as idents here
+						insertSemicolon = false
+					} else {
+						insertSemicolon = !l.matchNextRune('.', '=', '{')
+					}
+				case *ast.FloatLiteralNode, *ast.SpecialFloatLiteralNode:
+					// these could only be values in a field literal, which don't need
+					// semicolons anyway
+					insertSemicolon = false
+				}
+				if insertSemicolon {
+					// insert semicolon
+					l.input.unreadRune(1)
+					l.setRune(lval, ';')
+					return ';'
+				}
+			}
+			l.info.AddLine(l.input.offset())
 			continue
 		}
 
@@ -746,6 +794,72 @@ func (l *protoLex) skipToEndOfBlockComment(lval *protoSymType) (ok, hasErr bool)
 				return true, false
 			}
 			l.input.unreadRune(sz)
+		}
+	}
+}
+
+func (l *protoLex) matchNextRune(targets ...rune) bool {
+	var found bool
+	l.input.save()
+LOOKAHEAD:
+	for {
+		cn, _, err := l.input.readRune()
+		if err != nil {
+			break
+		}
+		switch cn {
+		case '/':
+			// hit a comment; skip to the end of it without lexing
+			cn, _, err = l.input.readRune()
+			if err != nil {
+				break
+			}
+			if cn == '/' {
+				// line comment
+				readToEndOfLineComment(l.input)
+			} else if cn == '*' {
+				// block comment
+				readToEndOfBlockComment(l.input)
+			}
+		case '\n', '\r', '\t', '\f', '\v', ' ':
+			// skip whitespace
+		default:
+			for _, target := range targets {
+				if cn == target {
+					found = true
+					break
+				}
+			}
+			break LOOKAHEAD
+		}
+	}
+	l.input.restore()
+	return found
+}
+
+func readToEndOfLineComment(input *runeReader) {
+	for {
+		c, sz, _ := input.readRune()
+		switch c {
+		case '\n':
+			// don't include newline in the comment
+			input.unreadRune(sz)
+			return
+		case 0:
+			return
+		}
+	}
+}
+
+func readToEndOfBlockComment(input *runeReader) {
+	for {
+		c, _, _ := input.readRune()
+		if c == '*' {
+			c, sz, _ := input.readRune()
+			if c == '/' {
+				return
+			}
+			input.unreadRune(sz)
 		}
 	}
 }

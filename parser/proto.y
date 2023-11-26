@@ -63,6 +63,7 @@ import (
 	v            ast.ValueNode
 	il           ast.IntValueNode
 	str          []*ast.StringLiteralNode
+	sv           ast.StringValueNode
 	s            *ast.StringLiteralNode
 	i            *ast.UintLiteralNode
 	f            *ast.FloatLiteralNode
@@ -115,7 +116,9 @@ import (
 %type <extend>       extensionDecl
 %type <extElement>   extensionElement
 %type <extElements>  extensionElements extensionBody
-%type <str>          stringLit
+%type <sv>           stringLit
+%type <s>            singleStringLit
+%type <str>          compoundStringLit
 %type <svc>          serviceDecl
 %type <svcElement>   serviceElement
 %type <svcElements>  serviceElements serviceBody
@@ -216,21 +219,21 @@ fileElement : importDecl {
 	}
 
 syntaxDecl : _SYNTAX '=' stringLit ';' {
-		$$ = ast.NewSyntaxNode($1.ToKeyword(), $2, toStringValueNode($3), $4)
+		$$ = ast.NewSyntaxNode($1.ToKeyword(), $2, $3, $4)
 	}
 
 editionDecl : _EDITION '=' stringLit ';' {
-		$$ = ast.NewEditionNode($1.ToKeyword(), $2, toStringValueNode($3), $4)
+		$$ = ast.NewEditionNode($1.ToKeyword(), $2, $3, $4)
 	}
 
 importDecl : _IMPORT stringLit ';' {
-		$$ = ast.NewImportNode($1.ToKeyword(), nil, nil, toStringValueNode($2), $3)
+		$$ = ast.NewImportNode($1.ToKeyword(), nil, nil, $2, $3)
 	}
 	| _IMPORT _WEAK stringLit ';' {
-		$$ = ast.NewImportNode($1.ToKeyword(), nil, $2.ToKeyword(), toStringValueNode($3), $4)
+		$$ = ast.NewImportNode($1.ToKeyword(), nil, $2.ToKeyword(), $3, $4)
 	}
 	| _IMPORT _PUBLIC stringLit ';' {
-		$$ = ast.NewImportNode($1.ToKeyword(), $2.ToKeyword(), nil, toStringValueNode($3), $4)
+		$$ = ast.NewImportNode($1.ToKeyword(), $2.ToKeyword(), nil, $3, $4)
 	}
 
 packageDecl : _PACKAGE qualifiedIdentifier ';' {
@@ -326,7 +329,7 @@ optionValue : scalarValue
 	| messageLiteralWithBraces
 
 scalarValue : stringLit {
-		$$ = toStringValueNode($1)
+		$$ = $1
 	}
 	| numLit
 	| identifier {
@@ -365,10 +368,23 @@ numLit : _FLOAT_LIT {
 		}
 	}
 
-stringLit : _STRING_LIT {
-		$$ = []*ast.StringLiteralNode{$1}
+stringLit
+  : singleStringLit {
+		$$ = $1
 	}
-	| stringLit _STRING_LIT {
+	| compoundStringLit {
+		$$ = ast.NewCompoundLiteralStringNode($1...)
+	}
+
+singleStringLit : _STRING_LIT {
+		$$ = $1
+	}
+
+compoundStringLit
+	: _STRING_LIT _STRING_LIT {
+		$$ = []*ast.StringLiteralNode{$1, $2}
+	}
+	| compoundStringLit _STRING_LIT {
 		$$ = append($1, $2)
 	}
 
@@ -478,7 +494,8 @@ messageLiteral : messageLiteralWithBraces
 		$$ = ast.NewMessageLiteralNode($1, nil, nil, $2)
 	}
 
-listLiteral : '[' listElements optionalTrailingComma ']' {
+listLiteral
+	: '[' listElements optionalTrailingComma ']' {
 		if $2 == nil {
 			$$ = ast.NewArrayLiteralNode($1, nil, nil, $4)
 		} else {
@@ -486,6 +503,16 @@ listLiteral : '[' listElements optionalTrailingComma ']' {
 				$2.commas = append($2.commas, $3)
 			}
 			$$ = ast.NewArrayLiteralNode($1, $2.vals, $2.commas, $4)
+		}
+	}
+	| '[' listElements optionalTrailingComma ';' ']' {
+		if $2 == nil {
+			$$ = ast.NewArrayLiteralNode($1, nil, nil, $5)
+		} else {
+			if $3 != nil {
+				$2.commas = append($2.commas, $3)
+			}
+			$$ = ast.NewArrayLiteralNode($1, $2.vals, $2.commas, $5)
 		}
 	}
 	| '[' ']' {
@@ -507,7 +534,8 @@ listElements : listElement {
 listElement : scalarValue
 	| messageLiteral
 
-listOfMessagesLiteral : '[' messageLiterals optionalTrailingComma ']' {
+listOfMessagesLiteral
+	: '[' messageLiterals optionalTrailingComma ']' {
 		if $2 == nil {
 			$$ = ast.NewArrayLiteralNode($1, nil, nil, $4)
 		} else {
@@ -515,6 +543,16 @@ listOfMessagesLiteral : '[' messageLiterals optionalTrailingComma ']' {
 				$2.commas = append($2.commas, $3)
 			}
 			$$ = ast.NewArrayLiteralNode($1, $2.vals, $2.commas, $4)
+		}
+	}
+	| '[' messageLiterals optionalTrailingComma ';' ']' {
+		if $2 == nil {
+			$$ = ast.NewArrayLiteralNode($1, nil, nil, $5)
+		} else {
+			if $3 != nil {
+				$2.commas = append($2.commas, $3)
+			}
+			$$ = ast.NewArrayLiteralNode($1, $2.vals, $2.commas, $5)
 		}
 	}
 	| '[' ']' {
@@ -579,20 +617,31 @@ fieldCardinality : _REQUIRED
 	| _OPTIONAL
 	| _REPEATED
 
-compactOptions: '[' compactOptionDecls optionalTrailingComma ']' {
+compactOptions
+	: '[' compactOptionDecls optionalTrailingComma ']' {
 		if $3 != nil {
 			$2.commas = append($2.commas, $3)
 		}
 		$$ = ast.NewCompactOptionsNode($1, $2.options, $2.commas, $4)
 	}
+	| '[' compactOptionDecls optionalTrailingComma ';' ']' {
+		if $3 != nil {
+			$2.commas = append($2.commas, $3)
+		}
+		$$ = ast.NewCompactOptionsNode($1, $2.options, $2.commas, $5)
+	}
 
-compactOptionDecls : compactOption {
+compactOptionDecls :
+	compactOption {
 		$$ = &compactOptionSlices{options: []*ast.OptionNode{$1}}
 	}
 	| compactOptionDecls ',' compactOption {
 		$1.options = append($1.options, $3)
 		$1.commas = append($1.commas, $2)
 		$$ = $1
+	}
+	| {
+		$$ = &compactOptionSlices{options: []*ast.OptionNode{}}
 	}
 
 compactOption: optionName '=' optionValue {
@@ -770,10 +819,10 @@ reservedNames : _RESERVED fieldNameStrings optionalTrailingComma ';' {
 	}
 
 fieldNameStrings : stringLit {
-		$$ = &nameSlices{names: []ast.StringValueNode{toStringValueNode($1)}}
+		$$ = &nameSlices{names: []ast.StringValueNode{$1}}
 	}
 	| fieldNameStrings ',' stringLit {
-		$1.names = append($1.names, toStringValueNode($3))
+		$1.names = append($1.names, $3)
 		$1.commas = append($1.commas, $2)
 		$$ = $1
 	}
@@ -1351,10 +1400,10 @@ optionalTrailingComma : ',' {
 		$$ = nil
 	}
 
-// extended syntax: allow using ',' in addition to ';',
 commaOrSemicolon : ';' | ',' {
 		$$ = $1
 	}
+
 
 // =======================================
 

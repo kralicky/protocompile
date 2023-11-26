@@ -326,9 +326,6 @@ type CompactOptionsNode struct {
 // non-nil. The commas arg must have a length that is one less than the
 // length of opts. The opts arg must not be empty.
 func NewCompactOptionsNode(openBracket *RuneNode, opts []*OptionNode, commas []*RuneNode, closeBracket *RuneNode) *CompactOptionsNode {
-	if len(opts) == 0 {
-		panic("must have at least one part")
-	}
 	children := createCommaSeparatedNodes(
 		[]Node{openBracket},
 		opts,

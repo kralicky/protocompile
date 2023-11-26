@@ -1,39 +1,93 @@
-syntax = "proto2";
-package extsyntax;
+syntax = "proto2" // lexer-inserted semicolon ->
 
-import "google/protobuf/descriptor.proto";
+package extsyntax // lexer-inserted semicolon ->
+
+import "google/protobuf/descriptor.proto" // lexer-inserted semicolon ->
 
 extend google.protobuf.ExtensionRangeOptions {
-  optional string         label = 1000;
-  optional int32          test  = 1001;
-  optional TrailingCommas msg   = 1002;
+  optional string   label = 1000 // lexer-inserted semicolon ->
+  optional int32    test  = 1001 // lexer-inserted semicolon ->
+  optional GCCStyle msg   = 1002 // lexer-inserted semicolon ->
+  optional List     list  = 1003 // lexer-inserted semicolon ->
 }
 
-message TrailingCommas {
-  optional int32 a = 1 [default = 2, ];
-  optional int32 b = 2 [
-    json_name  = "b",
-    deprecated = true,
-  ];
+message // foo
+/* template<typename _Tp */ GCCStyle // bar
+{ // baz
+    enum 
+  Foo 
+    {
+        Zero = 0 // lexer-inserted semicolon ->
+        One = 1 // lexer-inserted semicolon ->
+    } // <- optional semicolon
 
-  extensions 249, 300 to 350, 500 to 550, 20000 to max [
-    (label) = "jazz",
+  optional int32 a = 1 
+    [
+      default 
+        = 
+          2,
+            ] // lexer-inserted semicolon ->
+  optional 
+    int32 
+    b 
+      =
+      2 
+    [
+      json_name
+        =
+        "b"    ,
+  deprecated
+      =
+true
+    ,
+        ] // lexer-inserted semicolon ->
 
-    (msg) = {
-      a: 1,
-      b: 2,
-    },
+  optional 
+int32 c = 3 [] // lexer-inserted semicolon ->
+    optional 
+int32 d = 4 [
+    /* test */
+  ] // lexer-inserted semicolon ->
 
-    (test) = 123,
-  ];
-  reserved 5 to 10, 12 to 15, 18, ;
+  extensions 
+  249, 
+  300 /*bar*/    to /*foo*/ 350, 
+    500 to 550, 
+20000 to max 
+[
+    (label)
+  = "jazz",
 
-  reserved "A", "B", "C", ;
+    (msg) = 
+                    {
+                      a: 1
+                      b: 2
+                    },
+
+        (test) 
+      = 
+  123, // <- trailing comma
+] // lexer-inserted semicolon ->
+
+  reserved 
+    5 to 10, 
+      12 to 15, 
+        18 // lexer-inserted semicolon ->
+      
+
+  reserved 
+    "A", 
+  "B", 
+"C", ;// <- trailing comma
 }
 
 enum CommaDelimitedEnums {
-  Semicolon = 1;
-  Comma     = 2,
-  reserved 5 to 10, 12 to 15, 18, ;
-  reserved "C", "B", "A", ;
+  Semicolon = 1 // lexer-inserted semicolon ->
+  Comma     = 2 // lexer-inserted semicolon ->
+  reserved 5 to 10, 12 to 15, 18, ; // <- trailing comma
+  reserved "C", "B", "A" // lexer-inserted semicolon ->
+}
+
+message List {
+  repeated int32 items = 1 // lexer-inserted semicolon ->
 }

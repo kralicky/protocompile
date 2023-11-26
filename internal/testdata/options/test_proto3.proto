@@ -18,9 +18,9 @@ package bufbuild.protocompile.test3;
 import "google/protobuf/descriptor.proto";
 import "options.proto";
 
-option go_package = "foo";
+option go_package   = "foo";
 option java_package = "bar";
-option (file) = {
+option (file)       = {
   i32:  0
   i64:  1
   u32:  2
@@ -40,9 +40,9 @@ option (file) = {
   oo_fl32: 1.2345e100
   oo_b:    "\x00\x01\x02\x03"
 };
-option (file).b = "\x00\x01\x02\x03";
+option (file).b    = "\x00\x01\x02\x03";
 option (file).flag = true;
-option (file).grp = {
+option (file).grp  = {
   foo: "abc"
   bar: 999
 };
@@ -77,7 +77,8 @@ option (file).msg.(t) = {
   ]
   m_i32: [
     {key: 123, value: 1},
-    {key: 234, value: 2}]
+    {key: 234, value: 2}
+  ]
   r_u32: [
     0,
     1,
@@ -92,23 +93,24 @@ option (file).msg.(t) = {
   ]
   m_u32: [
     {key: 123, value: 1},
-    {key: 234, value: 2}]
+    {key: 234, value: 2}
+  ]
 };
 option (file).msg.(t).msg.(t) = {
-  r_i32: 1
-  r_i32: 2
+  r_i32:  1
+  r_i32:  2
   pr_i32: 1
   pr_i32: 2
-  m_i32: {value: 0}
-  m_i32: {key: 123, value: 1}
-  m_i32: {key: 234, value: 2}
-  m_i32: {key: -345}
-  r_u32: 1
-  r_u32: 2
+  m_i32:  {value: 0}
+  m_i32:  {key: 123, value: 1}
+  m_i32:  {key: 234, value: 2}
+  m_i32:  {key: -345}
+  r_u32:  1
+  r_u32:  2
   pr_u32: 1
   pr_u32: 2
-  m_u32: {}
-  m_u32: {key: 234, value: 2}
+  m_u32:  {}
+  m_u32:  {key: 234, value: 2}
 };
 option (file).msg.(t).msg.(t).msg.(t) = {
   pr_i32: 1
@@ -118,22 +120,22 @@ option (file).pr_i32 = 1;
 option (file).pr_i32 = 0;
 option (file).pr_u32 = 0;
 option (file).pr_u32 = 1;
-option (file).r_i32 = 1;
-option (file).r_i32 = 0;
-option (file).r_msg = {
-  foo: "filefoo",
-  bar: 99,
+option (file).r_i32  = 1;
+option (file).r_i32  = 0;
+option (file).r_msg  = {
+  foo: "filefoo"
+  bar: 99
   baz: false
 };
 option (file).r_msg = {
-  foo: "filefoo2",
-  bar: 98,
+  foo: "filefoo2"
+  bar: 98
   baz: true
 };
 option (file).r_u32 = 1;
 option (file).r_u32 = 0;
-option (file3).i32 = 0;
-option (file3).msg = {
+option (file3).i32  = 0;
+option (file3).msg  = {
   i32: [
     0,
     1,
@@ -158,9 +160,9 @@ option (file3).msg.msg.msg = {
   u32: 1
 };
 option (file3).u32 = 0;
-option (file_i) = 1;
-option (file_i) = 3;
-option (file_i) = 2;
+option (file_i)    = 1;
+option (file_i)    = 3;
+option (file_i)    = 2;
 
 // Repeated scalar fields are packed by default in proto3. So we define some extra
 // options here just for testing that.
@@ -191,27 +193,35 @@ message PackedOptions {
 extend google.protobuf.FileOptions {
   PackedOptions file3 = 50505;
 }
+
 extend google.protobuf.MessageOptions {
   PackedOptions msg3 = 50505;
 }
+
 extend google.protobuf.FieldOptions {
   PackedOptions fld3 = 50505;
 }
+
 extend google.protobuf.OneofOptions {
   PackedOptions oo3 = 50505;
 }
+
 extend google.protobuf.ExtensionRangeOptions {
   PackedOptions ext3 = 50505;
 }
+
 extend google.protobuf.EnumOptions {
   PackedOptions en3 = 50505;
 }
+
 extend google.protobuf.EnumValueOptions {
   PackedOptions env3 = 50505;
 }
+
 extend google.protobuf.ServiceOptions {
   PackedOptions svc3 = 50505;
 }
+
 extend google.protobuf.MethodOptions {
   PackedOptions rpc3 = 50505;
 }
@@ -259,20 +269,20 @@ message TestMessage {
 
     (fld).pr_s32 = 0,
     (fld).pr_s32 = 1,
-    (fld3).s32 = 1,
+    (fld3).s32   = 1,
 
     (fld).m_s32 = {
-      key: 123,
+      key:   123
       value: 0
     },
     (fld).m_s32 = {
-      key: -234,
+      key:   -234
       value: 1
     },
 
     (fld).flag = true,
-    (fld).b = "\x00\x01\x02\x03",
-    (fld).grp = {
+    (fld).b    = "\x00\x01\x02\x03",
+    (fld).grp  = {
       foo: "abc"
       bar: 999
     },
@@ -282,26 +292,26 @@ message TestMessage {
 
     (fld).pr_fl32 = 0,
     (fld).pr_fl32 = 1,
-    (fld3).fl32 = 1,
+    (fld3).fl32   = 1,
 
     (fld).m_fl32 = {
-      key: "abc",
+      key:   "abc"
       value: 0
     },
     (fld).m_fl32 = {
-      key: "def",
+      key:   "def"
       value: 1
     },
 
     (fld).r_msg = {
-      foo: "filefoo",
-      bar: 99,
+      foo: "filefoo"
+      bar: 99
       baz: false
     },
 
     (fld).r_msg = {
-      foo: "filefoo2",
-      bar: 98,
+      foo: "filefoo2"
+      bar: 98
       baz: true
     },
 
@@ -320,7 +330,8 @@ message TestMessage {
       ]
       m_s32: [
         {key: 123, value: 1},
-        {key: -234, value: 2}]
+        {key: -234, value: 2}
+      ]
       r_fl32: [
         0,
         1,
@@ -335,7 +346,8 @@ message TestMessage {
       ]
       m_fl32: [
         {key: "foo", value: 1},
-        {key: "bar", value: 2}]
+        {key: "bar", value: 2}
+      ]
     },
     (fld3).msg = {
       s32: [
@@ -343,29 +355,29 @@ message TestMessage {
         1,
         2,
         3
-      ],
+      ]
       fl32: [
         0,
         1,
         2,
         3
-      ],
+      ]
     },
     (fld).msg.(t).msg.(t) = {
-      r_s32: 1
-      r_s32: 2
-      pr_s32: 1
-      pr_s32: 2
-      m_s32: {value: 0}
-      m_s32: {key: 123, value: 1}
-      m_s32: {key: 234, value: 2}
-      m_s32: {key: -345}
-      r_fl32: 1
-      r_fl32: 2
+      r_s32:   1
+      r_s32:   2
+      pr_s32:  1
+      pr_s32:  2
+      m_s32:   {value: 0}
+      m_s32:   {key: 123, value: 1}
+      m_s32:   {key: 234, value: 2}
+      m_s32:   {key: -345}
+      r_fl32:  1
+      r_fl32:  2
       pr_fl32: 1
       pr_fl32: 2
-      m_fl32: {}
-      m_fl32: {key: "bar", value: -2.2222}
+      m_fl32:  {}
+      m_fl32:  {key: "bar", value: -2.2222}
     },
     (fld3).msg.msg = {
       s32:  1
@@ -408,17 +420,17 @@ message TestMessage {
       str:  "file"
     };
 
-    option (oo).oo_i64 = -9876;
-    option (oo).oo_f64 = 1234;
+    option (oo).oo_i64  = -9876;
+    option (oo).oo_f64  = 1234;
     option (oo).oo_fl64 = 1.2345e100;
-    option (oo).oo_str = "foobar";
+    option (oo).oo_str  = "foobar";
 
     option (oo).r_i64 = 0;
     option (oo).r_i64 = 1;
 
     option (oo).pr_i64 = 0;
     option (oo).pr_i64 = 1;
-    option (oo3).i64 = 0;
+    option (oo3).i64   = 0;
 
     option (oo).m_i64 = {
       key:   123
@@ -430,8 +442,8 @@ message TestMessage {
     };
 
     option (oo).flag = true;
-    option (oo).b = "\x00\x01\x02\x03";
-    option (oo).grp = {
+    option (oo).b    = "\x00\x01\x02\x03";
+    option (oo).grp  = {
       foo: "abc"
       bar: 999
     };
@@ -441,7 +453,7 @@ message TestMessage {
 
     option (oo).pr_u64 = 0;
     option (oo).pr_u64 = 1;
-    option (oo3).u64 = 0;
+    option (oo3).u64   = 0;
 
     option (oo).m_u64 = {
       key:   123
@@ -453,14 +465,14 @@ message TestMessage {
     };
 
     option (oo).r_msg = {
-      foo: "filefoo",
-      bar: 99,
+      foo: "filefoo"
+      bar: 99
       baz: false
     };
 
     option (oo).r_msg = {
-      foo: "filefoo2",
-      bar: 98,
+      foo: "filefoo2"
+      bar: 98
       baz: true
     };
 
@@ -479,7 +491,8 @@ message TestMessage {
       ]
       m_i64: [
         {key: 123, value: 1},
-        {key: 234, value: 2}]
+        {key: 234, value: 2}
+      ]
       r_u64: [
         0,
         1,
@@ -494,7 +507,8 @@ message TestMessage {
       ]
       m_u64: [
         {key: 123, value: 1},
-        {key: 234, value: 2}]
+        {key: 234, value: 2}
+      ]
     };
     option (oo3).msg = {
       i64: [
@@ -511,20 +525,20 @@ message TestMessage {
       ]
     };
     option (oo).msg.(t).msg.(t) = {
-      r_i64: 1
-      r_i64: 2
+      r_i64:  1
+      r_i64:  2
       pr_i64: 1
       pr_i64: 2
-      m_i64: {value: 0}
-      m_i64: {key: 123, value: 1}
-      m_i64: {key: 234, value: 2}
-      m_i64: {key: -345}
-      r_u64: 1
-      r_u64: 2
+      m_i64:  {value: 0}
+      m_i64:  {key: 123, value: 1}
+      m_i64:  {key: 234, value: 2}
+      m_i64:  {key: -345}
+      r_u64:  1
+      r_u64:  2
       pr_u64: 1
       pr_u64: 2
-      m_u64: {}
-      m_u64: {key: 234, value: 2}
+      m_u64:  {}
+      m_u64:  {key: 234, value: 2}
     };
     option (oo3).msg.msg = {
       i64: 1
@@ -537,8 +551,8 @@ message TestMessage {
       pr_u64: 1
     };
     option (oo3).msg.msg.msg = {
-      i64: 1;
-      u64: 2;
+      i64: 1
+      u64: 2
     };
   }
 
@@ -558,17 +572,17 @@ message TestMessage {
     str:  "file"
   };
 
-  option (msg).oo_s64 = -9876;
+  option (msg).oo_s64  = -9876;
   option (msg).oo_sf64 = 1234;
-  option (msg).oo_en = UNO;
-  option (msg).oo_grp = {foo: "abc", bar: 123};
+  option (msg).oo_en   = UNO;
+  option (msg).oo_grp  = {foo: "abc", bar: 123};
 
   option (msg).r_f32 = 0;
   option (msg).r_f32 = 1;
 
   option (msg).pr_f32 = 0;
   option (msg).pr_f32 = 1;
-  option (msg3).f32 = 0;
+  option (msg3).f32   = 0;
 
   option (msg).m_f32 = {
     key:   123
@@ -580,8 +594,8 @@ message TestMessage {
   };
 
   option (msg).flag = true;
-  option (msg).b = "\x00\x01\x02\x03";
-  option (msg).grp = {
+  option (msg).b    = "\x00\x01\x02\x03";
+  option (msg).grp  = {
     foo: "abc"
     bar: 999
   };
@@ -591,7 +605,7 @@ message TestMessage {
 
   option (msg).pr_sf32 = 0;
   option (msg).pr_sf32 = 1;
-  option (msg3).sf32 = 0;
+  option (msg3).sf32   = 0;
 
   option (msg).m_sf32 = {
     key:   123
@@ -603,14 +617,14 @@ message TestMessage {
   };
 
   option (msg).r_msg = {
-    foo: "filefoo",
-    bar: 99,
+    foo: "filefoo"
+    bar: 99
     baz: false
   };
 
   option (msg).r_msg = {
-    foo: "filefoo2",
-    bar: 98,
+    foo: "filefoo2"
+    bar: 98
     baz: true
   };
 
@@ -629,7 +643,8 @@ message TestMessage {
     ]
     m_f32: [
       {key: 123, value: 1},
-      {key: 234, value: 2}]
+      {key: 234, value: 2}
+    ]
     r_sf32: [
       0,
       1,
@@ -644,7 +659,8 @@ message TestMessage {
     ]
     m_sf32: [
       {key: 123, value: 1},
-      {key: 234, value: 2}]
+      {key: 234, value: 2}
+    ]
   };
   option (msg3).msg = {
     f32: [
@@ -661,20 +677,20 @@ message TestMessage {
     ]
   };
   option (msg).msg.(t).msg.(t) = {
-    r_f32: 1
-    r_f32: 2
-    pr_f32: 1
-    pr_f32: 2
-    m_f32: {value: 0}
-    m_f32: {key: 123, value: 1}
-    m_f32: {key: 234, value: 2}
-    m_f32: {key: 345}
-    r_sf32: 1
-    r_sf32: 2
+    r_f32:   1
+    r_f32:   2
+    pr_f32:  1
+    pr_f32:  2
+    m_f32:   {value: 0}
+    m_f32:   {key: 123, value: 1}
+    m_f32:   {key: 234, value: 2}
+    m_f32:   {key: 345}
+    r_sf32:  1
+    r_sf32:  2
     pr_sf32: 1
     pr_sf32: 2
-    m_sf32: {}
-    m_sf32: {key: -234, value: -2}
+    m_sf32:  {}
+    m_sf32:  {key: -234, value: -2}
   };
   option (msg3).msg.msg = {
     f32:  1
@@ -727,30 +743,30 @@ enum TestEnum {
       str:  "file"
     },
 
-    (env).oo_u32 = 9876,
-    (env).oo_f32 = 1234,
+    (env).oo_u32  = 9876,
+    (env).oo_f32  = 1234,
     (env).oo_fl32 = 1.2345e100,
-    (env).oo_b = "\x00\x01\x02\x03",
+    (env).oo_b    = "\x00\x01\x02\x03",
 
     (env).r_s64 = 0,
     (env).r_s64 = 1,
 
     (env).pr_s64 = 0,
     (env).pr_s64 = 1,
-    (env3).s64 = 0,
+    (env3).s64   = 0,
 
     (env).m_s64 = {
-      key: 123,
+      key:   123
       value: 0
     },
     (env).m_s64 = {
-      key: -234,
+      key:   -234
       value: 1
     },
 
     (env).flag = true,
-    (env).b = "\x00\x01\x02\x03",
-    (env).grp = {
+    (env).b    = "\x00\x01\x02\x03",
+    (env).grp  = {
       foo: "abc"
       bar: 999
     },
@@ -760,26 +776,26 @@ enum TestEnum {
 
     (env).pr_fl64 = 0,
     (env).pr_fl64 = 1,
-    (env3).fl64 = 0,
+    (env3).fl64   = 0,
 
     (env).m_fl64 = {
-      key: "abc",
+      key:   "abc"
       value: 0
     },
     (env).m_fl64 = {
-      key: "def",
+      key:   "def"
       value: 1
     },
 
     (env).r_msg = {
-      foo: "filefoo",
-      bar: 99,
+      foo: "filefoo"
+      bar: 99
       baz: false
     },
 
     (env).r_msg = {
-      foo: "filefoo2",
-      bar: 98,
+      foo: "filefoo2"
+      bar: 98
       baz: true
     },
 
@@ -798,7 +814,8 @@ enum TestEnum {
       ]
       m_s64: [
         {key: 123, value: 1},
-        {key: 234, value: 2}]
+        {key: 234, value: 2}
+      ]
       r_fl64: [
         0,
         1,
@@ -813,7 +830,8 @@ enum TestEnum {
       ]
       m_fl64: [
         {key: "foo", value: 1},
-        {key: "bar", value: 2}]
+        {key: "bar", value: 2}
+      ]
     },
     (env3).msg = {
       s64: [
@@ -830,20 +848,20 @@ enum TestEnum {
       ]
     },
     (env).msg.(t).msg.(t) = {
-      r_s64: 1
-      r_s64: 2
-      pr_s64: 1
-      pr_s64: 2
-      m_s64: {value: 0}
-      m_s64: {key: 123, value: 1}
-      m_s64: {key: 234, value: 2}
-      m_s64: {key: -345}
-      r_fl64: 1
-      r_fl64: 2
+      r_s64:   1
+      r_s64:   2
+      pr_s64:  1
+      pr_s64:  2
+      m_s64:   {value: 0}
+      m_s64:   {key: 123, value: 1}
+      m_s64:   {key: 234, value: 2}
+      m_s64:   {key: -345}
+      r_fl64:  1
+      r_fl64:  2
       pr_fl64: 1
       pr_fl64: 2
-      m_fl64: {}
-      m_fl64: {key: "bar", value: 2}
+      m_fl64:  {}
+      m_fl64:  {key: "bar", value: 2}
     },
     (env3).msg.msg = {
       s64:  1
@@ -887,7 +905,7 @@ enum TestEnum {
 
   option (en).pr_f64 = 0;
   option (en).pr_f64 = 1;
-  option (en3).f64 = 0;
+  option (en3).f64   = 0;
 
   option (en).m_f64 = {
     key:   123
@@ -899,8 +917,8 @@ enum TestEnum {
   };
 
   option (en).flag = true;
-  option (en).b = "\x00\x01\x02\x03";
-  option (en).grp = {
+  option (en).b    = "\x00\x01\x02\x03";
+  option (en).grp  = {
     foo: "abc"
     bar: 999
   };
@@ -910,7 +928,7 @@ enum TestEnum {
 
   option (en).pr_sf64 = 0;
   option (en).pr_sf64 = 1;
-  option (en3).sf64 = 0;
+  option (en3).sf64   = 0;
 
   option (en).m_sf64 = {
     key:   123
@@ -922,14 +940,14 @@ enum TestEnum {
   };
 
   option (en).r_msg = {
-    foo: "filefoo",
-    bar: 99,
+    foo: "filefoo"
+    bar: 99
     baz: false
   };
 
   option (en).r_msg = {
-    foo: "filefoo2",
-    bar: 98,
+    foo: "filefoo2"
+    bar: 98
     baz: true
   };
 
@@ -948,7 +966,8 @@ enum TestEnum {
     ]
     m_f64: [
       {key: 123, value: 1},
-      {key: 234, value: 2}]
+      {key: 234, value: 2}
+    ]
     r_sf64: [
       0,
       1,
@@ -963,7 +982,8 @@ enum TestEnum {
     ]
     m_sf64: [
       {key: 123, value: 1},
-      {key: 234, value: 2}]
+      {key: 234, value: 2}
+    ]
   };
   option (en3).msg = {
     f64: [
@@ -980,20 +1000,20 @@ enum TestEnum {
     ]
   };
   option (en).msg.(t).msg.(t) = {
-    r_f64: 1
-    r_f64: 2
-    pr_f64: 1
-    pr_f64: 2
-    m_f64: {value: 0}
-    m_f64: {key: 123, value: 1}
-    m_f64: {key: 234, value: 2}
-    m_f64: {key: 345}
-    r_sf64: 1
-    r_sf64: 2
+    r_f64:   1
+    r_f64:   2
+    pr_f64:  1
+    pr_f64:  2
+    m_f64:   {value: 0}
+    m_f64:   {key: 123, value: 1}
+    m_f64:   {key: 234, value: 2}
+    m_f64:   {key: 345}
+    r_sf64:  1
+    r_sf64:  2
     pr_sf64: 1
     pr_sf64: 2
-    m_sf64: {}
-    m_sf64: {key: -234, value: -2}
+    m_sf64:  {}
+    m_sf64:  {key: -234, value: -2}
   };
   option (en3).msg.msg = {
     f64:  1
@@ -1022,24 +1042,24 @@ service TestService {
     option (rpc_i) = 3;
 
     option (rpc) = {
-      i32: 0
-      i64: 1
-      u32: 2
-      u64: 3
-      f32: 4
-      f64: 5
+      i32:  0
+      i64:  1
+      u32:  2
+      u64:  3
+      f32:  4
+      f64:  5
       sf32: 6
       sf64: 7
       fl32: 8.9
       fl64: 9.101
-      s32: -10
-      s64: -11
-      str: "file"
+      s32:  -10
+      s64:  -11
+      str:  "file"
 
-      oo_i32: -9876
-      oo_f32: 1234
+      oo_i32:  -9876
+      oo_f32:  1234
       oo_fl32: 1.2345e100
-      OO_Grp <foo: "abc", bar: 123>
+      OO_Grp   <foo: "abc", bar: 123>
     };
 
     option (rpc).r_en = ZED;
@@ -1078,14 +1098,14 @@ service TestService {
     };
 
     option (rpc).r_msg = {
-      foo: "filefoo",
-      bar: 99,
+      foo: "filefoo"
+      bar: 99
       baz: false
     };
 
     option (rpc).r_msg = {
-      foo: "filefoo2",
-      bar: 98,
+      foo: "filefoo2"
+      bar: 98
       baz: true
     };
 
@@ -1102,7 +1122,8 @@ service TestService {
       ]
       m_en: [
         {key: "foo", value: UNO},
-        {key: "bar", value: DOS}]
+        {key: "bar", value: DOS}
+      ]
       r_str: [
         "abc",
         "def",
@@ -1111,7 +1132,8 @@ service TestService {
       ]
       m_str: [
         {key: "foo", value: "one"},
-        {key: "bar", value: "two"}]
+        {key: "bar", value: "two"}
+      ]
     };
     option (rpc3).msg = {
       en: [
@@ -1120,12 +1142,12 @@ service TestService {
       ]
     };
     option (rpc).msg.(t).msg.(t) = {
-      r_en: UNO
-      r_en: DOS
+      r_en:  UNO
+      r_en:  DOS
       pr_en: UNO
       pr_en: DOS
-      m_en: {key: "foo", value: UNO}
-      m_en: {key: "bar", value: DOS}
+      m_en:  {key: "foo", value: UNO}
+      m_en:  {key: "bar", value: DOS}
       r_str: "abc"
       r_str: "def"
       m_str: {key: "foo", value: "one"}
@@ -1191,11 +1213,11 @@ service TestService {
   option (svc).r_b = "\x02\x03";
 
   option (svc).r_grp = {
-    foo: "foo",
+    foo: "foo"
     bar: 1
   };
   option (svc).r_grp = {
-    foo: "bar",
+    foo: "bar"
     bar: 2
   };
 
@@ -1209,13 +1231,13 @@ service TestService {
   };
 
   option (svc).r_msg = {
-    foo: "filefoo",
-    bar: 99,
+    foo: "filefoo"
+    bar: 99
     baz: false
   };
   option (svc).r_msg = {
-    foo: "filefoo2",
-    bar: 98,
+    foo: "filefoo2"
+    bar: 98
     baz: true
   };
 
@@ -1234,7 +1256,8 @@ service TestService {
     ]
     m_flag: [
       {key: "foo", value: true},
-      {key: "bar", value: false}]
+      {key: "bar", value: false}
+    ]
     r_b: [
       "abc",
       "def",
@@ -1243,7 +1266,8 @@ service TestService {
     ]
     m_b: [
       {key: "foo", value: "abc"},
-      {key: "bar", value: "def"}]
+      {key: "bar", value: "def"}
+    ]
   };
   option (svc3).msg = {
     flag: [
@@ -1254,16 +1278,16 @@ service TestService {
     ]
   };
   option (svc).msg.(t).msg.(t) = {
-    r_flag: true
-    r_flag: false
+    r_flag:  true
+    r_flag:  false
     pr_flag: true
     pr_flag: false
-    m_flag: {key: "foo", value: true}
-    m_flag: {key: "bar", value: false}
-    r_b: "abc"
-    r_b: "def"
-    m_b: {key: "foo", value: "abc"}
-    m_b: {key: "bar", value: "def"}
+    m_flag:  {key: "foo", value: true}
+    m_flag:  {key: "bar", value: false}
+    r_b:     "abc"
+    r_b:     "def"
+    m_b:     {key: "foo", value: "abc"}
+    m_b:     {key: "bar", value: "def"}
   };
   option (svc3).msg.msg = {
     flag: true

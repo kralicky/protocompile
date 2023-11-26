@@ -24,12 +24,12 @@ type compactOptionSlices struct {
 	commas  []*ast.RuneNode
 }
 
-func toStringValueNode(strs []*ast.StringLiteralNode) ast.StringValueNode {
-	if len(strs) == 1 {
-		return strs[0]
-	}
-	return ast.NewCompoundLiteralStringNode(strs...)
-}
+// func toStringValueNode(strs ...*ast.StringLiteralNode) ast.StringValueNode {
+// 	if len(strs) == 1 {
+// 		return strs[0]
+// 	}
+// 	return ast.NewCompoundLiteralStringNode(strs...)
+// }
 
 type nameSlices struct {
 	// only names or idents will be set, never both

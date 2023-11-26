@@ -349,3 +349,65 @@ func TestPathological(t *testing.T) {
 		})
 	}
 }
+
+func TestExtendedSyntax(t *testing.T) {
+	t.Parallel()
+	// inputs that have been found in the past to cause panics by oss-fuzz
+	inputs := map[string]string{
+		"trailing-commas": `
+		syntax = proto3;
+		message TrailingCommas {
+			optional int32 a = 1 [default = 2, ];
+			optional int32 b = 2 [
+				json_name  = "b",
+				deprecated = true,
+			];
+			reserved 5 to 10, 12 to 15, 18, ;
+			reserved "A", "B", "C", ;
+			extensions 249, 300 to 350, 500 to 550, 20000 to max [
+				(msg) = {
+					a: 1,
+					b: 2,
+				},
+				(test) = 123,
+				(xyz) = [
+					"a",
+					"b",
+					"c",
+				],
+			];
+		}`,
+		"empty-productions": `
+		syntax = proto3;
+		message EmptyProductions {
+			optional int32 a = 1 [];
+			optional int32 b = 2 [
+				(foo) = {
+					items: [],
+				},
+			],
+		}
+		message EmptyMessage{
+
+		}
+		enum EmptyEnum {
+		}
+		`,
+	}
+	for name, input := range inputs {
+		name, input := name, input
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			errHandler := reporter.NewHandler(reporter.NewReporter(
+				// returning nil means this will keep trying to parse after any error
+				func(err reporter.ErrorWithPos) error { return nil },
+				nil, // ignore warnings
+			))
+			protoName := fmt.Sprintf("%s.proto", name)
+			_, err := Parse(protoName, strings.NewReader(input), errHandler)
+			// we expect this to error... but we don't want it to panic
+			require.Error(t, err, "junk input should have returned error")
+			t.Logf("error from parse: %v", err)
+		})
+	}
+}
