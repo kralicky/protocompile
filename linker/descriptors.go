@@ -274,8 +274,12 @@ func (r *result) PopulateSourceCodeInfo(optsIndex sourceinfo.OptionIndex, optsDe
 	r.srcLocations = srcLocs{file: r, locs: srcLocProtos, index: srcLocIndex}
 	r.optsIndex = optsIndex
 	r.optsDescIndex = optsDescIndex
+	a := r.AST()
 	for node, desc := range optsDescIndex.FieldReferenceNodesToFieldDescriptors {
-		r.resolvedReferences[desc] = append(r.resolvedReferences[desc], r.AST().NodeInfo(node))
+		r.resolvedReferences[desc] = append(r.resolvedReferences[desc], a.NodeInfo(node))
+	}
+	for node, desc := range optsDescIndex.EnumValueIdentNodesToEnumValueDescriptors {
+		r.resolvedReferences[desc] = append(r.resolvedReferences[desc], a.NodeInfo(node))
 	}
 }
 

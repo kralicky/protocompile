@@ -967,7 +967,6 @@ func (interp *interpreter) interpretOptions(
 	if err := cloneInto(opts, msg.Interface(), interp.resolver); err != nil {
 		node := interp.file.Node(element)
 		return nil, interp.reporter.HandleError(reporter.Error(interp.nodeInfo(node), err))
-		return nil, interp.reporter.HandleError(reporter.Error(interp.nodeInfo(node), err))
 	}
 
 	if interp.container != nil {
@@ -1337,6 +1336,17 @@ func (interp *interpreter) interpretField(mc *internal.MessageContext, msg proto
 		val, err = interp.setOptionFieldFromProto(mc, msg, fld, node, opt, optValNode)
 	} else {
 		val, index, err = interp.setOptionField(mc, msg, fld, node, optValNode, false)
+
+		// index enum value references used as extension values:
+		// option (foo) = SomeEnumValue;
+		if fld.Kind() == protoreflect.EnumKind {
+			enumDesc := fld.Enum()
+			switch v := optValNode.(type) {
+			case ast.IdentValueNode:
+				interp.descriptorIndex.EnumValueIdentNodesToEnumValueDescriptors[v] =
+					enumDesc.Values().ByName(protoreflect.Name(v.AsIdentifier()))
+			}
+		}
 	}
 	if err != nil {
 		return nil, interp.reporter.HandleError(err)
@@ -1352,6 +1362,23 @@ func (interp *interpreter) interpretField(mc *internal.MessageContext, msg proto
 			continue
 		}
 		interp.descriptorIndex.FieldReferenceNodesToFieldDescriptors[interpretedField.node] = fieldDesc
+
+		// index enum value references used as field values:
+		// option (foo) = {
+		//   bar: SomeEnumValue
+		//   baz: SomeOtherEnumValue
+		// };
+		if fieldDesc.Kind() == protoreflect.EnumKind {
+			enumDesc := fieldDesc.Enum()
+			switch v := interpretedField.node.(type) {
+			case *ast.MessageFieldNode:
+				switch v := v.Val.(type) {
+				case ast.IdentValueNode:
+					interp.descriptorIndex.EnumValueIdentNodesToEnumValueDescriptors[v] =
+						enumDesc.Values().ByName(protoreflect.Name(v.AsIdentifier()))
+				}
+			}
+		}
 	}
 
 	return &interpretedOption{
