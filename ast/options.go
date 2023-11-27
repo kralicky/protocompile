@@ -121,6 +121,29 @@ func (n *OptionNode) GetName() Node {
 func (n *OptionNode) GetValue() ValueNode {
 	return n.Val
 }
+func NewIncompleteCompactOptionNode(name *OptionNameNode, equals *RuneNode, val ValueNode) *OptionNode {
+	var children []Node
+	if name != nil {
+		children = append(children, name)
+	}
+	if equals != nil {
+		children = append(children, equals)
+	}
+	if val != nil {
+		children = append(children, val)
+	} else {
+		val = NoSourceNode{}
+	}
+
+	return &OptionNode{
+		compositeNode: compositeNode{
+			children: children,
+		},
+		Name:   name,
+		Equals: equals,
+		Val:    val,
+	}
+}
 
 // OptionNameNode represents an option name or even a traversal through message
 // types to name a nested option field. Example:
@@ -285,6 +308,39 @@ func NewAnyTypeReferenceNode(openSym *RuneNode, urlPrefix IdentValueNode, slashS
 	}
 }
 
+func NewIncompleteExtensionFieldReferenceNode(openSym *RuneNode, name IdentValueNode, closeSym *RuneNode) *FieldReferenceNode {
+	if openSym == nil {
+		panic("openSym is nil")
+	}
+	children := []Node{openSym}
+	if name != nil {
+		children = append(children, name)
+	}
+	if closeSym != nil {
+		children = append(children, closeSym)
+	}
+	return &FieldReferenceNode{
+		compositeNode: compositeNode{
+			children: children,
+		},
+		Open:  openSym,
+		Name:  NewIncompleteIdentNode(name, openSym.Token()),
+		Close: closeSym,
+	}
+}
+
+func NewIncompleteFieldReferenceNode(name *IdentNode) *FieldReferenceNode {
+	if name == nil {
+		panic("name is nil")
+	}
+	return &FieldReferenceNode{
+		compositeNode: compositeNode{
+			children: []Node{name},
+		},
+		Name: NewIncompleteIdentNode(name, name.Token()),
+	}
+}
+
 // IsExtension reports if this is an extension name or not (e.g. enclosed in
 // punctuation, such as parentheses or brackets).
 func (a *FieldReferenceNode) IsExtension() bool {
@@ -296,12 +352,22 @@ func (a *FieldReferenceNode) IsAnyTypeReference() bool {
 	return a.Slash != nil
 }
 
+func (a *FieldReferenceNode) IsIncomplete() bool {
+	_, ok := a.Name.(*IncompleteIdentNode)
+	return ok
+}
+
 func (a *FieldReferenceNode) Value() string {
 	if a.Open != nil {
-		if a.Slash != nil {
-			return string(a.Open.Rune) + string(a.URLPrefix.AsIdentifier()) + string(a.Slash.Rune) + string(a.Name.AsIdentifier()) + string(a.Close.Rune)
+		var closeRune string
+		if a.Close != nil {
+			// extended syntax rule: account for possible missing close rune
+			closeRune = string(a.Close.Rune)
 		}
-		return string(a.Open.Rune) + string(a.Name.AsIdentifier()) + string(a.Close.Rune)
+		if a.Slash != nil {
+			return string(a.Open.Rune) + string(a.URLPrefix.AsIdentifier()) + string(a.Slash.Rune) + string(a.Name.AsIdentifier()) + closeRune
+		}
+		return string(a.Open.Rune) + string(a.Name.AsIdentifier()) + closeRune
 	}
 	return string(a.Name.AsIdentifier())
 }

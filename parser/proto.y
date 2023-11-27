@@ -83,7 +83,7 @@ import (
 %type <pkg>          packageDecl
 %type <opt>          optionDecl compactOption
 %type <opts>         compactOptionDecls
-%type <ref>          extensionName messageLiteralFieldName
+%type <ref>          extensionName messageLiteralFieldName incompleteExtensionName
 %type <optNms>       optionName
 %type <cmpctOpts>    compactOptions
 %type <v>            value optionValue scalarValue messageLiteralWithBraces messageLiteral numLit listLiteral listElement listOfMessagesLiteral messageValue
@@ -298,7 +298,8 @@ mtdElementIdent : mtdElementName {
 		$$ = $1
 	}
 
-optionDecl : _OPTION optionName '=' optionValue ';' {
+optionDecl
+	: _OPTION optionName '=' optionValue ';' {
 		optName := ast.NewOptionNameNode($2.refs, $2.dots)
 		$$ = ast.NewOptionNode($1.ToKeyword(), optName, $3, $4, $5)
 	}
@@ -321,8 +322,20 @@ optionName : identifier {
 		$$ = $1
 	}
 
-extensionName : '(' typeName ')' {
+extensionName
+	: '(' typeName ')' {
 		$$ = ast.NewExtensionFieldReferenceNode($1, $2, $3)
+	}
+
+incompleteExtensionName
+	: '(' typeName {
+		$$ = ast.NewIncompleteExtensionFieldReferenceNode($1, $2, nil)
+	}
+	| '(' ')' {
+		$$ = ast.NewIncompleteExtensionFieldReferenceNode($1, nil, $2)
+	}
+	| '(' {
+		$$ = ast.NewIncompleteExtensionFieldReferenceNode($1, nil, nil)
 	}
 
 optionValue : scalarValue
@@ -644,19 +657,29 @@ compactOptionDecls :
 		$$ = &compactOptionSlices{options: []*ast.OptionNode{}}
 	}
 
-compactOption: optionName '=' optionValue {
+compactOption
+	: optionName '=' optionValue {
 		optName := ast.NewOptionNameNode($1.refs, $1.dots)
 		$$ = ast.NewCompactOptionNode(optName, $2, $3)
 	}
+	| incompleteExtensionName {
+		refs := &fieldRefSlices{refs: []*ast.FieldReferenceNode{$1}}
+		optName := ast.NewOptionNameNode(refs.refs, refs.dots)
+		$$ = ast.NewIncompleteCompactOptionNode(optName, nil, nil)
+	}
+	| optionName {
+		optName := ast.NewOptionNameNode($1.refs, $1.dots)
+		$$ = ast.NewIncompleteCompactOptionNode(optName, nil, nil)
+	}
 
-groupDecl : fieldCardinality _GROUP identifier '=' _INT_LIT '{' messageBody '}' {
+groupDecl : fieldCardinality _GROUP identifier '=' _INT_LIT '{' messageBody '}' ';' {
 		$$ = ast.NewGroupNode($1.ToKeyword(), $2.ToKeyword(), $3, $4, $5, nil, $6, $7, $8)
 	}
-	| fieldCardinality _GROUP identifier '=' _INT_LIT compactOptions '{' messageBody '}' {
+	| fieldCardinality _GROUP identifier '=' _INT_LIT compactOptions '{' messageBody '}' ';' {
 		$$ = ast.NewGroupNode($1.ToKeyword(), $2.ToKeyword(), $3, $4, $5, $6, $7, $8, $9)
 	}
 
-oneofDecl : _ONEOF identifier '{' oneofBody '}' {
+oneofDecl : _ONEOF identifier '{' oneofBody '}' ';' {
 		$$ = ast.NewOneofNode($1.ToKeyword(), $2, $3, $4, $5)
 	}
 
@@ -703,10 +726,10 @@ oneofFieldDecl : oneofElementTypeIdent identifier '=' _INT_LIT ';' {
 		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, $5, $6)
 	}
 
-oneofGroupDecl : _GROUP identifier '=' _INT_LIT '{' messageBody '}' {
+oneofGroupDecl : _GROUP identifier '=' _INT_LIT '{' messageBody '}' ';' {
 		$$ = ast.NewGroupNode(nil, $1.ToKeyword(), $2, $3, $4, nil, $5, $6, $7)
 	}
-	| _GROUP identifier '=' _INT_LIT compactOptions '{' messageBody '}' {
+	| _GROUP identifier '=' _INT_LIT compactOptions '{' messageBody '}' ';' {
 		$$ = ast.NewGroupNode(nil, $1.ToKeyword(), $2, $3, $4, $5, $6, $7, $8)
 	}
 
@@ -836,7 +859,7 @@ fieldNameIdents : identifier {
 		$$ = $1
 	}
 
-enumDecl : _ENUM identifier '{' enumBody '}' {
+enumDecl : _ENUM identifier '{' enumBody '}' ';' {
 		$$ = ast.NewEnumNode($1.ToKeyword(), $2, $3, $4, $5)
 	}
 
@@ -884,7 +907,7 @@ enumValueDecl : enumValueName '=' enumValueNumber commaOrSemicolon {
 	}
 
 
-messageDecl : _MESSAGE identifier '{' messageBody '}' {
+messageDecl : _MESSAGE identifier '{' messageBody '}' ';' {
 		$$ = ast.NewMessageNode($1.ToKeyword(), $2, $3, $4, $5)
 	}
 
@@ -958,7 +981,7 @@ messageFieldDecl : fieldCardinality notGroupElementTypeIdent identifier '=' _INT
 		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, $5, $6)
 	}
 
-extensionDecl : _EXTEND typeName '{' extensionBody '}' {
+extensionDecl : _EXTEND typeName '{' extensionBody '}' ';' {
 		$$ = ast.NewExtendNode($1.ToKeyword(), $2, $3, $4, $5)
 	}
 
@@ -1008,7 +1031,7 @@ extensionFieldDecl : fieldCardinality notGroupElementTypeIdent identifier '=' _I
 		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, $5, $6)
 	}
 
-serviceDecl : _SERVICE identifier '{' serviceBody '}' {
+serviceDecl : _SERVICE identifier '{' serviceBody '}' ';' {
 		$$ = ast.NewServiceNode($1.ToKeyword(), $2, $3, $4, $5)
 	}
 
@@ -1051,7 +1074,7 @@ serviceElement : optionDecl {
 methodDecl : _RPC identifier methodMessageType _RETURNS methodMessageType ';' {
 		$$ = ast.NewRPCNode($1.ToKeyword(), $2, $3, $4.ToKeyword(), $5, $6)
 	}
-	| _RPC identifier methodMessageType _RETURNS methodMessageType '{' methodBody '}' {
+	| _RPC identifier methodMessageType _RETURNS methodMessageType '{' methodBody '}' ';' {
 		$$ = ast.NewRPCNodeWithBody($1.ToKeyword(), $2, $3, $4.ToKeyword(), $5, $6, $7, $8)
 	}
 

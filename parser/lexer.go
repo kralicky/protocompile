@@ -192,6 +192,13 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 		l.prevOffset = l.input.offset()
 		c, _, err := l.input.readRune()
 		if err == io.EOF {
+			// insert a semicolon if the last token was the '}' rune (i.e. end of message)
+			if l.shouldInsertVirtualSemicolon(l.prevSym) {
+				// note: nothing to unread
+				l.setRune(lval, ';')
+				return ';'
+			}
+
 			// we're not actually returning a rune, but this will associate
 			// accumulated comments as a trailing comment on last symbol
 			// (if appropriate)
@@ -209,40 +216,10 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 			continue
 		}
 		if c == '\n' {
-			if l.prevSym != nil {
-				insertSemicolon := false
-				switch prev := l.prevSym.(type) {
-				case *ast.KeywordNode:
-					insertSemicolon = false
-				case *ast.RuneNode:
-					insertSemicolon = prev.Rune == ']'
-				case *ast.StringLiteralNode:
-					// handle compound string literals
-					insertSemicolon = !l.matchNextRune('"', '\'')
-				case *ast.UintLiteralNode:
-					// handle the case where compact options are on the next line following
-					// an integer literal
-					insertSemicolon = !l.matchNextRune('[')
-				case *ast.IdentNode:
-					// only if the ident is not followed immediately by a dot, equals, or
-					// left bracket
-					if _, ok := keywords[prev.Val]; ok {
-						// keywords are parsed as idents here
-						insertSemicolon = false
-					} else {
-						insertSemicolon = !l.matchNextRune('.', '=', '{')
-					}
-				case *ast.FloatLiteralNode, *ast.SpecialFloatLiteralNode:
-					// these could only be values in a field literal, which don't need
-					// semicolons anyway
-					insertSemicolon = false
-				}
-				if insertSemicolon {
-					// insert semicolon
-					l.input.unreadRune(1)
-					l.setRune(lval, ';')
-					return ';'
-				}
+			if l.shouldInsertVirtualSemicolon(l.prevSym) {
+				l.input.unreadRune(1)
+				l.setRune(lval, ';')
+				return ';'
 			}
 			l.info.AddLine(l.input.offset())
 			continue
@@ -885,4 +862,40 @@ func (l *protoLex) errWithCurrentPos(err error, offset int) reporter.ErrorWithPo
 	}
 	pos := l.info.SourcePos(l.input.offset() + offset)
 	return reporter.Error(ast.NewSourceSpan(pos, pos), err)
+}
+
+func (l *protoLex) shouldInsertVirtualSemicolon(prevSym ast.TerminalNode) bool {
+	if prevSym == nil {
+		return false
+	}
+	switch prev := prevSym.(type) {
+	case *ast.KeywordNode:
+		return false
+	case *ast.RuneNode:
+		switch prev.Rune {
+		case ']', '}':
+			return true
+		}
+	case *ast.StringLiteralNode:
+		// handle compound string literals
+		return !l.matchNextRune('"', '\'')
+	case *ast.UintLiteralNode:
+		// handle the case where compact options are on the next line following
+		// an integer literal
+		return !l.matchNextRune('[')
+	case *ast.IdentNode:
+		// only if the ident is not followed immediately by a dot, equals, or
+		// left bracket
+		if _, ok := keywords[prev.Val]; ok {
+			// keywords are parsed as idents here
+			return false
+		} else {
+			return !l.matchNextRune('.', '=', '{')
+		}
+	case *ast.FloatLiteralNode, *ast.SpecialFloatLiteralNode:
+		// these could only be values in a field literal, which don't need
+		// semicolons anyway
+		return false
+	}
+	return false
 }

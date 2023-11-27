@@ -32,6 +32,7 @@ type IdentValueNode interface {
 
 var _ IdentValueNode = (*IdentNode)(nil)
 var _ IdentValueNode = (*CompoundIdentNode)(nil)
+var _ IdentValueNode = (*IncompleteIdentNode)(nil)
 
 // IdentNode represents a simple, unqualified identifier. These are used to name
 // elements declared in a protobuf file or to refer to elements. Example:
@@ -144,5 +145,31 @@ func NewKeywordNode(val string, tok Token) *KeywordNode {
 	return &KeywordNode{
 		terminalNode: tok.asTerminalNode(),
 		Val:          val,
+	}
+}
+
+// IncompleteIdentNode represents an identifier that could not be parsed due to
+// a syntax error. It is equivalent to an *IdentNode with an empty value when
+// used as the IdentValueNode interface, but the invalid text can be retrieved
+// using the Val field on the concrete type.
+type IncompleteIdentNode struct {
+	terminalNode
+	IncompleteVal IdentValueNode
+}
+
+// AsIdentifier implements IdentValueNode.
+func (*IncompleteIdentNode) AsIdentifier() Identifier {
+	return ""
+}
+
+// Value implements IdentValueNode.
+func (*IncompleteIdentNode) Value() interface{} {
+	return nil
+}
+
+func NewIncompleteIdentNode(base IdentValueNode, tok Token) *IncompleteIdentNode {
+	return &IncompleteIdentNode{
+		terminalNode:  tok.asTerminalNode(),
+		IncompleteVal: base,
 	}
 }
