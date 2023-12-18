@@ -155,7 +155,7 @@ func NewKeywordNode(val string, tok Token) *KeywordNode {
 // IncompleteIdentNode represents an identifier that could not be parsed due to
 // a syntax error. It is equivalent to an *IdentNode with an empty value when
 // used as the IdentValueNode interface, but the invalid text can be retrieved
-// using the Val field on the concrete type.
+// using the IncompleteVal field on the concrete type.
 type IncompleteIdentNode struct {
 	terminalNode
 	IncompleteVal IdentValueNode

@@ -967,12 +967,6 @@ messageElement : messageFieldDecl {
 	| msgReserved {
 		$$ = $1
 	}
-	| ';' {
-		$$ = ast.NewEmptyDeclNode($1)
-	}
-	| error {
-		$$ = nil
-	}
 
 messageFieldDecl : fieldCardinality notGroupElementTypeIdent identifier '=' _INT_LIT nonVirtualSemicolon {
 		$$ = ast.NewFieldNode($1.ToKeyword(), $2, $3, $4, $5, nil, $6)
@@ -997,6 +991,10 @@ messageFieldDecl : fieldCardinality notGroupElementTypeIdent identifier '=' _INT
 	| fieldCardinality notGroupElementTypeIdent ';' {
 		protolex.(*protoLex).ErrExtendedSyntax("missing field name")
 		$$ = ast.NewIncompleteFieldNode($1.ToKeyword(), $2, nil, nil, nil, nil, $3)
+	}
+	| fieldCardinality ';' {
+		protolex.(*protoLex).ErrExtendedSyntax("missing type name")
+		$$ = ast.NewIncompleteFieldNode($1.ToKeyword(), nil, nil, nil, nil, nil, $2)
 	}
 	| msgElementTypeIdent identifier '=' ';' {
 		protolex.(*protoLex).ErrExtendedSyntax("missing field number after '='")

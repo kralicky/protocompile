@@ -120,9 +120,11 @@ func (f *FileInfo) AddToken(offset, length int) Token {
 		}
 	}
 
-	if len(f.items) > len(f.data) {
+	if len(f.items) > len(f.data)+1 {
 		// sanity check: if we have more tokens than bytes in the file, something
 		// has gone horribly wrong
+		fmt.Println(string(f.data))
+		fmt.Println(f.items)
 		panic("bug: more tokens have been created than could possibly exist in the file")
 	}
 

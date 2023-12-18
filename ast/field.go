@@ -142,6 +142,9 @@ func (n *FieldNode) FieldName() Node {
 }
 
 func (n *FieldNode) FieldType() Node {
+	if n.FldType == nil {
+		return NoSourceNode{}
+	}
 	return n.FldType
 }
 
@@ -209,15 +212,15 @@ func (f *FieldLabel) IsPresent() bool {
 //   - opts: Optional set of field options.
 //   - semicolon: The token corresponding to the ";" rune that ends the declaration.
 func NewIncompleteFieldNode(label *KeywordNode, fieldType IdentValueNode, name *IdentNode, equals *RuneNode, tag *UintLiteralNode, opts *CompactOptionsNode, semicolon *RuneNode) *FieldNode {
-	if fieldType == nil {
-		panic("fieldType is nil")
-	}
 	if semicolon == nil {
 		panic("semicolon is nil")
 	}
 	var children []Node
 	if label != nil {
 		children = append(children, label)
+	}
+	if fieldType == nil {
+		fieldType = NewIncompleteIdentNode(fieldType, label.Token())
 	}
 	children = append(children, fieldType)
 	if name != nil {

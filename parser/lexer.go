@@ -926,8 +926,6 @@ func (l *protoLex) shouldInsertVirtualSemicolon(prevSym ast.TerminalNode) bool {
 		return false
 	}
 	switch prev := prevSym.(type) {
-	case *ast.KeywordNode:
-		return false
 	case *ast.RuneNode:
 		switch prev.Rune {
 		case ']', '}', '>':
@@ -943,12 +941,18 @@ func (l *protoLex) shouldInsertVirtualSemicolon(prevSym ast.TerminalNode) bool {
 		// an integer literal
 		return !l.matchNextRune('[')
 	case *ast.IdentNode:
-		// only if the ident is not followed immediately by a dot, equals, or
-		// left bracket
 		if _, ok := keywords[prev.Val]; ok {
 			// keywords are parsed as idents here
-			return false
+			switch prev.Val {
+			case "optional", "repeated":
+				// matches the production `fieldCardinality ';'` in messageFieldDecl
+				return true
+			default:
+				return false
+			}
 		} else {
+			// only if the ident is not followed immediately by a dot, equals, or
+			// left bracket.
 			return !l.matchNextRune('.', '=', '{', '<')
 		}
 	case *ast.FloatLiteralNode, *ast.SpecialFloatLiteralNode:

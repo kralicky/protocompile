@@ -200,6 +200,8 @@ func Visit(n Node, v Visitor) error {
 		return v.VisitRPCTypeNode(n)
 	case *IdentNode:
 		return v.VisitIdentNode(n)
+	case *IncompleteIdentNode:
+		return v.VisitIncompleteIdentNode(n)
 	case *CompoundIdentNode:
 		return v.VisitCompoundIdentNode(n)
 	case *StringLiteralNode:
@@ -359,6 +361,8 @@ type Visitor interface {
 	VisitRPCTypeNode(*RPCTypeNode) error
 	// VisitIdentNode is invoked when visiting an *IdentNode in the AST.
 	VisitIdentNode(*IdentNode) error
+	// VisitIdentNode is invoked when visiting an *IncompleteIdentNode in the AST.
+	VisitIncompleteIdentNode(*IncompleteIdentNode) error
 	// VisitCompoundIdentNode is invoked when visiting a *CompoundIdentNode in the AST.
 	VisitCompoundIdentNode(*CompoundIdentNode) error
 	// VisitStringLiteralNode is invoked when visiting a *StringLiteralNode in the AST.
@@ -499,6 +503,10 @@ func (n NoOpVisitor) VisitIdentNode(_ *IdentNode) error {
 	return nil
 }
 
+func (n NoOpVisitor) VisitIncompleteIdentNode(_ *IncompleteIdentNode) error {
+	return nil
+}
+
 func (n NoOpVisitor) VisitCompoundIdentNode(_ *CompoundIdentNode) error {
 	return nil
 }
@@ -611,6 +619,7 @@ type SimpleVisitor struct {
 	DoVisitRPCNode                   func(*RPCNode) error
 	DoVisitRPCTypeNode               func(*RPCTypeNode) error
 	DoVisitIdentNode                 func(*IdentNode) error
+	DoVisitIncompleteIdentNode       func(*IncompleteIdentNode) error
 	DoVisitCompoundIdentNode         func(*CompoundIdentNode) error
 	DoVisitStringLiteralNode         func(*StringLiteralNode) error
 	DoVisitCompoundStringLiteralNode func(*CompoundStringLiteralNode) error
@@ -874,6 +883,13 @@ func (v *SimpleVisitor) VisitRPCTypeNode(node *RPCTypeNode) error {
 func (v *SimpleVisitor) VisitIdentNode(node *IdentNode) error {
 	if v.DoVisitIdentNode != nil {
 		return v.DoVisitIdentNode(node)
+	}
+	return v.visitInterface(node)
+}
+
+func (v *SimpleVisitor) VisitIncompleteIdentNode(node *IncompleteIdentNode) error {
+	if v.DoVisitIncompleteIdentNode != nil {
+		return v.DoVisitIncompleteIdentNode(node)
 	}
 	return v.visitInterface(node)
 }
