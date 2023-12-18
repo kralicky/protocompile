@@ -43,14 +43,14 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	"github.com/bufbuild/protocompile"
-	"github.com/bufbuild/protocompile/ast"
-	"github.com/bufbuild/protocompile/internal/protoc"
-	"github.com/bufbuild/protocompile/linker"
-	"github.com/bufbuild/protocompile/parser"
-	"github.com/bufbuild/protocompile/parser/imports"
-	"github.com/bufbuild/protocompile/protoutil"
-	"github.com/bufbuild/protocompile/reporter"
+	"github.com/kralicky/protocompile"
+	"github.com/kralicky/protocompile/ast"
+	"github.com/kralicky/protocompile/internal/protoc"
+	"github.com/kralicky/protocompile/linker"
+	"github.com/kralicky/protocompile/parser"
+	"github.com/kralicky/protocompile/parser/imports"
+	"github.com/kralicky/protocompile/protoutil"
+	"github.com/kralicky/protocompile/reporter"
 )
 
 const (

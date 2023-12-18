@@ -25,9 +25,9 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
-	"github.com/bufbuild/protocompile/ast"
-	"github.com/bufbuild/protocompile/parser"
-	"github.com/bufbuild/protocompile/reporter"
+	"github.com/kralicky/protocompile/ast"
+	"github.com/kralicky/protocompile/parser"
+	"github.com/kralicky/protocompile/reporter"
 )
 
 func TestSymbolsPackages(t *testing.T) {

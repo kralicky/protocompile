@@ -26,8 +26,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bufbuild/protocompile/ast"
-	"github.com/bufbuild/protocompile/reporter"
+	"github.com/kralicky/protocompile/ast"
+	"github.com/kralicky/protocompile/reporter"
 )
 
 func TestErrorReporting(t *testing.T) {

@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/bufbuild/protocompile/walk"
+	"github.com/kralicky/protocompile/walk"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"

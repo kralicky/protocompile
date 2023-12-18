@@ -14,7 +14,7 @@
 
 package parser
 
-import "github.com/bufbuild/protocompile/ast"
+import "github.com/kralicky/protocompile/ast"
 
 // the types below are accumulator types, just used in intermediate productions
 // to accumulate slices that will get stored in AST nodes

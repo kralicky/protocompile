@@ -28,11 +28,11 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
 
-	"github.com/bufbuild/protocompile/ast"
-	"github.com/bufbuild/protocompile/internal"
-	"github.com/bufbuild/protocompile/parser"
-	"github.com/bufbuild/protocompile/protoutil"
-	"github.com/bufbuild/protocompile/sourceinfo"
+	"github.com/kralicky/protocompile/ast"
+	"github.com/kralicky/protocompile/internal"
+	"github.com/kralicky/protocompile/parser"
+	"github.com/kralicky/protocompile/protoutil"
+	"github.com/kralicky/protocompile/sourceinfo"
 	art "github.com/plar/go-adaptive-radix-tree"
 )
 

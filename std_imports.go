@@ -15,7 +15,7 @@
 package protocompile
 
 import (
-	"github.com/bufbuild/protocompile/internal"
+	"github.com/kralicky/protocompile/internal"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"

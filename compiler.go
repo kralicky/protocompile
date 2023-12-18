@@ -29,12 +29,12 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	"github.com/bufbuild/protocompile/ast"
-	"github.com/bufbuild/protocompile/linker"
-	"github.com/bufbuild/protocompile/options"
-	"github.com/bufbuild/protocompile/parser"
-	"github.com/bufbuild/protocompile/reporter"
-	"github.com/bufbuild/protocompile/sourceinfo"
+	"github.com/kralicky/protocompile/ast"
+	"github.com/kralicky/protocompile/linker"
+	"github.com/kralicky/protocompile/options"
+	"github.com/kralicky/protocompile/parser"
+	"github.com/kralicky/protocompile/reporter"
+	"github.com/kralicky/protocompile/sourceinfo"
 )
 
 // Compiler handles compilation tasks, to turn protobuf source files, or other

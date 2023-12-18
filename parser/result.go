@@ -25,9 +25,9 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	"github.com/bufbuild/protocompile/ast"
-	"github.com/bufbuild/protocompile/internal"
-	"github.com/bufbuild/protocompile/reporter"
+	"github.com/kralicky/protocompile/ast"
+	"github.com/kralicky/protocompile/internal"
+	"github.com/kralicky/protocompile/reporter"
 )
 
 var supportedEditions = map[string]descriptorpb.Edition{

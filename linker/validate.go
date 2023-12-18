@@ -23,9 +23,9 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	"github.com/bufbuild/protocompile/internal"
-	"github.com/bufbuild/protocompile/reporter"
-	"github.com/bufbuild/protocompile/walk"
+	"github.com/kralicky/protocompile/internal"
+	"github.com/kralicky/protocompile/reporter"
+	"github.com/kralicky/protocompile/walk"
 )
 
 // ValidateOptions runs some validation checks on the result that can only

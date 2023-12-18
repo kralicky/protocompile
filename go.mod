@@ -1,4 +1,4 @@
-module github.com/bufbuild/protocompile
+module github.com/kralicky/protocompile
 
 go 1.21
 

@@ -24,9 +24,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bufbuild/protocompile/internal"
-	"github.com/bufbuild/protocompile/internal/protoc"
-	"github.com/bufbuild/protocompile/reporter"
+	"github.com/kralicky/protocompile/internal"
+	"github.com/kralicky/protocompile/internal/protoc"
+	"github.com/kralicky/protocompile/reporter"
 )
 
 func TestMain(m *testing.M) {

@@ -8,7 +8,7 @@ import __yyfmt__ "fmt"
 import (
 	"math"
 
-	"github.com/bufbuild/protocompile/ast"
+	"github.com/kralicky/protocompile/ast"
 )
 
 type protoSymType struct {
