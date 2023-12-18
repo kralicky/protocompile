@@ -1,37 +1,37 @@
-syntax = "proto2" // lexer-inserted semicolon ->
+syntax = "proto2" // virtual semicolon ->
 
-package extsyntax // lexer-inserted semicolon ->
+package extsyntax // virtual semicolon ->
 
-import "google/protobuf/descriptor.proto" // lexer-inserted semicolon ->
+import "google/protobuf/descriptor.proto" // virtual semicolon ->
 
 extend google.protobuf.ExtensionRangeOptions {
-  optional string   label = 1000 // lexer-inserted semicolon ->
-  optional int32    test  = 1001 // lexer-inserted semicolon ->
-  optional GCCStyle msg   = 1002 // lexer-inserted semicolon ->
-  optional List     list  = 1003 // lexer-inserted semicolon ->
+  optional string   label = 1000 // virtual semicolon ->
+  optional int32    test  = 1001 // virtual semicolon ->
+  optional GCCStyle msg   = 1002 // virtual semicolon ->
+  optional List     list  = 1003 // virtual semicolon ->
 }
 
 message // foo
 /* template<typename _Tp */ GCCStyle // bar
 { // baz
-    enum 
-  Foo 
+    enum
+  Foo
     {
-        Zero = 0 // lexer-inserted semicolon ->
-        One = 1 // lexer-inserted semicolon ->
+        Zero = 0 // virtual semicolon ->
+        One = 1 // virtual semicolon ->
     } // <- optional semicolon
 
-  optional int32 a = 1 
+  optional int32 a = 1
     [
-      default 
-        = 
+      default
+        =
           2,
-            ] // lexer-inserted semicolon ->
-  optional 
-    int32 
-    b 
+            ] // virtual semicolon ->
+  optional
+    int32
+    b
       =
-      2 
+      2
     [
       json_name
         =
@@ -40,54 +40,57 @@ message // foo
       =
 true
     ,
-        ] // lexer-inserted semicolon ->
+        ] // virtual semicolon ->
 
-  optional 
-int32 c = 3 [] // lexer-inserted semicolon ->
-    optional 
+  optional
+int32 c = 3 [] // virtual semicolon ->
+    optional
 int32 d = 4 [
     /* test */
-  ] // lexer-inserted semicolon ->
+  ] // virtual semicolon ->
 
-  extensions 
-  249, 
-  300 /*bar*/    to /*foo*/ 350, 
-    500 to 550, 
-20000 to max 
+  extensions
+  249,
+  300 /*bar*/    to /*foo*/ 350,
+    500 to 550,
+20000 to max
 [
     (label)
   = "jazz",
 
-    (msg) = 
+    (msg) =
                     {
                       a: 1
                       b: 2
                     },
 
-        (test) 
-      = 
+        (test)
+      =
   123, // <- trailing comma
-] // lexer-inserted semicolon ->
+] // virtual semicolon ->
 
-  reserved 
-    5 to 10, 
-      12 to 15, 
-        18 // lexer-inserted semicolon ->
-      
+  reserved
+    5 to 10,
+      12 to 15,
+        18 // virtual semicolon ->
 
-  reserved 
-    "A", 
-  "B", 
+
+  reserved
+    "A",
+  "B",
 "C", ;// <- trailing comma
 }
 
 enum CommaDelimitedEnums {
-  Semicolon = 1 // lexer-inserted semicolon ->
-  Comma     = 2 // lexer-inserted semicolon ->
+  Semicolon = 1 // virtual semicolon ->
+  Comma     = 2 // virtual semicolon ->
   reserved 5 to 10, 12 to 15, 18, ; // <- trailing comma
-  reserved "C", "B", "A" // lexer-inserted semicolon ->
+  reserved "C", "B", "A" // virtual semicolon ->
 }
 
 message List {
-  repeated int32 items = 1 // lexer-inserted semicolon ->
+  repeated int32 items = 1 // virtual semicolon ->
 }
+
+
+message Compact1{}message Compact2{message A{}message B{message C{oneof Foo{int32 a = 1; int32 b = 2 [default=1]}}}}

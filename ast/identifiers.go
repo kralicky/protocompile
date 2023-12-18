@@ -56,6 +56,10 @@ func (n *IdentNode) Value() interface{} {
 }
 
 func (n *IdentNode) AsIdentifier() Identifier {
+	if n == nil {
+		// extended syntax: fields with missing names
+		return Identifier("")
+	}
 	return Identifier(n.Val)
 }
 

@@ -98,6 +98,10 @@ func (n *compositeNode) End() Token {
 type RuneNode struct {
 	terminalNode
 	Rune rune
+
+	// Virtual is true if this rune is not actually present in the source file,
+	// but is instead injected by the lexer to satisfy certain grammar rules.
+	Virtual bool
 }
 
 // NewRuneNode creates a new *RuneNode with the given properties.
@@ -105,6 +109,14 @@ func NewRuneNode(r rune, tok Token) *RuneNode {
 	return &RuneNode{
 		terminalNode: tok.asTerminalNode(),
 		Rune:         r,
+	}
+}
+
+func NewVirtualRuneNode(r rune, tok Token) *RuneNode {
+	return &RuneNode{
+		terminalNode: tok.asTerminalNode(),
+		Rune:         r,
+		Virtual:      true,
 	}
 }
 

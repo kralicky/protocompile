@@ -16,6 +16,7 @@ package ast
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 )
 
@@ -50,6 +51,11 @@ type commentInfo struct {
 	index int
 	// the index of the token to which this comment is attributed.
 	attributedToIndex int
+	// if > 0, the comment is attributed to the token in attributedToIndex for
+	// display and interaction purposes, but only because the token it should be
+	// attributed to is a virtual token - this has implications when formatting
+	// extended syntax virtual tokens.
+	virtualIndex int
 }
 
 type itemSpan struct {
@@ -114,6 +120,12 @@ func (f *FileInfo) AddToken(offset, length int) Token {
 		}
 	}
 
+	if len(f.items) > len(f.data) {
+		// sanity check: if we have more tokens than bytes in the file, something
+		// has gone horribly wrong
+		panic("bug: more tokens have been created than could possibly exist in the file")
+	}
+
 	f.items = append(f.items, itemSpan{offset: offset, length: length})
 	return Token(tokenID)
 }
@@ -124,7 +136,7 @@ func (f *FileInfo) AddToken(offset, length int) Token {
 // file with which the comment is associated. If comment's offset is before that
 // of attributedTo, then this is a leading comment. Otherwise, it is a trailing
 // comment.
-func (f *FileInfo) AddComment(comment, attributedTo Token) Comment {
+func (f *FileInfo) AddComment(comment, attributedTo Token) {
 	if len(f.comments) > 0 {
 		lastComment := f.comments[len(f.comments)-1]
 		if int(comment) <= lastComment.index {
@@ -135,11 +147,29 @@ func (f *FileInfo) AddComment(comment, attributedTo Token) Comment {
 		}
 	}
 
-	f.comments = append(f.comments, commentInfo{index: int(comment), attributedToIndex: int(attributedTo)})
-	return Comment{
-		fileInfo: f,
-		index:    len(f.comments) - 1,
+	f.comments = append(f.comments, commentInfo{
+		index:             int(comment),
+		attributedToIndex: int(attributedTo),
+		virtualIndex:      -1,
+	})
+}
+
+func (f *FileInfo) AddVirtualComment(comment Token, attributedTo Token, virtualToken Token) {
+	if len(f.comments) > 0 {
+		lastComment := f.comments[len(f.comments)-1]
+		if int(comment) <= lastComment.index {
+			panic(fmt.Sprintf("invalid index: %d is not greater than previously observed comment index %d", comment, lastComment.index))
+		}
+		if int(attributedTo) < lastComment.attributedToIndex {
+			panic(fmt.Sprintf("invalid attribution: %d is not greater than previously observed comment attribution index %d", attributedTo, lastComment.attributedToIndex))
+		}
 	}
+
+	f.comments = append(f.comments, commentInfo{
+		index:             int(comment),
+		attributedToIndex: int(attributedTo),
+		virtualIndex:      int(virtualToken),
+	})
 }
 
 // NodeInfo returns details from the original source for the given AST node.
@@ -578,29 +608,35 @@ func (n NodeInfo) TrailingComments() Comments {
 
 	start := sort.Search(len(n.fileInfo.comments), func(i int) bool {
 		comment := n.fileInfo.comments[i]
-		return comment.attributedToIndex >= n.endIndex &&
-			comment.index > n.endIndex
+		return (comment.virtualIndex >= n.endIndex) ||
+			(comment.attributedToIndex >= n.endIndex && comment.index > n.endIndex)
 	})
 
-	if start == len(n.fileInfo.comments) || n.fileInfo.comments[start].attributedToIndex != n.endIndex {
-		// no comments associated with this token
-		return EmptyComments
-	}
-
 	numComments := 0
+	var virtual []int
 	for i := start; i < len(n.fileInfo.comments); i++ {
 		comment := n.fileInfo.comments[i]
 		if comment.attributedToIndex == n.endIndex {
+			if comment.virtualIndex > 0 {
+				virtual = append(virtual, numComments)
+			}
+			numComments++
+		} else if comment.virtualIndex == n.endIndex {
 			numComments++
 		} else {
 			break
 		}
 	}
 
+	if numComments == 0 {
+		return EmptyComments
+	}
+
 	return Comments{
 		fileInfo: n.fileInfo,
 		first:    start,
 		num:      numComments,
+		virtual:  virtual,
 	}
 }
 
@@ -639,6 +675,7 @@ func (pos SourcePos) String() string {
 type Comments struct {
 	fileInfo   *FileInfo
 	first, num int
+	virtual    []int // indices of virtual comments
 }
 
 // EmptyComments is an empty set of comments.
@@ -653,9 +690,14 @@ func (c Comments) Index(i int) Comment {
 	if i < 0 || i >= c.num {
 		panic(fmt.Sprintf("index %d out of range (len = %d)", i, c.num))
 	}
+	virtual := false
+	if len(c.virtual) > 0 {
+		virtual = slices.Contains(c.virtual, i)
+	}
 	return Comment{
 		fileInfo: c.fileInfo,
 		index:    c.first + i,
+		virtual:  virtual,
 	}
 }
 
@@ -670,6 +712,7 @@ func (c Comments) Index(i int) Comment {
 type Comment struct {
 	fileInfo *FileInfo
 	index    int
+	virtual  bool
 }
 
 var _ ItemInfo = Comment{}
@@ -693,6 +736,10 @@ func (c Comment) Start() SourcePos {
 func (c Comment) End() SourcePos {
 	span := c.fileInfo.items[c.AsItem()]
 	return c.fileInfo.SourcePos(span.offset + span.length - 1)
+}
+
+func (c Comment) IsVirtual() bool {
+	return c.virtual
 }
 
 func (c Comment) LeadingWhitespace() string {

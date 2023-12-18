@@ -344,6 +344,9 @@ func (r *result) addExtensions(ext *ast.ExtendNode, flds *[]*descriptorpb.FieldD
 	for _, decl := range ext.Decls {
 		switch decl := decl.(type) {
 		case *ast.FieldNode:
+			if decl.IsIncomplete() {
+				continue
+			}
 			count++
 			// use higher limit since we don't know yet whether extendee is messageset wire format
 			fd := r.asFieldDescriptor(decl, internal.MaxTag, syntax, handler)
@@ -680,6 +683,9 @@ func (r *result) addMessageBody(msgd *descriptorpb.DescriptorProto, body *ast.Me
 		case *ast.ExtensionRangeNode:
 			msgd.ExtensionRange = append(msgd.ExtensionRange, r.asExtensionRanges(decl, maxTag, handler)...)
 		case *ast.FieldNode:
+			if decl.IsIncomplete() {
+				continue
+			}
 			fd := r.asFieldDescriptor(decl, maxTag, syntax, handler)
 			msgd.Field = append(msgd.Field, fd)
 		case *ast.MapFieldNode:
@@ -704,6 +710,9 @@ func (r *result) addMessageBody(msgd *descriptorpb.DescriptorProto, body *ast.Me
 					}
 					ood.Options.UninterpretedOption = append(ood.Options.UninterpretedOption, r.asUninterpretedOption(oodecl))
 				case *ast.FieldNode:
+					if oodecl.IsIncomplete() {
+						continue
+					}
 					fd := r.asFieldDescriptor(oodecl, maxTag, syntax, handler)
 					fd.OneofIndex = proto.Int32(int32(oodIndex))
 					msgd.Field = append(msgd.Field, fd)

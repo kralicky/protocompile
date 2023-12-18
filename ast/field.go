@@ -135,6 +135,9 @@ func (n *FieldNode) FieldLabel() Node {
 }
 
 func (n *FieldNode) FieldName() Node {
+	if n.Name == nil {
+		return NoSourceNode{}
+	}
 	return n.Name
 }
 
@@ -143,6 +146,9 @@ func (n *FieldNode) FieldType() Node {
 }
 
 func (n *FieldNode) FieldTag() Node {
+	if n.Tag == nil {
+		return NoSourceNode{}
+	}
 	return n.Tag
 }
 
@@ -159,6 +165,10 @@ func (n *FieldNode) GetGroupKeyword() Node {
 
 func (n *FieldNode) GetOptions() *CompactOptionsNode {
 	return n.Options
+}
+
+func (n *FieldNode) IsIncomplete() bool {
+	return n.Tag == nil || n.Equals == nil || n.Name == nil
 }
 
 // FieldLabel represents the label of a field, which indicates its cardinality
@@ -186,6 +196,56 @@ func newFieldLabel(lbl *KeywordNode) FieldLabel {
 // and false if it was absent.
 func (f *FieldLabel) IsPresent() bool {
 	return f.KeywordNode != nil
+}
+
+// NewPartialFieldNode creates a new *PartialFieldNode. The label and options arguments may be
+// nil but the others must be non-nil.
+//   - label: The token corresponding to the label keyword if present ("optional",
+//     "required", or "repeated").
+//   - fieldType: The token corresponding to the field's type.
+//   - name: The token corresponding to the field's name.
+//   - equals: The token corresponding to the '=' rune after the name.
+//   - tag: The token corresponding to the field's tag number.
+//   - opts: Optional set of field options.
+//   - semicolon: The token corresponding to the ";" rune that ends the declaration.
+func NewIncompleteFieldNode(label *KeywordNode, fieldType IdentValueNode, name *IdentNode, equals *RuneNode, tag *UintLiteralNode, opts *CompactOptionsNode, semicolon *RuneNode) *FieldNode {
+	if fieldType == nil {
+		panic("fieldType is nil")
+	}
+	if semicolon == nil {
+		panic("semicolon is nil")
+	}
+	var children []Node
+	if label != nil {
+		children = append(children, label)
+	}
+	children = append(children, fieldType)
+	if name != nil {
+		children = append(children, name)
+	}
+	if equals != nil {
+		children = append(children, equals)
+	}
+	if tag != nil {
+		children = append(children, tag)
+	}
+	if opts != nil {
+		children = append(children, opts)
+	}
+	children = append(children, semicolon)
+
+	return &FieldNode{
+		compositeNode: compositeNode{
+			children: children,
+		},
+		Label:     newFieldLabel(label),
+		FldType:   fieldType,
+		Name:      name,
+		Equals:    equals,
+		Tag:       tag,
+		Options:   opts,
+		Semicolon: semicolon,
+	}
 }
 
 // GroupNode represents a group declaration, which doubles as a field and inline

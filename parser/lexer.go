@@ -122,49 +122,65 @@ func newLexer(in io.Reader, filename string, handler *reporter.Handler) (*protoL
 }
 
 var keywords = map[string]int{
-	"syntax":     _SYNTAX,
-	"edition":    _EDITION,
-	"import":     _IMPORT,
-	"weak":       _WEAK,
-	"public":     _PUBLIC,
-	"package":    _PACKAGE,
-	"option":     _OPTION,
-	"true":       _TRUE,
-	"false":      _FALSE,
-	"inf":        _INF,
-	"nan":        _NAN,
-	"repeated":   _REPEATED,
-	"optional":   _OPTIONAL,
-	"required":   _REQUIRED,
+	"bytes":      _BYTES,
+	"bool":       _BOOL,
 	"double":     _DOUBLE,
-	"float":      _FLOAT,
-	"int32":      _INT32,
-	"int64":      _INT64,
-	"uint32":     _UINT32,
-	"uint64":     _UINT64,
-	"sint32":     _SINT32,
-	"sint64":     _SINT64,
+	"edition":    _EDITION,
+	"enum":       _ENUM,
+	"extend":     _EXTEND,
+	"extensions": _EXTENSIONS,
+	"false":      _FALSE,
 	"fixed32":    _FIXED32,
 	"fixed64":    _FIXED64,
+	"float":      _FLOAT,
+	"group":      _GROUP,
+	"import":     _IMPORT,
+	"inf":        _INF,
+	"int32":      _INT32,
+	"int64":      _INT64,
+	"map":        _MAP,
+	"max":        _MAX,
+	"message":    _MESSAGE,
+	"nan":        _NAN,
+	"oneof":      _ONEOF,
+	"optional":   _OPTIONAL,
+	"option":     _OPTION,
+	"package":    _PACKAGE,
+	"public":     _PUBLIC,
+	"repeated":   _REPEATED,
+	"required":   _REQUIRED,
+	"reserved":   _RESERVED,
+	"returns":    _RETURNS,
+	"rpc":        _RPC,
+	"service":    _SERVICE,
 	"sfixed32":   _SFIXED32,
 	"sfixed64":   _SFIXED64,
-	"bool":       _BOOL,
-	"string":     _STRING,
-	"bytes":      _BYTES,
-	"group":      _GROUP,
-	"oneof":      _ONEOF,
-	"map":        _MAP,
-	"extensions": _EXTENSIONS,
-	"to":         _TO,
-	"max":        _MAX,
-	"reserved":   _RESERVED,
-	"enum":       _ENUM,
-	"message":    _MESSAGE,
-	"extend":     _EXTEND,
-	"service":    _SERVICE,
-	"rpc":        _RPC,
+	"sint32":     _SINT32,
+	"sint64":     _SINT64,
 	"stream":     _STREAM,
-	"returns":    _RETURNS,
+	"string":     _STRING,
+	"syntax":     _SYNTAX,
+	"to":         _TO,
+	"true":       _TRUE,
+	"uint32":     _UINT32,
+	"uint64":     _UINT64,
+	"weak":       _WEAK,
+}
+
+// a list of runes that can start a line
+var topLevelKeywordLineStartingRunes = map[rune]struct{}{
+	'b': {}, // bytes, bool
+	'd': {}, // double
+	'e': {}, // enum, extend, edition, extensions
+	'f': {}, // fixed32, fixed64, float
+	'g': {}, // group
+	'i': {}, // import
+	'm': {}, // message, map
+	'o': {}, // option, optional, oneof
+	'p': {}, // package
+	'r': {}, // rpc, repeated, 'reserved', 'required'
+	's': {}, // syntax, service
+	'u': {}, // uint32, uint64,
 }
 
 func (l *protoLex) maybeNewLine(r rune) {
@@ -195,7 +211,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 			// insert a semicolon if the last token was the '}' rune (i.e. end of message)
 			if l.shouldInsertVirtualSemicolon(l.prevSym) {
 				// note: nothing to unread
-				l.setRune(lval, ';')
+				l.setVirtualRune(lval, ';')
 				return ';'
 			}
 
@@ -215,14 +231,39 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 			// skip whitespace
 			continue
 		}
-		if c == '\n' {
+
+		// check if we need to insert a virtual semicolon at the end of the line
+		insertVirtualSemicolon := func() int {
+			l.input.unreadRune(1)
+			l.setVirtualRune(lval, ';')
+			return ';'
+		}
+		switch c {
+		case '}':
+			// handle closing brackets that are not immediately preceded by a semicolon
+			if prev, ok := l.prevSym.(*ast.RuneNode); ok && prev.Rune == ';' {
+				break
+			}
 			if l.shouldInsertVirtualSemicolon(l.prevSym) {
-				l.input.unreadRune(1)
-				l.setRune(lval, ';')
-				return ';'
+				return insertVirtualSemicolon()
+			}
+		case '\n':
+			if l.shouldInsertVirtualSemicolon(l.prevSym) {
+				return insertVirtualSemicolon()
 			}
 			l.info.AddLine(l.input.offset())
 			continue
+		case 'b', 'd', 'e', 'f', 'g', 'i', 'm', 'o', 'p', 'r', 's', 'u':
+			switch prev := l.prevSym.(type) {
+			case *ast.RuneNode:
+				switch prev.Rune {
+				case '}':
+					if l.shouldInsertVirtualSemicolon(l.prevSym) {
+						return insertVirtualSemicolon()
+					}
+				}
+			}
+		case ';':
 		}
 
 		if c == '.' {
@@ -431,8 +472,15 @@ func (l *protoLex) setPrevAndAddComments(n ast.TerminalNode) {
 	for _, c := range prevTrailingComments {
 		l.info.AddComment(c, l.prevSym.Token())
 	}
-	for _, c := range comments {
-		l.info.AddComment(c, n.Token())
+
+	if rn, ok := n.(*ast.RuneNode); ok && rn.Virtual {
+		for _, c := range comments {
+			l.info.AddVirtualComment(c, l.prevSym.Token(), n.Token())
+		}
+	} else {
+		for _, c := range comments {
+			l.info.AddComment(c, n.Token())
+		}
 	}
 
 	l.prevSym = n
@@ -460,6 +508,11 @@ func (l *protoLex) setFloat(lval *protoSymType, val float64) {
 
 func (l *protoLex) setRune(lval *protoSymType, val rune) {
 	lval.b = ast.NewRuneNode(val, l.newToken())
+	l.setPrevAndAddComments(lval.b)
+}
+
+func (l *protoLex) setVirtualRune(lval *protoSymType, val rune) {
+	lval.b = ast.NewVirtualRuneNode(val, l.newToken())
 	l.setPrevAndAddComments(lval.b)
 }
 
@@ -855,6 +908,10 @@ func (l *protoLex) Error(s string) {
 	_, _ = l.addSourceError(NewParseError(errors.New(s)))
 }
 
+func (l *protoLex) ErrExtendedSyntax(s string) {
+	_, _ = l.addSourceError(NewExtendedSyntaxError(errors.New(s)))
+}
+
 // TODO: Accept both a start and end offset, and use that to create a span.
 func (l *protoLex) errWithCurrentPos(err error, offset int) reporter.ErrorWithPos {
 	if ewp, ok := err.(reporter.ErrorWithPos); ok {
@@ -873,8 +930,10 @@ func (l *protoLex) shouldInsertVirtualSemicolon(prevSym ast.TerminalNode) bool {
 		return false
 	case *ast.RuneNode:
 		switch prev.Rune {
-		case ']', '}':
+		case ']', '}', '>':
 			return true
+			// case '=':
+			// 	return l.matchNextRune('[')
 		}
 	case *ast.StringLiteralNode:
 		// handle compound string literals
@@ -890,7 +949,7 @@ func (l *protoLex) shouldInsertVirtualSemicolon(prevSym ast.TerminalNode) bool {
 			// keywords are parsed as idents here
 			return false
 		} else {
-			return !l.matchNextRune('.', '=', '{')
+			return !l.matchNextRune('.', '=', '{', '<')
 		}
 	case *ast.FloatLiteralNode, *ast.SpecialFloatLiteralNode:
 		// these could only be values in a field literal, which don't need

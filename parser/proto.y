@@ -126,7 +126,7 @@ import (
 %type <mtdElement>   methodElement
 %type <mtdElements>  methodElements methodBody
 %type <mtdMsgType>   methodMessageType
-%type <b>            commaOrSemicolon optionalTrailingComma
+%type <b>            nonVirtualSemicolonOrInvalidComma optionalTrailingComma nonVirtualSemicolon
 
 // same for terminals
 %token <s>   _STRING_LIT
@@ -218,25 +218,25 @@ fileElement : importDecl {
 		$$ = nil
 	}
 
-syntaxDecl : _SYNTAX '=' stringLit ';' {
+syntaxDecl : _SYNTAX '=' stringLit nonVirtualSemicolon {
 		$$ = ast.NewSyntaxNode($1.ToKeyword(), $2, $3, $4)
 	}
 
-editionDecl : _EDITION '=' stringLit ';' {
+editionDecl : _EDITION '=' stringLit nonVirtualSemicolon {
 		$$ = ast.NewEditionNode($1.ToKeyword(), $2, $3, $4)
 	}
 
-importDecl : _IMPORT stringLit ';' {
+importDecl : _IMPORT stringLit nonVirtualSemicolon {
 		$$ = ast.NewImportNode($1.ToKeyword(), nil, nil, $2, $3)
 	}
-	| _IMPORT _WEAK stringLit ';' {
+	| _IMPORT _WEAK stringLit nonVirtualSemicolon {
 		$$ = ast.NewImportNode($1.ToKeyword(), nil, $2.ToKeyword(), $3, $4)
 	}
-	| _IMPORT _PUBLIC stringLit ';' {
+	| _IMPORT _PUBLIC stringLit nonVirtualSemicolon {
 		$$ = ast.NewImportNode($1.ToKeyword(), $2.ToKeyword(), nil, $3, $4)
 	}
 
-packageDecl : _PACKAGE qualifiedIdentifier ';' {
+packageDecl : _PACKAGE qualifiedIdentifier nonVirtualSemicolon {
 		$$ = ast.NewPackageNode($1.ToKeyword(), $2.toIdentValueNode(nil), $3)
 	}
 
@@ -299,7 +299,7 @@ mtdElementIdent : mtdElementName {
 	}
 
 optionDecl
-	: _OPTION optionName '=' optionValue ';' {
+	: _OPTION optionName '=' optionValue nonVirtualSemicolon {
 		optName := ast.NewOptionNameNode($2.refs, $2.dots)
 		$$ = ast.NewOptionNode($1.ToKeyword(), optName, $3, $4, $5)
 	}
@@ -635,11 +635,17 @@ compactOptions
 		if $3 != nil {
 			$2.commas = append($2.commas, $3)
 		}
+		if len($2.options) == 0 {
+			protolex.(*protoLex).ErrExtendedSyntax("compact options list cannot be empty")
+		}
 		$$ = ast.NewCompactOptionsNode($1, $2.options, $2.commas, $4)
 	}
 	| '[' compactOptionDecls optionalTrailingComma ';' ']' {
 		if $3 != nil {
 			$2.commas = append($2.commas, $3)
+		}
+		if len($2.options) == 0 {
+			protolex.(*protoLex).ErrExtendedSyntax("compact options list cannot be empty")
 		}
 		$$ = ast.NewCompactOptionsNode($1, $2.options, $2.commas, $5)
 	}
@@ -719,10 +725,10 @@ oneofElement : optionDecl {
 		$$ = nil
 	}
 
-oneofFieldDecl : oneofElementTypeIdent identifier '=' _INT_LIT ';' {
+oneofFieldDecl : oneofElementTypeIdent identifier '=' _INT_LIT nonVirtualSemicolon {
 		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, nil, $5)
 	}
-	| oneofElementTypeIdent identifier '=' _INT_LIT compactOptions ';' {
+	| oneofElementTypeIdent identifier '=' _INT_LIT compactOptions nonVirtualSemicolon {
 		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, $5, $6)
 	}
 
@@ -733,10 +739,10 @@ oneofGroupDecl : _GROUP identifier '=' _INT_LIT '{' messageBody '}' ';' {
 		$$ = ast.NewGroupNode(nil, $1.ToKeyword(), $2, $3, $4, $5, $6, $7, $8)
 	}
 
-mapFieldDecl : mapType identifier '=' _INT_LIT ';' {
+mapFieldDecl : mapType identifier '=' _INT_LIT nonVirtualSemicolon {
 		$$ = ast.NewMapFieldNode($1, $2, $3, $4, nil, $5)
 	}
-	| mapType identifier '=' _INT_LIT compactOptions ';' {
+	| mapType identifier '=' _INT_LIT compactOptions nonVirtualSemicolon {
 		$$ = ast.NewMapFieldNode($1, $2, $3, $4, $5, $6)
 	}
 
@@ -757,13 +763,13 @@ mapKeyType : _INT32
 	| _BOOL
 	| _STRING
 
-extensionRangeDecl : _EXTENSIONS tagRanges optionalTrailingComma ';' {
+extensionRangeDecl : _EXTENSIONS tagRanges optionalTrailingComma nonVirtualSemicolon {
 		if $3 != nil {
 			$2.commas = append($2.commas, $3)
 		}
 		$$ = ast.NewExtensionRangeNode($1.ToKeyword(), $2.ranges, $2.commas, nil, $4)
 	}
-	| _EXTENSIONS tagRanges optionalTrailingComma compactOptions ';' {
+	| _EXTENSIONS tagRanges optionalTrailingComma compactOptions nonVirtualSemicolon {
 		if $3 != nil {
 			$2.commas = append($2.commas, $3)
 		}
@@ -815,7 +821,7 @@ enumValueNumber : _INT_LIT {
 		$$ = ast.NewNegativeIntLiteralNode($1, $2)
 	}
 
-msgReserved : _RESERVED tagRanges optionalTrailingComma ';' {
+msgReserved : _RESERVED tagRanges optionalTrailingComma nonVirtualSemicolon {
 		if $3 != nil {
 			$2.commas = append($2.commas, $3)
 		}
@@ -823,7 +829,7 @@ msgReserved : _RESERVED tagRanges optionalTrailingComma ';' {
 	}
 	| reservedNames
 
-enumReserved : _RESERVED enumValueRanges optionalTrailingComma ';' {
+enumReserved : _RESERVED enumValueRanges optionalTrailingComma nonVirtualSemicolon {
 		if $3 != nil {
 			$2.commas = append($2.commas, $3)
 		}
@@ -831,13 +837,13 @@ enumReserved : _RESERVED enumValueRanges optionalTrailingComma ';' {
 	}
 	| reservedNames
 
-reservedNames : _RESERVED fieldNameStrings optionalTrailingComma ';' {
+reservedNames : _RESERVED fieldNameStrings optionalTrailingComma nonVirtualSemicolon {
 		if $3 != nil {
 			$2.commas = append($2.commas, $3)
 		}
 		$$ = ast.NewReservedNamesNode($1.ToKeyword(), $2.names, $2.commas, $4)
 	}
-	| _RESERVED fieldNameIdents ';' {
+	| _RESERVED fieldNameIdents nonVirtualSemicolon {
 		$$ = ast.NewReservedIdentifiersNode($1.ToKeyword(), $2.idents, $2.commas, $3)
 	}
 
@@ -899,10 +905,10 @@ enumElement : optionDecl {
 		$$ = nil
 	}
 
-enumValueDecl : enumValueName '=' enumValueNumber commaOrSemicolon {
+enumValueDecl : enumValueName '=' enumValueNumber nonVirtualSemicolonOrInvalidComma {
 		$$ = ast.NewEnumValueNode($1, $2, $3, nil, $4)
 	}
-	|  enumValueName '=' enumValueNumber compactOptions commaOrSemicolon {
+	|  enumValueName '=' enumValueNumber compactOptions nonVirtualSemicolonOrInvalidComma {
 		$$ = ast.NewEnumValueNode($1, $2, $3, $4, $5)
 	}
 
@@ -968,17 +974,41 @@ messageElement : messageFieldDecl {
 		$$ = nil
 	}
 
-messageFieldDecl : fieldCardinality notGroupElementTypeIdent identifier '=' _INT_LIT ';' {
+messageFieldDecl : fieldCardinality notGroupElementTypeIdent identifier '=' _INT_LIT nonVirtualSemicolon {
 		$$ = ast.NewFieldNode($1.ToKeyword(), $2, $3, $4, $5, nil, $6)
 	}
-	| fieldCardinality notGroupElementTypeIdent identifier '=' _INT_LIT compactOptions ';' {
+	| fieldCardinality notGroupElementTypeIdent identifier '=' _INT_LIT compactOptions nonVirtualSemicolon {
 		$$ = ast.NewFieldNode($1.ToKeyword(), $2, $3, $4, $5, $6, $7)
 	}
-	| msgElementTypeIdent identifier '=' _INT_LIT ';' {
+	| msgElementTypeIdent identifier '=' _INT_LIT nonVirtualSemicolon {
 		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, nil, $5)
 	}
-	| msgElementTypeIdent identifier '=' _INT_LIT compactOptions ';' {
+	| msgElementTypeIdent identifier '=' _INT_LIT compactOptions nonVirtualSemicolon {
 		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, $5, $6)
+	}
+	| fieldCardinality notGroupElementTypeIdent identifier '=' ';' {
+		protolex.(*protoLex).ErrExtendedSyntax("missing field number after '='")
+		$$ = ast.NewIncompleteFieldNode($1.ToKeyword(), $2, $3, $4, nil, nil, $5)
+	}
+	| fieldCardinality notGroupElementTypeIdent identifier ';' {
+		protolex.(*protoLex).ErrExtendedSyntax("missing '=' after field name")
+		$$ = ast.NewIncompleteFieldNode($1.ToKeyword(), $2, $3, nil, nil, nil, $4)
+	}
+	| fieldCardinality notGroupElementTypeIdent ';' {
+		protolex.(*protoLex).ErrExtendedSyntax("missing field name")
+		$$ = ast.NewIncompleteFieldNode($1.ToKeyword(), $2, nil, nil, nil, nil, $3)
+	}
+	| msgElementTypeIdent identifier '=' ';' {
+		protolex.(*protoLex).ErrExtendedSyntax("missing field number after '='")
+		$$ = ast.NewIncompleteFieldNode(nil, $1, $2, $3, nil, nil, $4)
+	}
+	| msgElementTypeIdent identifier ';' {
+		protolex.(*protoLex).ErrExtendedSyntax("missing '=' after field name")
+		$$ = ast.NewIncompleteFieldNode(nil, $1, $2, nil, nil, nil, $3)
+	}
+	| msgElementTypeIdent ';' {
+		protolex.(*protoLex).ErrExtendedSyntax("missing field name")
+		$$ = ast.NewIncompleteFieldNode(nil, $1, nil, nil, nil, nil, $2)
 	}
 
 extensionDecl : _EXTEND typeName '{' extensionBody '}' ';' {
@@ -1018,16 +1048,16 @@ extensionElement : extensionFieldDecl {
 		$$ = nil
 	}
 
-extensionFieldDecl : fieldCardinality notGroupElementTypeIdent identifier '=' _INT_LIT ';' {
+extensionFieldDecl : fieldCardinality notGroupElementTypeIdent identifier '=' _INT_LIT nonVirtualSemicolon {
 		$$ = ast.NewFieldNode($1.ToKeyword(), $2, $3, $4, $5, nil, $6)
 	}
-	| fieldCardinality notGroupElementTypeIdent identifier '=' _INT_LIT compactOptions ';' {
+	| fieldCardinality notGroupElementTypeIdent identifier '=' _INT_LIT compactOptions nonVirtualSemicolon {
 		$$ = ast.NewFieldNode($1.ToKeyword(), $2, $3, $4, $5, $6, $7)
 	}
-	| extElementTypeIdent identifier '=' _INT_LIT ';' {
+	| extElementTypeIdent identifier '=' _INT_LIT nonVirtualSemicolon {
 		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, nil, $5)
 	}
-	| extElementTypeIdent identifier '=' _INT_LIT compactOptions ';' {
+	| extElementTypeIdent identifier '=' _INT_LIT compactOptions nonVirtualSemicolon {
 		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, $5, $6)
 	}
 
@@ -1071,7 +1101,7 @@ serviceElement : optionDecl {
 		$$ = nil
 	}
 
-methodDecl : _RPC identifier methodMessageType _RETURNS methodMessageType ';' {
+methodDecl : _RPC identifier methodMessageType _RETURNS methodMessageType nonVirtualSemicolon {
 		$$ = ast.NewRPCNode($1.ToKeyword(), $2, $3, $4.ToKeyword(), $5, $6)
 	}
 	| _RPC identifier methodMessageType _RETURNS methodMessageType '{' methodBody '}' ';' {
@@ -1416,14 +1446,28 @@ identifier : _NAME
 
 // ======== extended syntax rules ========
 
-optionalTrailingComma : ',' {
+optionalTrailingComma
+	: ',' {
+		protolex.(*protoLex).ErrExtendedSyntax("unexpected trailing comma")
 		$$ = $1
 	}
 	| {
 		$$ = nil
 	}
 
-commaOrSemicolon : ';' | ',' {
+nonVirtualSemicolonOrInvalidComma
+	:	nonVirtualSemicolon {
+		$$ = $1
+	}
+	| ',' {
+		protolex.(*protoLex).ErrExtendedSyntax("expected ';', found ','")
+		$$ = $1
+	}
+
+nonVirtualSemicolon : ';' {
+		if $1.Virtual {
+			protolex.(*protoLex).ErrExtendedSyntax("expected ';'")
+		}
 		$$ = $1
 	}
 

@@ -153,7 +153,7 @@ func NewEnumValueNode(name *IdentNode, equals *RuneNode, number IntValueNode, op
 		panic("semicolon is nil")
 	}
 	if semicolon.Rune != ';' {
-		if !extendedSyntaxEnabled || semicolon.Rune != ',' {
+		if !ExtendedSyntaxEnabled || semicolon.Rune != ',' {
 			panic(fmt.Sprintf("unexpected rune %q, expected ';'", semicolon.Rune))
 		}
 	}
