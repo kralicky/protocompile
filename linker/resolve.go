@@ -102,31 +102,36 @@ func (r *result) markUsed(importPath string) {
 }
 
 func (r *result) CheckForUnusedImports(handler *reporter.Handler) {
-	fd := r.FileDescriptorProto()
-	file, _ := r.FileNode().(*ast.FileNode)
-	for i, dep := range fd.Dependency {
-		if _, ok := r.usedImports[dep]; !ok {
-			isPublic := false
-			// it's fine if it's a public import
-			for _, j := range fd.PublicDependency {
-				if i == int(j) {
-					isPublic = true
-					break
-				}
+	resAst := r.AST()
+	var imports []*ast.ImportNode
+	for _, decl := range resAst.Decls {
+		if imp, ok := decl.(*ast.ImportNode); ok {
+			imports = append(imports, imp)
+		}
+	}
+
+	dependencyPaths := r.FileDescriptorProto().Dependency
+	foundDescriptorProto := false
+	for _, imp := range imports {
+		if imp.Name.AsString() == "google/protobuf/descriptor.proto" {
+			foundDescriptorProto = true
+			break
+		}
+	}
+	if !foundDescriptorProto {
+		for i, dep := range dependencyPaths {
+			if dep == "google/protobuf/descriptor.proto" {
+				dependencyPaths = append(dependencyPaths[:i], dependencyPaths[i+1:]...)
+				break
 			}
-			if isPublic {
-				continue
-			}
-			span := ast.UnknownSpan(fd.GetName())
-			if file != nil {
-				for _, decl := range file.Decls {
-					imp, ok := decl.(*ast.ImportNode)
-					if ok && imp.Name.AsString() == dep {
-						span = file.NodeInfo(imp)
-					}
-				}
-			}
-			handler.HandleWarningWithPos(span, errUnusedImport(dep))
+		}
+	}
+
+	for i, imp := range imports {
+		path := dependencyPaths[i]
+		info := resAst.NodeInfo(imp)
+		if _, ok := r.usedImports[path]; !ok {
+			handler.HandleWarningWithPos(info, errUnusedImport(imp.Name.AsString()))
 		}
 	}
 }
