@@ -100,7 +100,7 @@ foo
 	// comment attached to no tokens (upcoming token is EOF!)
 	/* another comment followed by some final whitespace*/
 
-	
+
 	`), handler)
 
 	var prev ast.Node
@@ -143,10 +143,10 @@ foo
 		27: {t: _INT_LIT, line: 26, col: 10, span: 5, v: uint64(12345)},
 		28: {t: _FLOAT_LIT, line: 27, col: 9, span: 8, v: 123.1234},
 		29: {t: _FLOAT_LIT, line: 28, col: 9, span: 5, v: 0.123},
-		30: {t: _INT_LIT, line: 29, col: 9, span: 6, v: uint64(012345)},
+		30: {t: _INT_LIT, line: 29, col: 9, span: 6, v: uint64(0o12345)},
 		31: {t: _INT_LIT, line: 30, col: 9, span: 14, v: uint64(0x2134abcdef30)},
 		32: {t: '-', line: 31, col: 9, span: 1, v: nil},
-		33: {t: _INT_LIT, line: 31, col: 10, span: 4, v: uint64(0543)},
+		33: {t: _INT_LIT, line: 31, col: 10, span: 4, v: uint64(0o543)},
 		34: {t: '-', line: 32, col: 9, span: 1, v: nil},
 		35: {t: _INT_LIT, line: 32, col: 10, span: 6, v: uint64(0xff76)},
 		36: {t: _FLOAT_LIT, line: 33, col: 9, span: 8, v: 101.0102},
@@ -200,8 +200,8 @@ foo
 			n = sym.id
 			val = sym.id.Val
 		case _STRING_LIT:
-			n = sym.s
-			val = sym.s.Val
+			n = sym.sv
+			val = sym.sv
 		case _INT_LIT:
 			n = sym.i
 			val = sym.i.Val
@@ -537,7 +537,7 @@ func TestUTF8(t *testing.T) {
 		if !tc.succeeds {
 			assert.Equal(t, _ERROR, tok, "lexer should return error for %v", tc.data)
 		} else if assert.Equal(t, _STRING_LIT, tok, "lexer should return string literal token for %v", tc.data) {
-			assert.Equal(t, tc.expectVal, sym.s.Val)
+			assert.Equal(t, tc.expectVal, sym.sv)
 		}
 	}
 }

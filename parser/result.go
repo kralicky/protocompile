@@ -227,6 +227,9 @@ func (r *result) createFileDescriptor(filename string, file *ast.FileNode, handl
 		case *ast.MessageNode:
 			fd.MessageType = append(fd.MessageType, r.asMessageDescriptor(decl, syntax, handler, 1))
 		case *ast.OptionNode:
+			if decl.IsIncomplete() {
+				continue
+			}
 			if fd.Options == nil {
 				fd.Options = &descriptorpb.FileOptions{}
 			}
@@ -262,9 +265,12 @@ func (r *result) asUninterpretedOptions(nodes []*ast.OptionNode) []*descriptorpb
 	if len(nodes) == 0 {
 		return nil
 	}
-	opts := make([]*descriptorpb.UninterpretedOption, len(nodes))
-	for i, n := range nodes {
-		opts[i] = r.asUninterpretedOption(n)
+	opts := make([]*descriptorpb.UninterpretedOption, 0, len(nodes))
+	for _, n := range nodes {
+		if n.IsIncomplete() {
+			continue
+		}
+		opts = append(opts, r.asUninterpretedOption(n))
 	}
 	return opts
 }
@@ -547,6 +553,9 @@ func (r *result) asMethodDescriptor(node *ast.RPCNode) *descriptorpb.MethodDescr
 		md.Options = &descriptorpb.MethodOptions{}
 		for _, decl := range node.Decls {
 			if option, ok := decl.(*ast.OptionNode); ok {
+				if option.IsIncomplete() {
+					continue
+				}
 				md.Options.UninterpretedOption = append(md.Options.UninterpretedOption, r.asUninterpretedOption(option))
 			}
 		}
@@ -561,6 +570,9 @@ func (r *result) asEnumDescriptor(en *ast.EnumNode, syntax syntaxType, handler *
 	for _, decl := range en.Decls {
 		switch decl := decl.(type) {
 		case *ast.OptionNode:
+			if decl.IsIncomplete() {
+				continue
+			}
 			if ed.Options == nil {
 				ed.Options = &descriptorpb.EnumOptions{}
 			}
@@ -649,6 +661,9 @@ func (r *result) addMessageBody(msgd *descriptorpb.DescriptorProto, body *ast.Me
 	// first process any options
 	for _, decl := range body.Decls {
 		if opt, ok := decl.(*ast.OptionNode); ok {
+			if opt.IsIncomplete() {
+				continue
+			}
 			if msgd.Options == nil {
 				msgd.Options = &descriptorpb.MessageOptions{}
 			}
@@ -705,6 +720,9 @@ func (r *result) addMessageBody(msgd *descriptorpb.DescriptorProto, body *ast.Me
 			for _, oodecl := range decl.Decls {
 				switch oodecl := oodecl.(type) {
 				case *ast.OptionNode:
+					if oodecl.IsIncomplete() {
+						continue
+					}
 					if ood.Options == nil {
 						ood.Options = &descriptorpb.OneofOptions{}
 					}
@@ -825,6 +843,9 @@ func (r *result) asServiceDescriptor(svc *ast.ServiceNode) *descriptorpb.Service
 	for _, decl := range svc.Decls {
 		switch decl := decl.(type) {
 		case *ast.OptionNode:
+			if decl.IsIncomplete() {
+				continue
+			}
 			if sd.Options == nil {
 				sd.Options = &descriptorpb.ServiceOptions{}
 			}

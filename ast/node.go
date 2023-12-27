@@ -33,13 +33,15 @@ type TerminalNode interface {
 	Token() Token
 }
 
-var _ TerminalNode = (*StringLiteralNode)(nil)
-var _ TerminalNode = (*UintLiteralNode)(nil)
-var _ TerminalNode = (*FloatLiteralNode)(nil)
-var _ TerminalNode = (*IdentNode)(nil)
-var _ TerminalNode = (*SpecialFloatLiteralNode)(nil)
-var _ TerminalNode = (*KeywordNode)(nil)
-var _ TerminalNode = (*RuneNode)(nil)
+var (
+	_ TerminalNode = (*StringLiteralNode)(nil)
+	_ TerminalNode = (*UintLiteralNode)(nil)
+	_ TerminalNode = (*FloatLiteralNode)(nil)
+	_ TerminalNode = (*IdentNode)(nil)
+	_ TerminalNode = (*SpecialFloatLiteralNode)(nil)
+	_ TerminalNode = (*KeywordNode)(nil)
+	_ TerminalNode = (*RuneNode)(nil)
+)
 
 // CompositeNode represents any non-terminal node in the tree. These
 // are interior or root nodes and have child nodes.

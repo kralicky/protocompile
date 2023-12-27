@@ -29,10 +29,12 @@ type MessageDeclNode interface {
 	MessageName() Node
 }
 
-var _ MessageDeclNode = (*MessageNode)(nil)
-var _ MessageDeclNode = (*GroupNode)(nil)
-var _ MessageDeclNode = (*MapFieldNode)(nil)
-var _ MessageDeclNode = NoSourceNode{}
+var (
+	_ MessageDeclNode = (*MessageNode)(nil)
+	_ MessageDeclNode = (*GroupNode)(nil)
+	_ MessageDeclNode = (*MapFieldNode)(nil)
+	_ MessageDeclNode = NoSourceNode{}
+)
 
 // MessageNode represents a message declaration. Example:
 //
@@ -126,17 +128,19 @@ type MessageElement interface {
 	msgElement()
 }
 
-var _ MessageElement = (*OptionNode)(nil)
-var _ MessageElement = (*FieldNode)(nil)
-var _ MessageElement = (*MapFieldNode)(nil)
-var _ MessageElement = (*OneofNode)(nil)
-var _ MessageElement = (*GroupNode)(nil)
-var _ MessageElement = (*MessageNode)(nil)
-var _ MessageElement = (*EnumNode)(nil)
-var _ MessageElement = (*ExtendNode)(nil)
-var _ MessageElement = (*ExtensionRangeNode)(nil)
-var _ MessageElement = (*ReservedNode)(nil)
-var _ MessageElement = (*EmptyDeclNode)(nil)
+var (
+	_ MessageElement = (*OptionNode)(nil)
+	_ MessageElement = (*FieldNode)(nil)
+	_ MessageElement = (*MapFieldNode)(nil)
+	_ MessageElement = (*OneofNode)(nil)
+	_ MessageElement = (*GroupNode)(nil)
+	_ MessageElement = (*MessageNode)(nil)
+	_ MessageElement = (*EnumNode)(nil)
+	_ MessageElement = (*ExtendNode)(nil)
+	_ MessageElement = (*ExtensionRangeNode)(nil)
+	_ MessageElement = (*ReservedNode)(nil)
+	_ MessageElement = (*EmptyDeclNode)(nil)
+)
 
 // ExtendNode represents a declaration of extension fields. Example:
 //
@@ -216,6 +220,8 @@ type ExtendElement interface {
 	extendElement()
 }
 
-var _ ExtendElement = (*FieldNode)(nil)
-var _ ExtendElement = (*GroupNode)(nil)
-var _ ExtendElement = (*EmptyDeclNode)(nil)
+var (
+	_ ExtendElement = (*FieldNode)(nil)
+	_ ExtendElement = (*GroupNode)(nil)
+	_ ExtendElement = (*EmptyDeclNode)(nil)
+)

@@ -25,8 +25,10 @@ type OptionDeclNode interface {
 	GetValue() ValueNode
 }
 
-var _ OptionDeclNode = (*OptionNode)(nil)
-var _ OptionDeclNode = NoSourceNode{}
+var (
+	_ OptionDeclNode = (*OptionNode)(nil)
+	_ OptionDeclNode = NoSourceNode{}
+)
 
 // OptionNode represents the declaration of a single option for an element.
 // It is used both for normal option declarations (start with "option" keyword
@@ -41,6 +43,8 @@ type OptionNode struct {
 	Equals    *RuneNode
 	Val       ValueNode
 	Semicolon *RuneNode // absent for compact options
+
+	incomplete bool
 }
 
 func (n *OptionNode) fileElement()    {}
@@ -50,6 +54,11 @@ func (n *OptionNode) enumElement()    {}
 func (n *OptionNode) serviceElement() {}
 func (n *OptionNode) methodElement()  {}
 
+func (m *OptionNode) AddSemicolon(semi *RuneNode) {
+	m.Semicolon = semi
+	m.children = append(m.children, semi)
+}
+
 // NewOptionNode creates a new *OptionNode for a full option declaration (as
 // used in files, messages, oneofs, enums, services, and methods). All arguments
 // must be non-nil. (Also see NewCompactOptionNode.)
@@ -57,8 +66,7 @@ func (n *OptionNode) methodElement()  {}
 //   - name: The token corresponding to the name of the option.
 //   - equals: The token corresponding to the "=" rune after the name.
 //   - val: The token corresponding to the option value.
-//   - semicolon: The token corresponding to the ";" rune that ends the declaration.
-func NewOptionNode(keyword *KeywordNode, name *OptionNameNode, equals *RuneNode, val ValueNode, semicolon *RuneNode) *OptionNode {
+func NewOptionNode(keyword *KeywordNode, name *OptionNameNode, equals *RuneNode, val ValueNode) *OptionNode {
 	if keyword == nil {
 		panic("keyword is nil")
 	}
@@ -71,19 +79,43 @@ func NewOptionNode(keyword *KeywordNode, name *OptionNameNode, equals *RuneNode,
 	if val == nil {
 		panic("val is nil")
 	}
-	if semicolon == nil {
-		panic("semicolon is nil")
-	}
-	children := []Node{keyword, name, equals, val, semicolon}
+	children := []Node{keyword, name, equals, val}
 	return &OptionNode{
 		compositeNode: compositeNode{
 			children: children,
 		},
-		Keyword:   keyword,
-		Name:      name,
-		Equals:    equals,
-		Val:       val,
-		Semicolon: semicolon,
+		Keyword: keyword,
+		Name:    name,
+		Equals:  equals,
+		Val:     val,
+	}
+}
+
+func NewIncompleteOptionNode(keyword *KeywordNode, name *OptionNameNode, equals *RuneNode, val ValueNode) *OptionNode {
+	if keyword == nil {
+		panic("keyword is nil")
+	}
+	var children []Node
+	if name != nil {
+		children = append(children, name)
+	}
+	if equals != nil {
+		children = append(children, equals)
+	}
+	if val != nil {
+		children = append(children, val)
+	} else {
+		val = NoSourceNode{}
+	}
+	return &OptionNode{
+		compositeNode: compositeNode{
+			children: children,
+		},
+		Keyword:    keyword,
+		Name:       name,
+		Equals:     equals,
+		Val:        val,
+		incomplete: true,
 	}
 }
 
@@ -115,12 +147,23 @@ func NewCompactOptionNode(name *OptionNameNode, equals *RuneNode, val ValueNode)
 }
 
 func (n *OptionNode) GetName() Node {
+	if n.Name == nil {
+		return NoSourceNode{}
+	}
 	return n.Name
 }
 
 func (n *OptionNode) GetValue() ValueNode {
+	if n.Val == nil {
+		return NoSourceNode{}
+	}
 	return n.Val
 }
+
+func (n *OptionNode) IsIncomplete() bool {
+	return n.incomplete || n.Name.IsIncomplete()
+}
+
 func NewIncompleteCompactOptionNode(name *OptionNameNode, equals *RuneNode, val ValueNode) *OptionNode {
 	var children []Node
 	if name != nil {
@@ -139,9 +182,10 @@ func NewIncompleteCompactOptionNode(name *OptionNameNode, equals *RuneNode, val 
 		compositeNode: compositeNode{
 			children: children,
 		},
-		Name:   name,
-		Equals: equals,
-		Val:    val,
+		Name:       name,
+		Equals:     equals,
+		Val:        val,
+		incomplete: true,
 	}
 }
 
@@ -199,6 +243,15 @@ func NewOptionNameNode(parts []*FieldReferenceNode, dots []*RuneNode) *OptionNam
 	}
 }
 
+func (n *OptionNameNode) IsIncomplete() bool {
+	for _, part := range n.Parts {
+		if part.IsIncomplete() {
+			return true
+		}
+	}
+	return false
+}
+
 // FieldReferenceNode is a reference to a field name. It can indicate a regular
 // field (simple unqualified name), an extension field (possibly-qualified name
 // that is enclosed either in brackets or parentheses), or an "any" type
@@ -235,6 +288,8 @@ type FieldReferenceNode struct {
 	Name IdentValueNode
 
 	Close *RuneNode // only present for extension names and "any" type references
+
+	incomplete bool
 }
 
 // NewFieldReferenceNode creates a new *FieldReferenceNode for a regular field.
@@ -323,9 +378,10 @@ func NewIncompleteExtensionFieldReferenceNode(openSym *RuneNode, name IdentValue
 		compositeNode: compositeNode{
 			children: children,
 		},
-		Open:  openSym,
-		Name:  NewIncompleteIdentNode(name, openSym.Token()),
-		Close: closeSym,
+		Open:       openSym,
+		Name:       NewIncompleteIdentNode(name, openSym.Token()),
+		Close:      closeSym,
+		incomplete: true,
 	}
 }
 
@@ -353,8 +409,7 @@ func (a *FieldReferenceNode) IsAnyTypeReference() bool {
 }
 
 func (a *FieldReferenceNode) IsIncomplete() bool {
-	_, ok := a.Name.(*IncompleteIdentNode)
-	return ok
+	return a.incomplete
 }
 
 func (a *FieldReferenceNode) Value() string {

@@ -7,13 +7,13 @@ import "google/protobuf/descriptor.proto" // virtual semicolon ->
 extend google.protobuf.ExtensionRangeOptions {
   optional string   label = 1000 // virtual semicolon ->
   optional int32    test  = 1001 // virtual semicolon ->
-  optional GCCStyle msg   = 1002 // virtual semicolon ->
+  optional Message msg   = 1002 // virtual semicolon ->
   optional List     list  = 1003 // virtual semicolon ->
 }
 
-message // foo
-/* template<typename _Tp */ GCCStyle // bar
-{ // baz
+message // a
+/* b */ Message // c
+{ // d
     enum
   Foo
     {
@@ -93,4 +93,4 @@ message List {
 }
 
 
-message Compact1{}message Compact2{message A{}message B{message C{oneof Foo{int32 a = 1; int32 b = 2 [default=1]}}}}
+message Compact1{}message Compact2{message A{}message B{message C{oneof Foo{int32 a = 1; int32 b = 2 [default=1]}}}} 

@@ -14,7 +14,9 @@
 
 package ast
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // EnumDeclNode is a node in the AST that defines an enum type. This can be
 // either an *EnumNode or a NoSourceNode.
@@ -23,8 +25,10 @@ type EnumDeclNode interface {
 	GetName() Node
 }
 
-var _ EnumDeclNode = (*EnumNode)(nil)
-var _ EnumDeclNode = NoSourceNode{}
+var (
+	_ EnumDeclNode = (*EnumNode)(nil)
+	_ EnumDeclNode = NoSourceNode{}
+)
 
 // EnumNode represents an enum declaration. Example:
 //
@@ -101,10 +105,12 @@ type EnumElement interface {
 	enumElement()
 }
 
-var _ EnumElement = (*OptionNode)(nil)
-var _ EnumElement = (*EnumValueNode)(nil)
-var _ EnumElement = (*ReservedNode)(nil)
-var _ EnumElement = (*EmptyDeclNode)(nil)
+var (
+	_ EnumElement = (*OptionNode)(nil)
+	_ EnumElement = (*EnumValueNode)(nil)
+	_ EnumElement = (*ReservedNode)(nil)
+	_ EnumElement = (*EmptyDeclNode)(nil)
+)
 
 // EnumValueDeclNode is a placeholder interface for AST nodes that represent
 // enum values. This allows NoSourceNode to be used in place of *EnumValueNode
@@ -115,8 +121,10 @@ type EnumValueDeclNode interface {
 	GetNumber() Node
 }
 
-var _ EnumValueDeclNode = (*EnumValueNode)(nil)
-var _ EnumValueDeclNode = NoSourceNode{}
+var (
+	_ EnumValueDeclNode = (*EnumValueNode)(nil)
+	_ EnumValueDeclNode = NoSourceNode{}
+)
 
 // EnumValueNode represents an enum declaration. Example:
 //
@@ -138,8 +146,7 @@ func (*EnumValueNode) enumElement() {}
 //   - equals: The token corresponding to the '=' rune after the name.
 //   - number: The token corresponding to the enum value's number.
 //   - opts: Optional set of enum value options.
-//   - semicolon: The token corresponding to the ";" rune that ends the declaration.
-func NewEnumValueNode(name *IdentNode, equals *RuneNode, number IntValueNode, opts *CompactOptionsNode, semicolon *RuneNode) *EnumValueNode {
+func NewEnumValueNode(name *IdentNode, equals *RuneNode, number IntValueNode, opts *CompactOptionsNode) *EnumValueNode {
 	if name == nil {
 		panic("name is nil")
 	}
@@ -149,15 +156,7 @@ func NewEnumValueNode(name *IdentNode, equals *RuneNode, number IntValueNode, op
 	if number == nil {
 		panic("number is nil")
 	}
-	if semicolon == nil {
-		panic("semicolon is nil")
-	}
-	if semicolon.Rune != ';' {
-		if !ExtendedSyntaxEnabled || semicolon.Rune != ',' {
-			panic(fmt.Sprintf("unexpected rune %q, expected ';'", semicolon.Rune))
-		}
-	}
-	numChildren := 4
+	numChildren := 3
 	if opts != nil {
 		numChildren++
 	}
@@ -166,16 +165,14 @@ func NewEnumValueNode(name *IdentNode, equals *RuneNode, number IntValueNode, op
 	if opts != nil {
 		children = append(children, opts)
 	}
-	children = append(children, semicolon)
 	return &EnumValueNode{
 		compositeNode: compositeNode{
 			children: children,
 		},
-		Name:      name,
-		Equals:    equals,
-		Number:    number,
-		Options:   opts,
-		Semicolon: semicolon,
+		Name:    name,
+		Equals:  equals,
+		Number:  number,
+		Options: opts,
 	}
 }
 
@@ -185,4 +182,9 @@ func (e *EnumValueNode) GetName() Node {
 
 func (e *EnumValueNode) GetNumber() Node {
 	return e.Number
+}
+
+func (m *EnumValueNode) AddSemicolon(semi *RuneNode) {
+	m.Semicolon = semi
+	m.children = append(m.children, semi)
 }

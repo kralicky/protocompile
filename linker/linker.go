@@ -98,7 +98,7 @@ dependencies_ok:
 				}
 			} else {
 				// no ast, log an error with no source position
-				if err := handler.HandleErrorf(ast.UnknownSpan(parsedAst.Name()), "could not resolve import %q", imp); err != nil {
+				if err := handler.HandleErrorf(ast.UnknownSpan(parsed.FileDescriptorProto().GetName()), "could not resolve import %q", imp); err != nil {
 					return nil, err
 				}
 			}

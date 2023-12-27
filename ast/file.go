@@ -24,8 +24,10 @@ type FileDeclNode interface {
 	NodeInfo(n Node) NodeInfo
 }
 
-var _ FileDeclNode = (*FileNode)(nil)
-var _ FileDeclNode = NoSourceNode{}
+var (
+	_ FileDeclNode = (*FileNode)(nil)
+	_ FileDeclNode = NoSourceNode{}
+)
 
 // FileNode is the root of the AST hierarchy. It represents an entire
 // protobuf source file.
@@ -151,14 +153,16 @@ type FileElement interface {
 	fileElement()
 }
 
-var _ FileElement = (*ImportNode)(nil)
-var _ FileElement = (*PackageNode)(nil)
-var _ FileElement = (*OptionNode)(nil)
-var _ FileElement = (*MessageNode)(nil)
-var _ FileElement = (*EnumNode)(nil)
-var _ FileElement = (*ExtendNode)(nil)
-var _ FileElement = (*ServiceNode)(nil)
-var _ FileElement = (*EmptyDeclNode)(nil)
+var (
+	_ FileElement = (*ImportNode)(nil)
+	_ FileElement = (*PackageNode)(nil)
+	_ FileElement = (*OptionNode)(nil)
+	_ FileElement = (*MessageNode)(nil)
+	_ FileElement = (*EnumNode)(nil)
+	_ FileElement = (*ExtendNode)(nil)
+	_ FileElement = (*ServiceNode)(nil)
+	_ FileElement = (*EmptyDeclNode)(nil)
+)
 
 // SyntaxNode represents a syntax declaration, which if present must be
 // the first non-comment content. Example:
@@ -174,12 +178,17 @@ type SyntaxNode struct {
 	Semicolon *RuneNode
 }
 
+func (m *SyntaxNode) AddSemicolon(semi *RuneNode) {
+	m.Semicolon = semi
+	m.children = append(m.children, semi)
+}
+
 // NewSyntaxNode creates a new *SyntaxNode. All four arguments must be non-nil:
 //   - keyword: The token corresponding to the "syntax" keyword.
 //   - equals: The token corresponding to the "=" rune.
 //   - syntax: The actual syntax value, e.g. "proto2" or "proto3".
 //   - semicolon: The token corresponding to the ";" rune that ends the declaration.
-func NewSyntaxNode(keyword *KeywordNode, equals *RuneNode, syntax StringValueNode, semicolon *RuneNode) *SyntaxNode {
+func NewSyntaxNode(keyword *KeywordNode, equals *RuneNode, syntax StringValueNode) *SyntaxNode {
 	if keyword == nil {
 		panic("keyword is nil")
 	}
@@ -189,18 +198,14 @@ func NewSyntaxNode(keyword *KeywordNode, equals *RuneNode, syntax StringValueNod
 	if syntax == nil {
 		panic("syntax is nil")
 	}
-	if semicolon == nil {
-		panic("semicolon is nil")
-	}
-	children := []Node{keyword, equals, syntax, semicolon}
+	children := []Node{keyword, equals, syntax}
 	return &SyntaxNode{
 		compositeNode: compositeNode{
 			children: children,
 		},
-		Keyword:   keyword,
-		Equals:    equals,
-		Syntax:    syntax,
-		Semicolon: semicolon,
+		Keyword: keyword,
+		Equals:  equals,
+		Syntax:  syntax,
 	}
 }
 
@@ -219,12 +224,17 @@ type EditionNode struct {
 	Semicolon *RuneNode
 }
 
+func (m *EditionNode) AddSemicolon(semi *RuneNode) {
+	m.Semicolon = semi
+	m.children = append(m.children, semi)
+}
+
 // NewEditionNode creates a new *EditionNode. All four arguments must be non-nil:
 //   - keyword: The token corresponding to the "edition" keyword.
 //   - equals: The token corresponding to the "=" rune.
 //   - edition: The actual edition value, e.g. "2023".
 //   - semicolon: The token corresponding to the ";" rune that ends the declaration.
-func NewEditionNode(keyword *KeywordNode, equals *RuneNode, edition StringValueNode, semicolon *RuneNode) *EditionNode {
+func NewEditionNode(keyword *KeywordNode, equals *RuneNode, edition StringValueNode) *EditionNode {
 	if keyword == nil {
 		panic("keyword is nil")
 	}
@@ -234,18 +244,14 @@ func NewEditionNode(keyword *KeywordNode, equals *RuneNode, edition StringValueN
 	if edition == nil {
 		panic("edition is nil")
 	}
-	if semicolon == nil {
-		panic("semicolon is nil")
-	}
-	children := []Node{keyword, equals, edition, semicolon}
+	children := []Node{keyword, equals, edition}
 	return &EditionNode{
 		compositeNode: compositeNode{
 			children: children,
 		},
-		Keyword:   keyword,
-		Equals:    equals,
-		Edition:   edition,
-		Semicolon: semicolon,
+		Keyword: keyword,
+		Equals:  equals,
+		Edition: edition,
 	}
 }
 
@@ -273,43 +279,38 @@ type ImportNode struct {
 //   - public: The token corresponding to the optional "public" keyword.
 //   - weak: The token corresponding to the optional "weak" keyword.
 //   - name: The actual imported file name.
-//   - semicolon: The token corresponding to the ";" rune that ends the declaration.
-func NewImportNode(keyword *KeywordNode, public *KeywordNode, weak *KeywordNode, name StringValueNode, semicolon *RuneNode) *ImportNode {
+func NewImportNode(keyword *KeywordNode, public *KeywordNode, weak *KeywordNode, name StringValueNode) *ImportNode {
 	if keyword == nil {
 		panic("keyword is nil")
 	}
 	if name == nil {
 		panic("name is nil")
 	}
-	if semicolon == nil {
-		panic("semicolon is nil")
-	}
-	numChildren := 3
-	if public != nil || weak != nil {
-		numChildren++
-	}
-	children := make([]Node, 0, numChildren)
-	children = append(children, keyword)
+	children := []Node{keyword}
 	if public != nil {
 		children = append(children, public)
 	} else if weak != nil {
 		children = append(children, weak)
 	}
-	children = append(children, name, semicolon)
+	children = append(children, name)
 
 	return &ImportNode{
 		compositeNode: compositeNode{
 			children: children,
 		},
-		Keyword:   keyword,
-		Public:    public,
-		Weak:      weak,
-		Name:      name,
-		Semicolon: semicolon,
+		Keyword: keyword,
+		Public:  public,
+		Weak:    weak,
+		Name:    name,
 	}
 }
 
 func (*ImportNode) fileElement() {}
+
+func (m *ImportNode) AddSemicolon(semi *RuneNode) {
+	m.Semicolon = semi
+	m.children = append(m.children, semi)
+}
 
 // PackageNode represents a package declaration. Example:
 //
@@ -323,27 +324,28 @@ type PackageNode struct {
 
 func (*PackageNode) fileElement() {}
 
+func (m *PackageNode) AddSemicolon(semi *RuneNode) {
+	m.Semicolon = semi
+	m.children = append(m.children, semi)
+}
+
 // NewPackageNode creates a new *PackageNode. All three arguments must be non-nil:
 //   - keyword: The token corresponding to the "package" keyword.
 //   - name: The package name declared for the file.
 //   - semicolon: The token corresponding to the ";" rune that ends the declaration.
-func NewPackageNode(keyword *KeywordNode, name IdentValueNode, semicolon *RuneNode) *PackageNode {
+func NewPackageNode(keyword *KeywordNode, name IdentValueNode) *PackageNode {
 	if keyword == nil {
 		panic("keyword is nil")
 	}
 	if name == nil {
 		panic("name is nil")
 	}
-	if semicolon == nil {
-		panic("semicolon is nil")
-	}
-	children := []Node{keyword, name, semicolon}
+	children := []Node{keyword, name}
 	return &PackageNode{
 		compositeNode: compositeNode{
 			children: children,
 		},
-		Keyword:   keyword,
-		Name:      name,
-		Semicolon: semicolon,
+		Keyword: keyword,
+		Name:    name,
 	}
 }

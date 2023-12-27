@@ -23,8 +23,10 @@ type ServiceDeclNode interface {
 	GetName() Node
 }
 
-var _ ServiceDeclNode = (*ServiceNode)(nil)
-var _ ServiceDeclNode = NoSourceNode{}
+var (
+	_ ServiceDeclNode = (*ServiceNode)(nil)
+	_ ServiceDeclNode = NoSourceNode{}
+)
 
 // ServiceNode represents a service declaration. Example:
 //
@@ -97,9 +99,11 @@ type ServiceElement interface {
 	serviceElement()
 }
 
-var _ ServiceElement = (*OptionNode)(nil)
-var _ ServiceElement = (*RPCNode)(nil)
-var _ ServiceElement = (*EmptyDeclNode)(nil)
+var (
+	_ ServiceElement = (*OptionNode)(nil)
+	_ ServiceElement = (*RPCNode)(nil)
+	_ ServiceElement = (*EmptyDeclNode)(nil)
+)
 
 // RPCDeclNode is a placeholder interface for AST nodes that represent RPC
 // declarations. This allows NoSourceNode to be used in place of *RPCNode
@@ -111,8 +115,10 @@ type RPCDeclNode interface {
 	GetOutputType() Node
 }
 
-var _ RPCDeclNode = (*RPCNode)(nil)
-var _ RPCDeclNode = NoSourceNode{}
+var (
+	_ RPCDeclNode = (*RPCNode)(nil)
+	_ RPCDeclNode = NoSourceNode{}
+)
 
 // RPCNode represents an RPC declaration. Example:
 //
@@ -132,14 +138,18 @@ type RPCNode struct {
 
 func (n *RPCNode) serviceElement() {}
 
+func (m *RPCNode) AddSemicolon(semi *RuneNode) {
+	m.Semicolon = semi
+	m.children = append(m.children, semi)
+}
+
 // NewRPCNode creates a new *RPCNode with no body. All arguments must be non-nil.
 //   - keyword: The token corresponding to the "rpc" keyword.
 //   - name: The token corresponding to the RPC's name.
 //   - input: The token corresponding to the RPC input message type.
 //   - returns: The token corresponding to the "returns" keyword that precedes the output type.
 //   - output: The token corresponding to the RPC output message type.
-//   - semicolon: The token corresponding to the ";" rune that ends the declaration.
-func NewRPCNode(keyword *KeywordNode, name *IdentNode, input *RPCTypeNode, returns *KeywordNode, output *RPCTypeNode, semicolon *RuneNode) *RPCNode {
+func NewRPCNode(keyword *KeywordNode, name *IdentNode, input *RPCTypeNode, returns *KeywordNode, output *RPCTypeNode) *RPCNode {
 	if keyword == nil {
 		panic("keyword is nil")
 	}
@@ -155,20 +165,16 @@ func NewRPCNode(keyword *KeywordNode, name *IdentNode, input *RPCTypeNode, retur
 	if output == nil {
 		panic("output is nil")
 	}
-	if semicolon == nil {
-		panic("semicolon is nil")
-	}
-	children := []Node{keyword, name, input, returns, output, semicolon}
+	children := []Node{keyword, name, input, returns, output}
 	return &RPCNode{
 		compositeNode: compositeNode{
 			children: children,
 		},
-		Keyword:   keyword,
-		Name:      name,
-		Input:     input,
-		Returns:   returns,
-		Output:    output,
-		Semicolon: semicolon,
+		Keyword: keyword,
+		Name:    name,
+		Input:   input,
+		Returns: returns,
+		Output:  output,
 	}
 }
 
@@ -250,8 +256,10 @@ type RPCElement interface {
 	methodElement()
 }
 
-var _ RPCElement = (*OptionNode)(nil)
-var _ RPCElement = (*EmptyDeclNode)(nil)
+var (
+	_ RPCElement = (*OptionNode)(nil)
+	_ RPCElement = (*EmptyDeclNode)(nil)
+)
 
 // RPCTypeNode represents the declaration of a request or response type for an
 // RPC. Example:

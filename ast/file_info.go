@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
 )
 
 // FileInfo contains information about the contents of a source file, including
@@ -123,9 +124,35 @@ func (f *FileInfo) AddToken(offset, length int) Token {
 	if len(f.items) > len(f.data)+1 {
 		// sanity check: if we have more tokens than bytes in the file, something
 		// has gone horribly wrong
-		fmt.Println(string(f.data))
-		fmt.Println(f.items)
-		panic("bug: more tokens have been created than could possibly exist in the file")
+		var tokenList strings.Builder
+		for i := range f.items {
+			if i > 0 {
+				tokenList.WriteString("\n")
+			}
+			info := f.TokenInfo(Token(i))
+			start, end := info.Start(), info.End()
+			pos := fmt.Sprintf("%4d:%02d-%02d", start.Line, start.Col, end.Col)
+			tokenText := info.RawText()
+			if len(tokenText) == 0 {
+				tokenText = "(empty)"
+			} else {
+				tokenText = fmt.Sprintf("%q", tokenText)
+			}
+			tokenList.WriteString(fmt.Sprintf("%s | %s", pos, tokenText))
+		}
+		panic(fmt.Sprintf(`
+================================================================================
+WARNING: More tokens have been created than could possibly exist in the file.
+Stopping execution to prevent unbounded memory growth.
+
+Accumulated tokens (%d):
+%s
+
+line:col   | text
+-----------+-----------
+%s
+================================================================================
+`, len(f.items), f.name, tokenList.String()))
 	}
 
 	f.items = append(f.items, itemSpan{offset: offset, length: length})

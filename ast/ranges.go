@@ -35,6 +35,11 @@ type ExtensionRangeNode struct {
 
 func (e *ExtensionRangeNode) msgElement() {}
 
+func (m *ExtensionRangeNode) AddSemicolon(semi *RuneNode) {
+	m.Semicolon = semi
+	m.children = append(m.children, semi)
+}
+
 // NewExtensionRangeNode creates a new *ExtensionRangeNode. All args must be
 // non-nil except opts, which may be nil.
 //   - keyword: The token corresponding to the "extends" keyword.
@@ -42,16 +47,13 @@ func (e *ExtensionRangeNode) msgElement() {}
 //   - commas: Tokens that represent the "," runes that delimit the range expressions.
 //     The length of commas must be one less than the length of ranges.
 //   - opts: The node corresponding to options that apply to each of the ranges.
-//   - semicolon The token corresponding to the ";" rune that ends the declaration.
-func NewExtensionRangeNode(keyword *KeywordNode, ranges []*RangeNode, commas []*RuneNode, opts *CompactOptionsNode, semicolon *RuneNode) *ExtensionRangeNode {
+func NewExtensionRangeNode(keyword *KeywordNode, ranges []*RangeNode, commas []*RuneNode, opts *CompactOptionsNode) *ExtensionRangeNode {
 	if len(ranges) == 0 {
 		panic("must have at least one range")
 	}
 	var trailingNodes []Node
 	if opts != nil {
-		trailingNodes = []Node{opts, semicolon}
-	} else {
-		trailingNodes = []Node{semicolon}
+		trailingNodes = []Node{opts}
 	}
 	children := createCommaSeparatedNodes(
 		[]Node{keyword},
@@ -63,11 +65,10 @@ func NewExtensionRangeNode(keyword *KeywordNode, ranges []*RangeNode, commas []*
 		compositeNode: compositeNode{
 			children: children,
 		},
-		Keyword:   keyword,
-		Ranges:    ranges,
-		Commas:    commas,
-		Options:   opts,
-		Semicolon: semicolon,
+		Keyword: keyword,
+		Ranges:  ranges,
+		Commas:  commas,
+		Options: opts,
 	}
 }
 
@@ -80,8 +81,10 @@ type RangeDeclNode interface {
 	RangeEnd() Node
 }
 
-var _ RangeDeclNode = (*RangeNode)(nil)
-var _ RangeDeclNode = NoSourceNode{}
+var (
+	_ RangeDeclNode = (*RangeNode)(nil)
+	_ RangeDeclNode = NoSourceNode{}
+)
 
 // RangeNode represents a range expression, used in both extension ranges and
 // reserved ranges. Example:
@@ -214,14 +217,18 @@ type ReservedNode struct {
 func (*ReservedNode) msgElement()  {}
 func (*ReservedNode) enumElement() {}
 
+func (m *ReservedNode) AddSemicolon(semi *RuneNode) {
+	m.Semicolon = semi
+	m.children = append(m.children, semi)
+}
+
 // NewReservedRangesNode creates a new *ReservedNode that represents reserved
 // numeric ranges. All args must be non-nil.
 //   - keyword: The token corresponding to the "reserved" keyword.
 //   - ranges: One or more range expressions.
 //   - commas: Tokens that represent the "," runes that delimit the range expressions.
 //     The length of commas must be one less than the length of ranges.
-//   - semicolon The token corresponding to the ";" rune that ends the declaration.
-func NewReservedRangesNode(keyword *KeywordNode, ranges []*RangeNode, commas []*RuneNode, semicolon *RuneNode) *ReservedNode {
+func NewReservedRangesNode(keyword *KeywordNode, ranges []*RangeNode, commas []*RuneNode) *ReservedNode {
 	if len(ranges) == 0 {
 		panic("must have at least one range")
 	}
@@ -229,16 +236,15 @@ func NewReservedRangesNode(keyword *KeywordNode, ranges []*RangeNode, commas []*
 		[]Node{keyword},
 		ranges,
 		commas,
-		[]Node{semicolon},
+		nil,
 	)
 	return &ReservedNode{
 		compositeNode: compositeNode{
 			children: children,
 		},
-		Keyword:   keyword,
-		Ranges:    ranges,
-		Commas:    commas,
-		Semicolon: semicolon,
+		Keyword: keyword,
+		Ranges:  ranges,
+		Commas:  commas,
 	}
 }
 
@@ -249,7 +255,7 @@ func NewReservedRangesNode(keyword *KeywordNode, ranges []*RangeNode, commas []*
 //   - commas: Tokens that represent the "," runes that delimit the names.
 //     The length of commas must be one less than the length of names.
 //   - semicolon The token corresponding to the ";" rune that ends the declaration.
-func NewReservedNamesNode(keyword *KeywordNode, names []StringValueNode, commas []*RuneNode, semicolon *RuneNode) *ReservedNode {
+func NewReservedNamesNode(keyword *KeywordNode, names []StringValueNode, commas []*RuneNode) *ReservedNode {
 	if len(names) == 0 {
 		panic("must have at least one name")
 	}
@@ -257,16 +263,15 @@ func NewReservedNamesNode(keyword *KeywordNode, names []StringValueNode, commas 
 		[]Node{keyword},
 		names,
 		commas,
-		[]Node{semicolon},
+		nil,
 	)
 	return &ReservedNode{
 		compositeNode: compositeNode{
 			children: children,
 		},
-		Keyword:   keyword,
-		Names:     names,
-		Commas:    commas,
-		Semicolon: semicolon,
+		Keyword: keyword,
+		Names:   names,
+		Commas:  commas,
 	}
 }
 
@@ -277,12 +282,9 @@ func NewReservedNamesNode(keyword *KeywordNode, names []StringValueNode, commas 
 //   - commas: Tokens that represent the "," runes that delimit the names.
 //     The length of commas must be one less than the length of names.
 //   - semicolon The token corresponding to the ";" rune that ends the declaration.
-func NewReservedIdentifiersNode(keyword *KeywordNode, names []*IdentNode, commas []*RuneNode, semicolon *RuneNode) *ReservedNode {
+func NewReservedIdentifiersNode(keyword *KeywordNode, names []*IdentNode, commas []*RuneNode) *ReservedNode {
 	if keyword == nil {
 		panic("keyword is nil")
-	}
-	if semicolon == nil {
-		panic("semicolon is nil")
 	}
 	if len(names) == 0 {
 		panic("must have at least one name")
@@ -290,7 +292,7 @@ func NewReservedIdentifiersNode(keyword *KeywordNode, names []*IdentNode, commas
 	if len(commas) != len(names)-1 {
 		panic(fmt.Sprintf("%d names requires %d commas, not %d", len(names), len(names)-1, len(commas)))
 	}
-	children := make([]Node, 0, len(names)*2+1)
+	children := make([]Node, 0, len(names)*2)
 	children = append(children, keyword)
 	for i, name := range names {
 		if i > 0 {
@@ -304,7 +306,6 @@ func NewReservedIdentifiersNode(keyword *KeywordNode, names []*IdentNode, commas
 		}
 		children = append(children, name)
 	}
-	children = append(children, semicolon)
 	return &ReservedNode{
 		compositeNode: compositeNode{
 			children: children,
@@ -312,6 +313,5 @@ func NewReservedIdentifiersNode(keyword *KeywordNode, names []*IdentNode, commas
 		Keyword:     keyword,
 		Identifiers: names,
 		Commas:      commas,
-		Semicolon:   semicolon,
 	}
 }

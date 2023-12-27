@@ -5,13 +5,13 @@ package extsyntax.fmt; // virtual semicolon ->
 import "google/protobuf/descriptor.proto"; // virtual semicolon ->
 
 extend google.protobuf.ExtensionRangeOptions {
-  optional string   label = 1000; // virtual semicolon ->
-  optional int32    test  = 1001; // virtual semicolon ->
-  optional GCCStyle msg   = 1002; // virtual semicolon ->
-  optional List     list  = 1003; // virtual semicolon ->
+  optional string  label = 1000; // virtual semicolon ->
+  optional int32   test  = 1001; // virtual semicolon ->
+  optional Message msg   = 1002; // virtual semicolon ->
+  optional List    list  = 1003; // virtual semicolon ->
 }
 
-message /* foo */ /* template<typename _Tp */ GCCStyle /* bar */ { // baz
+message /* a */ /* b */ Message /* c */ { // d
   enum Foo {
     Zero = 0; // virtual semicolon ->
     One  = 1; // virtual semicolon ->

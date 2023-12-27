@@ -6,7 +6,7 @@ package parser
 import (
 	"math"
 
-	"github.com/bufbuild/protocompile/ast"
+	"github.com/kralicky/protocompile/ast"
 )
 
 %}
@@ -62,9 +62,7 @@ import (
 	msgLitFld    *ast.MessageFieldNode
 	v            ast.ValueNode
 	il           ast.IntValueNode
-	str          []*ast.StringLiteralNode
 	sv           ast.StringValueNode
-	s            *ast.StringLiteralNode
 	i            *ast.UintLiteralNode
 	f            *ast.FloatLiteralNode
 	id           *ast.IdentNode
@@ -83,7 +81,7 @@ import (
 %type <pkg>          packageDecl
 %type <opt>          optionDecl compactOption
 %type <opts>         compactOptionDecls
-%type <ref>          extensionName messageLiteralFieldName incompleteExtensionName
+%type <ref>          extensionName messageLiteralFieldName
 %type <optNms>       optionName
 %type <cmpctOpts>    compactOptions
 %type <v>            value optionValue scalarValue messageLiteralWithBraces messageLiteral numLit listLiteral listElement listOfMessagesLiteral messageValue
@@ -116,20 +114,17 @@ import (
 %type <extend>       extensionDecl
 %type <extElement>   extensionElement
 %type <extElements>  extensionElements extensionBody
-%type <sv>           stringLit
-%type <s>            singleStringLit
-%type <str>          compoundStringLit
 %type <svc>          serviceDecl
 %type <svcElement>   serviceElement
 %type <svcElements>  serviceElements serviceBody
-%type <mtd>          methodDecl
+%type <mtd>          methodDecl methodWithBodyDecl
 %type <mtdElement>   methodElement
 %type <mtdElements>  methodElements methodBody
 %type <mtdMsgType>   methodMessageType
-%type <b>            nonVirtualSemicolonOrInvalidComma optionalTrailingComma nonVirtualSemicolon
+%type <b>            nonVirtualSemicolonOrInvalidComma optionalTrailingComma optionalTrailingDot nonVirtualSemicolon
 
 // same for terminals
-%token <s>   _STRING_LIT
+%token <sv>   _STRING_LIT
 %token <i>   _INT_LIT
 %token <f>   _FLOAT_LIT
 %token <id>  _NAME
@@ -144,12 +139,15 @@ import (
 
 %%
 
-file : syntaxDecl {
+file
+	: syntaxDecl nonVirtualSemicolon {
+		$1.AddSemicolon($2)
 		lex := protolex.(*protoLex)
 		$$ = ast.NewFileNode(lex.info, $1, nil, lex.eof)
 		lex.res = $$
 	}
-	| editionDecl {
+	| editionDecl nonVirtualSemicolon {
+		$1.AddSemicolon($2)
 		lex := protolex.(*protoLex)
 		$$ = ast.NewFileNodeWithEdition(lex.info, $1, nil, lex.eof)
 		lex.res = $$
@@ -159,14 +157,16 @@ file : syntaxDecl {
 		$$ = ast.NewFileNode(lex.info, nil, $1, lex.eof)
 		lex.res = $$
 	}
-	| syntaxDecl fileElements {
+	| syntaxDecl nonVirtualSemicolon fileElements {
+		$1.AddSemicolon($2)
 		lex := protolex.(*protoLex)
-		$$ = ast.NewFileNode(lex.info, $1, $2, lex.eof)
+		$$ = ast.NewFileNode(lex.info, $1, $3, lex.eof)
 		lex.res = $$
 	}
-	| editionDecl fileElements {
+	| editionDecl nonVirtualSemicolon fileElements {
+		$1.AddSemicolon($2)
 		lex := protolex.(*protoLex)
-		$$ = ast.NewFileNodeWithEdition(lex.info, $1, $2, lex.eof)
+		$$ = ast.NewFileNodeWithEdition(lex.info, $1, $3, lex.eof)
 		lex.res = $$
 	}
 	| {
@@ -175,7 +175,8 @@ file : syntaxDecl {
 		lex.res = $$
 	}
 
-fileElements : fileElements fileElement {
+fileElements
+	: fileElements fileElement {
 		if $2 != nil {
 			$$ = append($1, $2)
 		} else {
@@ -190,57 +191,67 @@ fileElements : fileElements fileElement {
 		}
 	}
 
-fileElement : importDecl {
+fileElement
+	: importDecl nonVirtualSemicolon {
+		$1.AddSemicolon($2)
 		$$ = $1
 	}
-	| packageDecl {
+	| packageDecl nonVirtualSemicolon {
+		$1.AddSemicolon($2)
 		$$ = $1
 	}
-	| optionDecl {
+	| optionDecl nonVirtualSemicolon {
+		$1.AddSemicolon($2)
 		$$ = $1
 	}
-	| messageDecl {
+	| messageDecl ';' {
+		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
 	}
-	| enumDecl {
+	| enumDecl ';' {
+		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
 	}
-	| extensionDecl {
+	| extensionDecl ';' {
+		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
 	}
-	| serviceDecl {
+	| serviceDecl ';' {
+		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
-	}
-	| ';' {
-		$$ = ast.NewEmptyDeclNode($1)
 	}
 	| error {
 		$$ = nil
 	}
 
-syntaxDecl : _SYNTAX '=' stringLit nonVirtualSemicolon {
-		$$ = ast.NewSyntaxNode($1.ToKeyword(), $2, $3, $4)
+syntaxDecl
+	: _SYNTAX '=' _STRING_LIT {
+		$$ = ast.NewSyntaxNode($1.ToKeyword(), $2, $3)
 	}
 
-editionDecl : _EDITION '=' stringLit nonVirtualSemicolon {
-		$$ = ast.NewEditionNode($1.ToKeyword(), $2, $3, $4)
+editionDecl
+	: _EDITION '=' _STRING_LIT {
+		$$ = ast.NewEditionNode($1.ToKeyword(), $2, $3)
 	}
 
-importDecl : _IMPORT stringLit nonVirtualSemicolon {
-		$$ = ast.NewImportNode($1.ToKeyword(), nil, nil, $2, $3)
+importDecl
+	: _IMPORT _STRING_LIT {
+		$$ = ast.NewImportNode($1.ToKeyword(), nil, nil, $2)
 	}
-	| _IMPORT _WEAK stringLit nonVirtualSemicolon {
-		$$ = ast.NewImportNode($1.ToKeyword(), nil, $2.ToKeyword(), $3, $4)
+	| _IMPORT _WEAK _STRING_LIT {
+		$$ = ast.NewImportNode($1.ToKeyword(), nil, $2.ToKeyword(), $3)
 	}
-	| _IMPORT _PUBLIC stringLit nonVirtualSemicolon {
-		$$ = ast.NewImportNode($1.ToKeyword(), $2.ToKeyword(), nil, $3, $4)
-	}
-
-packageDecl : _PACKAGE qualifiedIdentifier nonVirtualSemicolon {
-		$$ = ast.NewPackageNode($1.ToKeyword(), $2.toIdentValueNode(nil), $3)
+	| _IMPORT _PUBLIC _STRING_LIT {
+		$$ = ast.NewImportNode($1.ToKeyword(), $2.ToKeyword(), nil, $3)
 	}
 
-qualifiedIdentifier : identifier {
+packageDecl
+	: _PACKAGE qualifiedIdentifier {
+		$$ = ast.NewPackageNode($1.ToKeyword(), $2.toIdentValueNode(nil))
+	}
+
+qualifiedIdentifier
+	: identifier {
 		$$ = &identSlices{idents: []*ast.IdentNode{$1}}
 	}
 	| qualifiedIdentifier '.' identifier {
@@ -253,7 +264,8 @@ qualifiedIdentifier : identifier {
 // we don't allowed message statement keywords as identifiers
 // (or oneof statement keywords [e.g. "option"] below)
 
-msgElementIdent : msgElementName {
+msgElementIdent
+	: msgElementName {
 		$$ = &identSlices{idents: []*ast.IdentNode{$1}}
 	}
 	| msgElementIdent '.' identifier {
@@ -262,7 +274,8 @@ msgElementIdent : msgElementName {
 		$$ = $1
 	}
 
-extElementIdent : extElementName {
+extElementIdent
+	: extElementName {
 		$$ = &identSlices{idents: []*ast.IdentNode{$1}}
 	}
 	| extElementIdent '.' identifier {
@@ -271,7 +284,8 @@ extElementIdent : extElementName {
 		$$ = $1
 	}
 
-oneofElementIdent : oneofElementName {
+oneofElementIdent
+	: oneofElementName {
 		$$ = &identSlices{idents: []*ast.IdentNode{$1}}
 	}
 	| oneofElementIdent '.' identifier {
@@ -280,7 +294,8 @@ oneofElementIdent : oneofElementName {
 		$$ = $1
 	}
 
-notGroupElementIdent : notGroupElementName {
+notGroupElementIdent
+	: notGroupElementName {
 		$$ = &identSlices{idents: []*ast.IdentNode{$1}}
 	}
 	| notGroupElementIdent '.' identifier {
@@ -289,7 +304,8 @@ notGroupElementIdent : notGroupElementName {
 		$$ = $1
 	}
 
-mtdElementIdent : mtdElementName {
+mtdElementIdent
+	: mtdElementName {
 		$$ = &identSlices{idents: []*ast.IdentNode{$1}}
 	}
 	| mtdElementIdent '.' identifier {
@@ -299,12 +315,18 @@ mtdElementIdent : mtdElementName {
 	}
 
 optionDecl
-	: _OPTION optionName '=' optionValue nonVirtualSemicolon {
+	: _OPTION optionName optionalTrailingDot '=' optionValue {
 		optName := ast.NewOptionNameNode($2.refs, $2.dots)
-		$$ = ast.NewOptionNode($1.ToKeyword(), optName, $3, $4, $5)
+		$$ = ast.NewOptionNode($1.ToKeyword(), optName, $4, $5)
 	}
+	/* | _OPTION optionName {
+		protolex.(*protoLex).ErrExtendedSyntax("expected '='")
+		optName := ast.NewOptionNameNode($2.refs, $2.dots)
+		$$ = ast.NewIncompleteOptionNode($1.ToKeyword(), optName, nil, nil)
+	} */
 
-optionName : identifier {
+optionName
+	: identifier {
 		fieldReferenceNode := ast.NewFieldReferenceNode($1)
 		$$ = &fieldRefSlices{refs: []*ast.FieldReferenceNode{fieldReferenceNode}}
 	}
@@ -326,22 +348,20 @@ extensionName
 	: '(' typeName ')' {
 		$$ = ast.NewExtensionFieldReferenceNode($1, $2, $3)
 	}
-
-incompleteExtensionName
-	: '(' typeName {
-		$$ = ast.NewIncompleteExtensionFieldReferenceNode($1, $2, nil)
-	}
 	| '(' ')' {
+		protolex.(*protoLex).ErrExtendedSyntax("missing extension name")
 		$$ = ast.NewIncompleteExtensionFieldReferenceNode($1, nil, $2)
 	}
-	| '(' {
-		$$ = ast.NewIncompleteExtensionFieldReferenceNode($1, nil, nil)
+
+optionValue
+	: scalarValue
+	| messageLiteralWithBraces ';' {
+		ast.AddVirtualSemicolon($1.(*ast.MessageLiteralNode), $2)
+		$$ = $1
 	}
 
-optionValue : scalarValue
-	| messageLiteralWithBraces
-
-scalarValue : stringLit {
+scalarValue
+	: _STRING_LIT {
 		$$ = $1
 	}
 	| numLit
@@ -349,7 +369,8 @@ scalarValue : stringLit {
 		$$ = $1
 	}
 
-numLit : _FLOAT_LIT {
+numLit
+	: _FLOAT_LIT {
 		$$ = $1
 	}
 	| '-' _FLOAT_LIT {
@@ -381,27 +402,8 @@ numLit : _FLOAT_LIT {
 		}
 	}
 
-stringLit
-  : singleStringLit {
-		$$ = $1
-	}
-	| compoundStringLit {
-		$$ = ast.NewCompoundLiteralStringNode($1...)
-	}
-
-singleStringLit : _STRING_LIT {
-		$$ = $1
-	}
-
-compoundStringLit
-	: _STRING_LIT _STRING_LIT {
-		$$ = []*ast.StringLiteralNode{$1, $2}
-	}
-	| compoundStringLit _STRING_LIT {
-		$$ = append($1, $2)
-	}
-
-messageLiteralWithBraces : '{' messageTextFormat '}' {
+messageLiteralWithBraces
+	: '{' messageTextFormat '}' {
 		if $2 == nil {
 			$$ = ast.NewMessageLiteralNode($1, nil, nil, $3)
 		} else {
@@ -409,13 +411,15 @@ messageLiteralWithBraces : '{' messageTextFormat '}' {
 			$$ = ast.NewMessageLiteralNode($1, fields, delimiters, $3)
 		}
 	}
-	| '{' '}' {
+	| '{' '}'{
 		$$ = ast.NewMessageLiteralNode($1, nil, nil, $2)
 	}
 
-messageTextFormat : messageLiteralFields
+messageTextFormat
+	: messageLiteralFields
 
-messageLiteralFields : messageLiteralFieldEntry
+messageLiteralFields
+	: messageLiteralFieldEntry
 	| messageLiteralFieldEntry messageLiteralFields {
 		if $1 != nil {
 			$1.next = $2
@@ -425,7 +429,8 @@ messageLiteralFields : messageLiteralFieldEntry
 		}
 	}
 
-messageLiteralFieldEntry : messageLiteralField {
+messageLiteralFieldEntry
+	: messageLiteralField {
 		if $1 != nil {
 			$$ = &messageFieldList{field: $1}
 		} else {
@@ -456,7 +461,8 @@ messageLiteralFieldEntry : messageLiteralField {
 		$$ = nil
 	}
 
-messageLiteralField : messageLiteralFieldName ':' value {
+messageLiteralField
+	: messageLiteralFieldName ':' value {
 		if $1 != nil && $2 != nil {
 			$$ = ast.NewMessageFieldNode($1, $2, $3)
 		} else {
@@ -474,27 +480,43 @@ messageLiteralField : messageLiteralFieldName ':' value {
 		$$ = nil
 	}
 
-messageLiteralFieldName : identifier {
+messageLiteralFieldName
+	: identifier {
 		$$ = ast.NewFieldReferenceNode($1)
 	}
-	| '[' qualifiedIdentifier ']' {
+	| '[' qualifiedIdentifier ']' ';'  {
 		$$ = ast.NewExtensionFieldReferenceNode($1, $2.toIdentValueNode(nil), $3)
 	}
-	| '[' qualifiedIdentifier '/' qualifiedIdentifier ']' {
+	| '[' qualifiedIdentifier '/' qualifiedIdentifier ']' ';' {
 		$$ = ast.NewAnyTypeReferenceNode($1, $2.toIdentValueNode(nil), $3, $4.toIdentValueNode(nil), $5)
 	}
-	| '[' error ']' {
+	| '[' error ']' ';' {
 		$$ = nil
 	}
 
-value : scalarValue
-	| messageLiteral
-	| listLiteral
+value
+	: scalarValue
+	| messageLiteral ';' {
+		ast.AddVirtualSemicolon($1.(*ast.MessageLiteralNode), $2)
+		$$ = $1
+	}
+	| listLiteral ';' {
+		ast.AddVirtualSemicolon($1.(*ast.ArrayLiteralNode), $2)
+		$$ = $1
+	}
 
-messageValue : messageLiteral
-	| listOfMessagesLiteral
+messageValue
+	: messageLiteral ';' {
+		ast.AddVirtualSemicolon($1.(*ast.MessageLiteralNode), $2)
+		$$ = $1
+	}
+	| listOfMessagesLiteral ';' {
+		ast.AddVirtualSemicolon($1.(*ast.ArrayLiteralNode), $2)
+		$$ = $1
+	}
 
-messageLiteral : messageLiteralWithBraces
+messageLiteral
+	: messageLiteralWithBraces
 	| '<' messageTextFormat '>' {
 		if $2 == nil {
 			$$ = ast.NewMessageLiteralNode($1, nil, nil, $3)
@@ -535,7 +557,8 @@ listLiteral
 		$$ = ast.NewArrayLiteralNode($1, nil, nil, $3)
 	}
 
-listElements : listElement {
+listElements
+	: listElement {
 		$$ = &valueSlices{vals: []ast.ValueNode{$1}}
 	}
 	| listElements ',' listElement {
@@ -544,8 +567,12 @@ listElements : listElement {
 		$$ = $1
 	}
 
-listElement : scalarValue
-	| messageLiteral
+listElement
+	: scalarValue
+	| messageLiteral ';' {
+		ast.AddVirtualSemicolon($1.(*ast.MessageLiteralNode), $2)
+		$$ = $1
+	}
 
 listOfMessagesLiteral
 	: '[' messageLiterals optionalTrailingComma ']' {
@@ -575,58 +602,68 @@ listOfMessagesLiteral
 		$$ = ast.NewArrayLiteralNode($1, nil, nil, $3)
 	}
 
-messageLiterals : messageLiteral {
+messageLiterals
+	: messageLiteral ';' {
+		ast.AddVirtualSemicolon($1.(*ast.MessageLiteralNode), $2)
 		$$ = &valueSlices{vals: []ast.ValueNode{$1}}
 	}
-	| messageLiterals ',' messageLiteral {
+	| messageLiterals ',' messageLiteral ';' {
+		ast.AddVirtualSemicolon($3.(*ast.MessageLiteralNode), $4)
 		$1.vals = append($1.vals, $3)
 		$1.commas = append($1.commas, $2)
 		$$ = $1
 	}
 
-typeName : qualifiedIdentifier {
+typeName
+	: qualifiedIdentifier {
 		$$ = $1.toIdentValueNode(nil)
 	}
 	| '.' qualifiedIdentifier {
 		$$ = $2.toIdentValueNode($1)
 	}
 
-msgElementTypeIdent : msgElementIdent {
+msgElementTypeIdent
+	: msgElementIdent {
 		$$ = $1.toIdentValueNode(nil)
 	}
 	| '.' qualifiedIdentifier {
 		$$ = $2.toIdentValueNode($1)
 	}
 
-extElementTypeIdent : extElementIdent {
+extElementTypeIdent
+	: extElementIdent {
 		$$ = $1.toIdentValueNode(nil)
 	}
 	| '.' qualifiedIdentifier {
 		$$ = $2.toIdentValueNode($1)
 	}
 
-oneofElementTypeIdent : oneofElementIdent {
+oneofElementTypeIdent
+	: oneofElementIdent {
 		$$ = $1.toIdentValueNode(nil)
 	}
 	| '.' qualifiedIdentifier {
 		$$ = $2.toIdentValueNode($1)
 	}
 
-notGroupElementTypeIdent : notGroupElementIdent {
+notGroupElementTypeIdent
+	: notGroupElementIdent {
 		$$ = $1.toIdentValueNode(nil)
 	}
 	| '.' qualifiedIdentifier {
 		$$ = $2.toIdentValueNode($1)
 	}
 
-mtdElementTypeIdent : mtdElementIdent {
+mtdElementTypeIdent
+	: mtdElementIdent {
 		$$ = $1.toIdentValueNode(nil)
 	}
 	| '.' qualifiedIdentifier {
 		$$ = $2.toIdentValueNode($1)
 	}
 
-fieldCardinality : _REQUIRED
+fieldCardinality
+	: _REQUIRED
 	| _OPTIONAL
 	| _REPEATED
 
@@ -668,33 +705,33 @@ compactOption
 		optName := ast.NewOptionNameNode($1.refs, $1.dots)
 		$$ = ast.NewCompactOptionNode(optName, $2, $3)
 	}
-	| incompleteExtensionName {
-		refs := &fieldRefSlices{refs: []*ast.FieldReferenceNode{$1}}
-		optName := ast.NewOptionNameNode(refs.refs, refs.dots)
-		$$ = ast.NewIncompleteCompactOptionNode(optName, nil, nil)
-	}
 	| optionName {
+		protolex.(*protoLex).ErrExtendedSyntax("expected '='")
 		optName := ast.NewOptionNameNode($1.refs, $1.dots)
 		$$ = ast.NewIncompleteCompactOptionNode(optName, nil, nil)
 	}
 
-groupDecl : fieldCardinality _GROUP identifier '=' _INT_LIT '{' messageBody '}' ';' {
+groupDecl
+	: fieldCardinality _GROUP identifier '=' _INT_LIT '{' messageBody '}' {
 		$$ = ast.NewGroupNode($1.ToKeyword(), $2.ToKeyword(), $3, $4, $5, nil, $6, $7, $8)
 	}
-	| fieldCardinality _GROUP identifier '=' _INT_LIT compactOptions '{' messageBody '}' ';' {
-		$$ = ast.NewGroupNode($1.ToKeyword(), $2.ToKeyword(), $3, $4, $5, $6, $7, $8, $9)
+	| fieldCardinality _GROUP identifier '=' _INT_LIT compactOptions ';' '{' messageBody '}' {
+		$$ = ast.NewGroupNode($1.ToKeyword(), $2.ToKeyword(), $3, $4, $5, $6, $8, $9, $10)
 	}
 
-oneofDecl : _ONEOF identifier '{' oneofBody '}' ';' {
+oneofDecl
+	: _ONEOF identifier '{' oneofBody '}' {
 		$$ = ast.NewOneofNode($1.ToKeyword(), $2, $3, $4, $5)
 	}
 
-oneofBody : {
+oneofBody
+	: {
 		$$ = nil
 	}
 	| oneofElements
 
-oneofElements : oneofElements oneofElement {
+oneofElements
+	: oneofElements oneofElement {
 		if $2 != nil {
 			$$ = append($1, $2)
 		} else {
@@ -709,48 +746,55 @@ oneofElements : oneofElements oneofElement {
 		}
 	}
 
-oneofElement : optionDecl {
+oneofElement
+	: optionDecl nonVirtualSemicolon {
+		$1.AddSemicolon($2)
 		$$ = $1
 	}
-	| oneofFieldDecl {
+	| oneofFieldDecl nonVirtualSemicolon {
+		$1.AddSemicolon($2)
 		$$ = $1
 	}
-	| oneofGroupDecl {
+	| oneofGroupDecl ';' {
+		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
-	}
-	| error ';' {
-		$$ = nil
 	}
 	| error {
 		$$ = nil
 	}
 
-oneofFieldDecl : oneofElementTypeIdent identifier '=' _INT_LIT nonVirtualSemicolon {
-		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, nil, $5)
+oneofFieldDecl
+	: oneofElementTypeIdent identifier '=' _INT_LIT {
+		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, nil)
 	}
-	| oneofElementTypeIdent identifier '=' _INT_LIT compactOptions nonVirtualSemicolon {
-		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, $5, $6)
+	| oneofElementTypeIdent identifier '=' _INT_LIT compactOptions {
+		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, $5)
 	}
 
-oneofGroupDecl : _GROUP identifier '=' _INT_LIT '{' messageBody '}' ';' {
+oneofGroupDecl
+	: _GROUP identifier '=' _INT_LIT '{' messageBody '}' {
 		$$ = ast.NewGroupNode(nil, $1.ToKeyword(), $2, $3, $4, nil, $5, $6, $7)
 	}
-	| _GROUP identifier '=' _INT_LIT compactOptions '{' messageBody '}' ';' {
-		$$ = ast.NewGroupNode(nil, $1.ToKeyword(), $2, $3, $4, $5, $6, $7, $8)
+	| _GROUP identifier '=' _INT_LIT compactOptions ';' '{' messageBody '}' {
+		$$ = ast.NewGroupNode(nil, $1.ToKeyword(), $2, $3, $4, $5, $7, $8, $9)
 	}
 
-mapFieldDecl : mapType identifier '=' _INT_LIT nonVirtualSemicolon {
-		$$ = ast.NewMapFieldNode($1, $2, $3, $4, nil, $5)
+mapFieldDecl
+	: mapType identifier '=' _INT_LIT {
+		$$ = ast.NewMapFieldNode($1, $2, $3, $4, nil)
 	}
-	| mapType identifier '=' _INT_LIT compactOptions nonVirtualSemicolon {
-		$$ = ast.NewMapFieldNode($1, $2, $3, $4, $5, $6)
+	| mapType identifier '=' _INT_LIT compactOptions {
+		$$ = ast.NewMapFieldNode($1, $2, $3, $4, $5)
 	}
 
-mapType : _MAP '<' mapKeyType ',' typeName '>' {
+mapType
+	: _MAP '<' mapKeyType ',' typeName '>' ';' {
 		$$ = ast.NewMapTypeNode($1.ToKeyword(), $2, $3, $4, $5, $6)
+		ast.AddVirtualSemicolon($$, $7)
 	}
 
-mapKeyType : _INT32
+mapKeyType
+	: _INT32
 	| _INT64
 	| _UINT32
 	| _UINT64
@@ -763,20 +807,22 @@ mapKeyType : _INT32
 	| _BOOL
 	| _STRING
 
-extensionRangeDecl : _EXTENSIONS tagRanges optionalTrailingComma nonVirtualSemicolon {
+extensionRangeDecl
+	: _EXTENSIONS tagRanges optionalTrailingComma {
 		if $3 != nil {
 			$2.commas = append($2.commas, $3)
 		}
-		$$ = ast.NewExtensionRangeNode($1.ToKeyword(), $2.ranges, $2.commas, nil, $4)
+		$$ = ast.NewExtensionRangeNode($1.ToKeyword(), $2.ranges, $2.commas, nil)
 	}
-	| _EXTENSIONS tagRanges optionalTrailingComma compactOptions nonVirtualSemicolon {
+	| _EXTENSIONS tagRanges optionalTrailingComma compactOptions {
 		if $3 != nil {
 			$2.commas = append($2.commas, $3)
 		}
-		$$ = ast.NewExtensionRangeNode($1.ToKeyword(), $2.ranges, $2.commas, $4, $5)
+		$$ = ast.NewExtensionRangeNode($1.ToKeyword(), $2.ranges, $2.commas, $4)
 	}
 
-tagRanges : tagRange {
+tagRanges
+	: tagRange {
 		$$ = &rangeSlices{ranges: []*ast.RangeNode{$1}}
 	}
 	| tagRanges ',' tagRange {
@@ -785,7 +831,8 @@ tagRanges : tagRange {
 		$$ = $1
 	}
 
-tagRange : _INT_LIT {
+tagRange
+	: _INT_LIT {
 		$$ = ast.NewRangeNode($1, nil, nil, nil)
 	}
 	| _INT_LIT _TO _INT_LIT {
@@ -795,7 +842,8 @@ tagRange : _INT_LIT {
 		$$ = ast.NewRangeNode($1, $2.ToKeyword(), nil, $3.ToKeyword())
 	}
 
-enumValueRanges : enumValueRange {
+enumValueRanges
+	: enumValueRange {
 		$$ = &rangeSlices{ranges: []*ast.RangeNode{$1}}
 	}
 	| enumValueRanges ',' enumValueRange {
@@ -804,7 +852,8 @@ enumValueRanges : enumValueRange {
 		$$ = $1
 	}
 
-enumValueRange : enumValueNumber {
+enumValueRange
+	: enumValueNumber {
 		$$ = ast.NewRangeNode($1, nil, nil, nil)
 	}
 	| enumValueNumber _TO enumValueNumber {
@@ -814,49 +863,55 @@ enumValueRange : enumValueNumber {
 		$$ = ast.NewRangeNode($1, $2.ToKeyword(), nil, $3.ToKeyword())
 	}
 
-enumValueNumber : _INT_LIT {
+enumValueNumber
+	: _INT_LIT {
 		$$ = $1
 	}
 	| '-' _INT_LIT {
 		$$ = ast.NewNegativeIntLiteralNode($1, $2)
 	}
 
-msgReserved : _RESERVED tagRanges optionalTrailingComma nonVirtualSemicolon {
+msgReserved
+	: _RESERVED tagRanges optionalTrailingComma {
 		if $3 != nil {
 			$2.commas = append($2.commas, $3)
 		}
-		$$ = ast.NewReservedRangesNode($1.ToKeyword(), $2.ranges, $2.commas, $4)
+		$$ = ast.NewReservedRangesNode($1.ToKeyword(), $2.ranges, $2.commas)
 	}
 	| reservedNames
 
-enumReserved : _RESERVED enumValueRanges optionalTrailingComma nonVirtualSemicolon {
+enumReserved
+	: _RESERVED enumValueRanges optionalTrailingComma {
 		if $3 != nil {
 			$2.commas = append($2.commas, $3)
 		}
-		$$ = ast.NewReservedRangesNode($1.ToKeyword(), $2.ranges, $2.commas, $4)
+		$$ = ast.NewReservedRangesNode($1.ToKeyword(), $2.ranges, $2.commas)
 	}
 	| reservedNames
 
-reservedNames : _RESERVED fieldNameStrings optionalTrailingComma nonVirtualSemicolon {
+reservedNames
+	: _RESERVED fieldNameStrings optionalTrailingComma {
 		if $3 != nil {
 			$2.commas = append($2.commas, $3)
 		}
-		$$ = ast.NewReservedNamesNode($1.ToKeyword(), $2.names, $2.commas, $4)
+		$$ = ast.NewReservedNamesNode($1.ToKeyword(), $2.names, $2.commas)
 	}
-	| _RESERVED fieldNameIdents nonVirtualSemicolon {
-		$$ = ast.NewReservedIdentifiersNode($1.ToKeyword(), $2.idents, $2.commas, $3)
+	| _RESERVED fieldNameIdents {
+		$$ = ast.NewReservedIdentifiersNode($1.ToKeyword(), $2.idents, $2.commas)
 	}
 
-fieldNameStrings : stringLit {
+fieldNameStrings
+	: _STRING_LIT {
 		$$ = &nameSlices{names: []ast.StringValueNode{$1}}
 	}
-	| fieldNameStrings ',' stringLit {
+	| fieldNameStrings ',' _STRING_LIT {
 		$1.names = append($1.names, $3)
 		$1.commas = append($1.commas, $2)
 		$$ = $1
 	}
 
-fieldNameIdents : identifier {
+fieldNameIdents
+	: identifier {
 		$$ = &nameSlices{idents: []*ast.IdentNode{$1}}
 	}
 	| fieldNameIdents ',' identifier {
@@ -865,16 +920,19 @@ fieldNameIdents : identifier {
 		$$ = $1
 	}
 
-enumDecl : _ENUM identifier '{' enumBody '}' ';' {
+enumDecl
+	: _ENUM identifier '{' enumBody '}' {
 		$$ = ast.NewEnumNode($1.ToKeyword(), $2, $3, $4, $5)
 	}
 
-enumBody : {
+enumBody
+	: {
 		$$ = nil
 	}
 	| enumElements
 
-enumElements : enumElements enumElement {
+enumElements
+	: enumElements enumElement {
 		if $2 != nil {
 			$$ = append($1, $2)
 		} else {
@@ -889,40 +947,45 @@ enumElements : enumElements enumElement {
 		}
 	}
 
-enumElement : optionDecl {
+enumElement
+	: optionDecl nonVirtualSemicolon {
+		$1.AddSemicolon($2)
 		$$ = $1
 	}
-	| enumValueDecl {
+	| enumValueDecl nonVirtualSemicolonOrInvalidComma {
+		$1.AddSemicolon($2)
 		$$ = $1
 	}
-	| enumReserved {
+	| enumReserved nonVirtualSemicolon {
+		$1.AddSemicolon($2)
 		$$ = $1
-	}
-	| ';' {
-		$$ = ast.NewEmptyDeclNode($1)
 	}
 	| error {
 		$$ = nil
 	}
 
-enumValueDecl : enumValueName '=' enumValueNumber nonVirtualSemicolonOrInvalidComma {
-		$$ = ast.NewEnumValueNode($1, $2, $3, nil, $4)
+enumValueDecl
+	: enumValueName '=' enumValueNumber  {
+		$$ = ast.NewEnumValueNode($1, $2, $3, nil)
 	}
-	|  enumValueName '=' enumValueNumber compactOptions nonVirtualSemicolonOrInvalidComma {
-		$$ = ast.NewEnumValueNode($1, $2, $3, $4, $5)
+	|  enumValueName '=' enumValueNumber compactOptions {
+		$$ = ast.NewEnumValueNode($1, $2, $3, $4)
 	}
 
 
-messageDecl : _MESSAGE identifier '{' messageBody '}' ';' {
+messageDecl
+	: _MESSAGE identifier '{' messageBody '}' {
 		$$ = ast.NewMessageNode($1.ToKeyword(), $2, $3, $4, $5)
 	}
 
-messageBody : {
+messageBody
+	: {
 		$$ = nil
 	}
 	| messageElements
 
-messageElements : messageElements messageElement {
+messageElements
+	: messageElements messageElement {
 		if $2 != nil {
 			$$ = append($1, $2)
 		} else {
@@ -937,88 +1000,102 @@ messageElements : messageElements messageElement {
 		}
 	}
 
-messageElement : messageFieldDecl {
+messageElement
+	: messageFieldDecl nonVirtualSemicolon {
+		$1.AddSemicolon($2)
 		$$ = $1
 	}
-	| enumDecl {
+	| enumDecl ';' {
+		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
 	}
-	| messageDecl {
+	| messageDecl ';' {
+		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
 	}
-	| extensionDecl {
+	| extensionDecl ';' {
+		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
 	}
-	| extensionRangeDecl {
+	| extensionRangeDecl nonVirtualSemicolon{
+		$1.AddSemicolon($2)
 		$$ = $1
 	}
-	| groupDecl {
+	| groupDecl ';' {
+		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
 	}
-	| optionDecl {
+	| optionDecl nonVirtualSemicolon {
+		$1.AddSemicolon($2)
 		$$ = $1
 	}
-	| oneofDecl {
+	| oneofDecl ';' {
+		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
 	}
-	| mapFieldDecl {
+	| mapFieldDecl nonVirtualSemicolon {
+		$1.AddSemicolon($2)
 		$$ = $1
 	}
-	| msgReserved {
+	| msgReserved nonVirtualSemicolon {
+		$1.AddSemicolon($2)
 		$$ = $1
+	}
+	| nonVirtualSemicolon {
+		$$ = ast.NewEmptyDeclNode($1)
 	}
 
-messageFieldDecl : fieldCardinality notGroupElementTypeIdent identifier '=' _INT_LIT nonVirtualSemicolon {
-		$$ = ast.NewFieldNode($1.ToKeyword(), $2, $3, $4, $5, nil, $6)
+messageFieldDecl
+	: fieldCardinality notGroupElementTypeIdent identifier '=' _INT_LIT {
+		$$ = ast.NewFieldNode($1.ToKeyword(), $2, $3, $4, $5, nil)
 	}
-	| fieldCardinality notGroupElementTypeIdent identifier '=' _INT_LIT compactOptions nonVirtualSemicolon {
-		$$ = ast.NewFieldNode($1.ToKeyword(), $2, $3, $4, $5, $6, $7)
+	| fieldCardinality notGroupElementTypeIdent identifier '=' _INT_LIT compactOptions {
+		$$ = ast.NewFieldNode($1.ToKeyword(), $2, $3, $4, $5, $6)
 	}
-	| msgElementTypeIdent identifier '=' _INT_LIT nonVirtualSemicolon {
-		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, nil, $5)
+	| msgElementTypeIdent identifier '=' _INT_LIT {
+		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, nil)
 	}
-	| msgElementTypeIdent identifier '=' _INT_LIT compactOptions nonVirtualSemicolon {
-		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, $5, $6)
+	| msgElementTypeIdent identifier '=' _INT_LIT compactOptions {
+		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, $5)
 	}
-	| fieldCardinality notGroupElementTypeIdent identifier '=' ';' {
+	| fieldCardinality notGroupElementTypeIdent identifier '=' {
 		protolex.(*protoLex).ErrExtendedSyntax("missing field number after '='")
-		$$ = ast.NewIncompleteFieldNode($1.ToKeyword(), $2, $3, $4, nil, nil, $5)
+		$$ = ast.NewIncompleteFieldNode($1.ToKeyword(), $2, $3, $4, nil, nil)
 	}
-	| fieldCardinality notGroupElementTypeIdent identifier ';' {
+	| fieldCardinality notGroupElementTypeIdent identifier {
 		protolex.(*protoLex).ErrExtendedSyntax("missing '=' after field name")
-		$$ = ast.NewIncompleteFieldNode($1.ToKeyword(), $2, $3, nil, nil, nil, $4)
+		$$ = ast.NewIncompleteFieldNode($1.ToKeyword(), $2, $3, nil, nil, nil)
 	}
-	| fieldCardinality notGroupElementTypeIdent ';' {
+	| fieldCardinality notGroupElementTypeIdent {
 		protolex.(*protoLex).ErrExtendedSyntax("missing field name")
-		$$ = ast.NewIncompleteFieldNode($1.ToKeyword(), $2, nil, nil, nil, nil, $3)
+		$$ = ast.NewIncompleteFieldNode($1.ToKeyword(), $2, nil, nil, nil, nil)
 	}
-	| fieldCardinality ';' {
-		protolex.(*protoLex).ErrExtendedSyntax("missing type name")
-		$$ = ast.NewIncompleteFieldNode($1.ToKeyword(), nil, nil, nil, nil, nil, $2)
-	}
-	| msgElementTypeIdent identifier '=' ';' {
+	| msgElementTypeIdent identifier '=' {
 		protolex.(*protoLex).ErrExtendedSyntax("missing field number after '='")
-		$$ = ast.NewIncompleteFieldNode(nil, $1, $2, $3, nil, nil, $4)
+		$$ = ast.NewIncompleteFieldNode(nil, $1, $2, $3, nil, nil)
 	}
-	| msgElementTypeIdent identifier ';' {
+	| msgElementTypeIdent identifier {
 		protolex.(*protoLex).ErrExtendedSyntax("missing '=' after field name")
-		$$ = ast.NewIncompleteFieldNode(nil, $1, $2, nil, nil, nil, $3)
+		$$ = ast.NewIncompleteFieldNode(nil, $1, $2, nil, nil, nil)
 	}
-	| msgElementTypeIdent ';' {
+	| msgElementTypeIdent {
 		protolex.(*protoLex).ErrExtendedSyntax("missing field name")
-		$$ = ast.NewIncompleteFieldNode(nil, $1, nil, nil, nil, nil, $2)
+		$$ = ast.NewIncompleteFieldNode(nil, $1, nil, nil, nil, nil)
 	}
 
-extensionDecl : _EXTEND typeName '{' extensionBody '}' ';' {
+extensionDecl
+	: _EXTEND typeName '{' extensionBody '}' {
 		$$ = ast.NewExtendNode($1.ToKeyword(), $2, $3, $4, $5)
 	}
 
-extensionBody : {
+extensionBody
+	: {
 		$$ = nil
 	}
 	| extensionElements
 
-extensionElements : extensionElements extensionElement {
+extensionElements
+	: extensionElements extensionElement {
 		if $2 != nil {
 			$$ = append($1, $2)
 		} else {
@@ -1033,42 +1110,46 @@ extensionElements : extensionElements extensionElement {
 		}
 	}
 
-extensionElement : extensionFieldDecl {
+extensionElement
+	: extensionFieldDecl nonVirtualSemicolon {
+		$1.AddSemicolon($2)
 		$$ = $1
 	}
-	| groupDecl {
+	| groupDecl ';' {
+		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
-	}
-	| error ';' {
-		$$ = nil
 	}
 	| error {
 		$$ = nil
 	}
 
-extensionFieldDecl : fieldCardinality notGroupElementTypeIdent identifier '=' _INT_LIT nonVirtualSemicolon {
-		$$ = ast.NewFieldNode($1.ToKeyword(), $2, $3, $4, $5, nil, $6)
+extensionFieldDecl
+	: fieldCardinality notGroupElementTypeIdent identifier '=' _INT_LIT {
+		$$ = ast.NewFieldNode($1.ToKeyword(), $2, $3, $4, $5, nil)
 	}
-	| fieldCardinality notGroupElementTypeIdent identifier '=' _INT_LIT compactOptions nonVirtualSemicolon {
-		$$ = ast.NewFieldNode($1.ToKeyword(), $2, $3, $4, $5, $6, $7)
+	| fieldCardinality notGroupElementTypeIdent identifier '=' _INT_LIT compactOptions {
+		$$ = ast.NewFieldNode($1.ToKeyword(), $2, $3, $4, $5, $6)
 	}
-	| extElementTypeIdent identifier '=' _INT_LIT nonVirtualSemicolon {
-		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, nil, $5)
+	| extElementTypeIdent identifier '=' _INT_LIT {
+		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, nil)
 	}
-	| extElementTypeIdent identifier '=' _INT_LIT compactOptions nonVirtualSemicolon {
-		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, $5, $6)
+	| extElementTypeIdent identifier '=' _INT_LIT compactOptions {
+		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, $5)
 	}
 
-serviceDecl : _SERVICE identifier '{' serviceBody '}' ';' {
+serviceDecl
+	: _SERVICE identifier '{' serviceBody '}' {
 		$$ = ast.NewServiceNode($1.ToKeyword(), $2, $3, $4, $5)
 	}
 
-serviceBody : {
+serviceBody
+	: {
 		$$ = nil
 	}
 	| serviceElements
 
-serviceElements : serviceElements serviceElement {
+serviceElements
+	: serviceElements serviceElement {
 		if $2 != nil {
 			$$ = append($1, $2)
 		} else {
@@ -1086,39 +1167,49 @@ serviceElements : serviceElements serviceElement {
 // NB: doc suggests support for "stream" declaration, separate from "rpc", but
 // it does not appear to be supported in protoc (doc is likely from grammar for
 // Google-internal version of protoc, with support for streaming stubby)
-serviceElement : optionDecl {
+serviceElement
+	: optionDecl nonVirtualSemicolon {
+		$1.AddSemicolon($2)
 		$$ = $1
 	}
-	| methodDecl {
+	| methodDecl nonVirtualSemicolon {
+		$1.AddSemicolon($2)
 		$$ = $1
 	}
-	| ';' {
-		$$ = ast.NewEmptyDeclNode($1)
+	| methodWithBodyDecl ';' {
+		ast.AddVirtualSemicolon($1, $2)
+		$$ = $1
 	}
 	| error {
 		$$ = nil
 	}
 
-methodDecl : _RPC identifier methodMessageType _RETURNS methodMessageType nonVirtualSemicolon {
-		$$ = ast.NewRPCNode($1.ToKeyword(), $2, $3, $4.ToKeyword(), $5, $6)
+methodDecl
+	: _RPC identifier methodMessageType _RETURNS methodMessageType {
+		$$ = ast.NewRPCNode($1.ToKeyword(), $2, $3, $4.ToKeyword(), $5)
 	}
-	| _RPC identifier methodMessageType _RETURNS methodMessageType '{' methodBody '}' ';' {
+
+methodWithBodyDecl
+  : _RPC identifier methodMessageType _RETURNS methodMessageType '{' methodBody '}' {
 		$$ = ast.NewRPCNodeWithBody($1.ToKeyword(), $2, $3, $4.ToKeyword(), $5, $6, $7, $8)
 	}
 
-methodMessageType : '(' _STREAM typeName ')' {
+methodMessageType
+	: '(' _STREAM typeName ')' {
 		$$ = ast.NewRPCTypeNode($1, $2.ToKeyword(), $3, $4)
 	}
 	| '(' mtdElementTypeIdent ')' {
 		$$ = ast.NewRPCTypeNode($1, nil, $2, $3)
 	}
 
-methodBody : {
+methodBody
+	: {
 		$$ = nil
 	}
 	| methodElements
 
-methodElements : methodElements methodElement {
+methodElements
+	: methodElements methodElement {
 		if $2 != nil {
 			$$ = append($1, $2)
 		} else {
@@ -1133,11 +1224,10 @@ methodElements : methodElements methodElement {
 		}
 	}
 
-methodElement : optionDecl {
+methodElement
+	: optionDecl nonVirtualSemicolon {
+		$1.AddSemicolon($2)
 		$$ = $1
-	}
-	| ';' {
-		$$ = ast.NewEmptyDeclNode($1)
 	}
 	| error {
 		$$ = nil
@@ -1145,7 +1235,8 @@ methodElement : optionDecl {
 
 // excludes message, enum, oneof, extensions, reserved, extend,
 //   option, group, optional, required, and repeated
-msgElementName : _NAME
+msgElementName
+	: _NAME
 	| _SYNTAX
 	| _EDITION
 	| _IMPORT
@@ -1180,7 +1271,8 @@ msgElementName : _NAME
 	| _RETURNS
 
 // excludes group, optional, required, and repeated
-extElementName : _NAME
+extElementName
+	: _NAME
 	| _SYNTAX
 	| _EDITION
 	| _IMPORT
@@ -1222,7 +1314,8 @@ extElementName : _NAME
 	| _RETURNS
 
 // excludes reserved, option
-enumValueName : _NAME
+enumValueName
+	: _NAME
 	| _SYNTAX
 	| _EDITION
 	| _IMPORT
@@ -1266,7 +1359,8 @@ enumValueName : _NAME
 	| _RETURNS
 
 // excludes group, option, optional, required, and repeated
-oneofElementName : _NAME
+oneofElementName
+	: _NAME
 	| _SYNTAX
 	| _EDITION
 	| _IMPORT
@@ -1307,7 +1401,8 @@ oneofElementName : _NAME
 	| _RETURNS
 
 // excludes group
-notGroupElementName : _NAME
+notGroupElementName
+	: _NAME
 	| _SYNTAX
 	| _EDITION
 	| _IMPORT
@@ -1352,7 +1447,8 @@ notGroupElementName : _NAME
 	| _RETURNS
 
 // excludes stream
-mtdElementName : _NAME
+mtdElementName
+	: _NAME
 	| _SYNTAX
 	| _EDITION
 	| _IMPORT
@@ -1396,7 +1492,8 @@ mtdElementName : _NAME
 	| _RPC
 	| _RETURNS
 
-identifier : _NAME
+identifier
+	: _NAME
 	| _SYNTAX
 	| _EDITION
 	| _IMPORT
@@ -1453,6 +1550,15 @@ optionalTrailingComma
 		$$ = nil
 	}
 
+optionalTrailingDot
+	: '.' {
+		protolex.(*protoLex).ErrExtendedSyntax("unexpected trailing '.'")
+		$$ = $1
+	}
+	| {
+		$$ = nil
+	}
+
 nonVirtualSemicolonOrInvalidComma
 	:	nonVirtualSemicolon {
 		$$ = $1
@@ -1462,13 +1568,13 @@ nonVirtualSemicolonOrInvalidComma
 		$$ = $1
 	}
 
-nonVirtualSemicolon : ';' {
+nonVirtualSemicolon
+	: ';' {
 		if $1.Virtual {
 			protolex.(*protoLex).ErrExtendedSyntax("expected ';'")
 		}
 		$$ = $1
 	}
-
 
 // =======================================
 

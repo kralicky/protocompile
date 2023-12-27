@@ -43,19 +43,21 @@ type ValueNode interface {
 	Value() interface{}
 }
 
-var _ ValueNode = (*IdentNode)(nil)
-var _ ValueNode = (*CompoundIdentNode)(nil)
-var _ ValueNode = (*StringLiteralNode)(nil)
-var _ ValueNode = (*CompoundStringLiteralNode)(nil)
-var _ ValueNode = (*UintLiteralNode)(nil)
-var _ ValueNode = (*PositiveUintLiteralNode)(nil)
-var _ ValueNode = (*NegativeIntLiteralNode)(nil)
-var _ ValueNode = (*FloatLiteralNode)(nil)
-var _ ValueNode = (*SpecialFloatLiteralNode)(nil)
-var _ ValueNode = (*SignedFloatLiteralNode)(nil)
-var _ ValueNode = (*ArrayLiteralNode)(nil)
-var _ ValueNode = (*MessageLiteralNode)(nil)
-var _ ValueNode = NoSourceNode{}
+var (
+	_ ValueNode = (*IdentNode)(nil)
+	_ ValueNode = (*CompoundIdentNode)(nil)
+	_ ValueNode = (*StringLiteralNode)(nil)
+	_ ValueNode = (*CompoundStringLiteralNode)(nil)
+	_ ValueNode = (*UintLiteralNode)(nil)
+	_ ValueNode = (*PositiveUintLiteralNode)(nil)
+	_ ValueNode = (*NegativeIntLiteralNode)(nil)
+	_ ValueNode = (*FloatLiteralNode)(nil)
+	_ ValueNode = (*SpecialFloatLiteralNode)(nil)
+	_ ValueNode = (*SignedFloatLiteralNode)(nil)
+	_ ValueNode = (*ArrayLiteralNode)(nil)
+	_ ValueNode = (*MessageLiteralNode)(nil)
+	_ ValueNode = NoSourceNode{}
+)
 
 // StringValueNode is an AST node that represents a string literal.
 // Such a node can be a single literal (*StringLiteralNode) or a
@@ -65,8 +67,10 @@ type StringValueNode interface {
 	AsString() string
 }
 
-var _ StringValueNode = (*StringLiteralNode)(nil)
-var _ StringValueNode = (*CompoundStringLiteralNode)(nil)
+var (
+	_ StringValueNode = (*StringLiteralNode)(nil)
+	_ StringValueNode = (*CompoundStringLiteralNode)(nil)
+)
 
 // StringLiteralNode represents a simple string literal. Example:
 //
@@ -102,18 +106,24 @@ type CompoundStringLiteralNode struct {
 	Val string
 }
 
-// NewCompoundLiteralStringNode creates a new *CompoundStringLiteralNode that
+// NewCompoundStringLiteralNode creates a new *CompoundStringLiteralNode that
 // consists of the given string components. The components argument may not be
 // empty.
-func NewCompoundLiteralStringNode(components ...*StringLiteralNode) *CompoundStringLiteralNode {
+func NewCompoundStringLiteralNode(components ...StringValueNode) *CompoundStringLiteralNode {
 	if len(components) == 0 {
 		panic("must have at least one component")
 	}
-	children := make([]Node, len(components))
+	children := make([]Node, 0, len(components))
 	var b strings.Builder
-	for i, comp := range components {
-		children[i] = comp
-		b.WriteString(comp.Val)
+	for _, comp := range components {
+		switch comp := comp.(type) {
+		case *StringLiteralNode:
+			b.WriteString(comp.Val)
+			children = append(children, comp)
+		case *CompoundStringLiteralNode:
+			children = append(children, comp.children...)
+			b.WriteString(comp.Val)
+		}
 	}
 	return &CompoundStringLiteralNode{
 		compositeNode: compositeNode{
@@ -153,9 +163,11 @@ func AsInt32(n IntValueNode, min, max int32) (int32, bool) {
 	return int32(i), true
 }
 
-var _ IntValueNode = (*UintLiteralNode)(nil)
-var _ IntValueNode = (*PositiveUintLiteralNode)(nil)
-var _ IntValueNode = (*NegativeIntLiteralNode)(nil)
+var (
+	_ IntValueNode = (*UintLiteralNode)(nil)
+	_ IntValueNode = (*PositiveUintLiteralNode)(nil)
+	_ IntValueNode = (*NegativeIntLiteralNode)(nil)
+)
 
 // UintLiteralNode represents a simple integer literal with no sign character.
 type UintLiteralNode struct {
@@ -285,9 +297,11 @@ type FloatValueNode interface {
 	AsFloat() float64
 }
 
-var _ FloatValueNode = (*FloatLiteralNode)(nil)
-var _ FloatValueNode = (*SpecialFloatLiteralNode)(nil)
-var _ FloatValueNode = (*UintLiteralNode)(nil)
+var (
+	_ FloatValueNode = (*FloatLiteralNode)(nil)
+	_ FloatValueNode = (*SpecialFloatLiteralNode)(nil)
+	_ FloatValueNode = (*UintLiteralNode)(nil)
+)
 
 // FloatLiteralNode represents a floating point numeric literal.
 type FloatLiteralNode struct {

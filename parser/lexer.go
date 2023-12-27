@@ -73,6 +73,11 @@ func (rr *runeReader) offset() int {
 func (rr *runeReader) unreadRune(sz int) {
 	newPos := rr.pos - sz
 	if newPos < rr.mark {
+		if rr.err == io.EOF {
+			rr.err = nil
+			// un-reading EOF should not move the position
+			return
+		}
 		panic("unread past mark")
 	}
 	rr.pos = newPos
@@ -86,6 +91,16 @@ func (rr *runeReader) getMark() string {
 	return string(rr.data[rr.mark:rr.pos])
 }
 
+type insertSemiMode int
+
+const (
+	atNextNewline         = 1
+	immediate             = 2 | atNextNewline
+	onlyIfMissing         = 4
+	always                = 8 | onlyIfMissing
+	onlyIfLastTokenOnLine = 16
+)
+
 type protoLex struct {
 	input   *runeReader
 	info    *ast.FileInfo
@@ -95,6 +110,10 @@ type protoLex struct {
 	prevSym    ast.TerminalNode
 	prevOffset int
 	eof        ast.Token
+
+	// if true, the lexer will insert a semicolon and set insertSemi to false
+	insertSemi              insertSemiMode
+	inCompoundStringLiteral bool
 
 	comments []ast.Token
 }
@@ -167,22 +186,6 @@ var keywords = map[string]int{
 	"weak":       _WEAK,
 }
 
-// a list of runes that can start a line
-var topLevelKeywordLineStartingRunes = map[rune]struct{}{
-	'b': {}, // bytes, bool
-	'd': {}, // double
-	'e': {}, // enum, extend, edition, extensions
-	'f': {}, // fixed32, fixed64, float
-	'g': {}, // group
-	'i': {}, // import
-	'm': {}, // message, map
-	'o': {}, // option, optional, oneof
-	'p': {}, // package
-	'r': {}, // rpc, repeated, 'reserved', 'required'
-	's': {}, // syntax, service
-	'u': {}, // uint32, uint64,
-}
-
 func (l *protoLex) maybeNewLine(r rune) {
 	if r == '\n' {
 		l.info.AddLine(l.input.offset())
@@ -191,6 +194,12 @@ func (l *protoLex) maybeNewLine(r rune) {
 
 func (l *protoLex) prev() ast.SourcePos {
 	return l.info.SourcePos(l.prevOffset)
+}
+
+func (l *protoLex) writeVirtualSemi(lval *protoSymType) int {
+	l.input.unreadRune(1)
+	l.setVirtualRune(lval, ';')
+	return ';'
 }
 
 func (l *protoLex) Lex(lval *protoSymType) int {
@@ -209,10 +218,9 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 		c, _, err := l.input.readRune()
 		if err == io.EOF {
 			// insert a semicolon if the last token was the '}' rune (i.e. end of message)
-			if l.shouldInsertVirtualSemicolon(l.prevSym) {
-				// note: nothing to unread
-				l.setVirtualRune(lval, ';')
-				return ';'
+			if l.insertSemi != 0 {
+				l.insertSemi = 0
+				return l.writeVirtualSemi(lval)
 			}
 
 			// we're not actually returning a rune, but this will associate
@@ -232,38 +240,45 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 			continue
 		}
 
-		// check if we need to insert a virtual semicolon at the end of the line
-		insertVirtualSemicolon := func() int {
-			l.input.unreadRune(1)
-			l.setVirtualRune(lval, ';')
-			return ';'
+		if l.insertSemi&immediate == immediate {
+			if (l.insertSemi&always == always) || c != ';' {
+				l.insertSemi = 0
+				return l.writeVirtualSemi(lval)
+			}
+			l.insertSemi = 0
 		}
+
 		switch c {
 		case '}':
-			// handle closing brackets that are not immediately preceded by a semicolon
-			if prev, ok := l.prevSym.(*ast.RuneNode); ok && prev.Rune == ';' {
-				break
-			}
-			if l.shouldInsertVirtualSemicolon(l.prevSym) {
-				return insertVirtualSemicolon()
-			}
+			l.insertSemi = immediate | always
+		case '>':
+			l.insertSemi = immediate | always
+		case ']':
+			l.insertSemi = immediate | onlyIfMissing
 		case '\n':
-			if l.shouldInsertVirtualSemicolon(l.prevSym) {
-				return insertVirtualSemicolon()
+			if l.insertSemi&atNextNewline != 0 {
+				prev := l.prevSym
+				prevRuneIsSemi := false
+				switch prev := prev.(type) {
+				case *ast.RuneNode:
+					if prev.Rune == ';' {
+						prevRuneIsSemi = true
+					}
+				}
+				if (l.insertSemi&always == always) || !prevRuneIsSemi {
+					l.insertSemi = 0
+					return l.writeVirtualSemi(lval)
+				}
+				l.insertSemi = 0
 			}
 			l.info.AddLine(l.input.offset())
 			continue
-		case 'b', 'd', 'e', 'f', 'g', 'i', 'm', 'o', 'p', 'r', 's', 'u':
-			switch prev := l.prevSym.(type) {
-			case *ast.RuneNode:
-				switch prev.Rune {
-				case '}':
-					if l.shouldInsertVirtualSemicolon(l.prevSym) {
-						return insertVirtualSemicolon()
-					}
+		default:
+			if l.insertSemi&onlyIfLastTokenOnLine == onlyIfLastTokenOnLine {
+				if c != '/' {
+					l.insertSemi = 0
 				}
 			}
-		case ';':
 		}
 
 		if c == '.' {
@@ -296,6 +311,10 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 			if t, ok := keywords[str]; ok {
 				l.setIdent(lval, str)
 				return t
+			}
+			if lval.id != nil && lval.id.Val == "package" {
+				// package expressions are a bit ambiguous when no semicolon is present
+				l.insertSemi |= atNextNewline | onlyIfMissing | onlyIfLastTokenOnLine
 			}
 			l.setIdent(lval, str)
 			return _NAME
@@ -348,6 +367,9 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 				l.setError(lval, numError(err, kind, token))
 				return _ERROR
 			}
+			if !l.matchNextRune('[') {
+				l.insertSemi |= atNextNewline | onlyIfMissing | onlyIfLastTokenOnLine
+			}
 			l.setInt(lval, ui)
 			return _INT_LIT
 		}
@@ -360,6 +382,14 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 				return _ERROR
 			}
 			l.setString(lval, str)
+			// check if this is a compound string literal
+			if l.matchNextRune('"', '\'') {
+				l.inCompoundStringLiteral = true
+				// continue reading
+				continue
+			}
+			l.inCompoundStringLiteral = false
+			l.insertSemi |= atNextNewline | onlyIfMissing | onlyIfLastTokenOnLine
 			return _STRING_LIT
 		}
 
@@ -487,8 +517,13 @@ func (l *protoLex) setPrevAndAddComments(n ast.TerminalNode) {
 }
 
 func (l *protoLex) setString(lval *protoSymType, val string) {
-	lval.s = ast.NewStringLiteralNode(val, l.newToken())
-	l.setPrevAndAddComments(lval.s)
+	node := ast.NewStringLiteralNode(val, l.newToken())
+	if l.inCompoundStringLiteral && lval.sv != nil {
+		lval.sv = ast.NewCompoundStringLiteralNode(lval.sv, node)
+	} else {
+		lval.sv = node
+	}
+	l.setPrevAndAddComments(node)
 }
 
 func (l *protoLex) setIdent(lval *protoSymType, val string) {
@@ -849,7 +884,10 @@ LOOKAHEAD:
 				readToEndOfLineComment(l.input)
 			} else if cn == '*' {
 				// block comment
-				readToEndOfBlockComment(l.input)
+				if !readToEndOfBlockComment(l.input) {
+					// incomplete block comment
+					break LOOKAHEAD
+				}
 			}
 		case '\n', '\r', '\t', '\f', '\v', ' ':
 			// skip whitespace
@@ -881,13 +919,16 @@ func readToEndOfLineComment(input *runeReader) {
 	}
 }
 
-func readToEndOfBlockComment(input *runeReader) {
+func readToEndOfBlockComment(input *runeReader) bool {
 	for {
-		c, _, _ := input.readRune()
+		c, _, err := input.readRune()
+		if err != nil {
+			return false
+		}
 		if c == '*' {
 			c, sz, _ := input.readRune()
 			if c == '/' {
-				return
+				return true
 			}
 			input.unreadRune(sz)
 		}
@@ -904,12 +945,21 @@ func (l *protoLex) addSourceError(err error) (reporter.ErrorWithPos, bool) {
 	return ewp, handlerErr == nil
 }
 
+func (l *protoLex) addSourceWarning(err error) {
+	ewp, ok := err.(reporter.ErrorWithPos)
+	if !ok {
+		// TODO: Store the previous span instead of just the position.
+		ewp = reporter.Error(ast.NewSourceSpan(l.prev(), l.prev()), err)
+	}
+	l.handler.HandleWarning(ewp)
+}
+
 func (l *protoLex) Error(s string) {
 	_, _ = l.addSourceError(NewParseError(errors.New(s)))
 }
 
 func (l *protoLex) ErrExtendedSyntax(s string) {
-	_, _ = l.addSourceError(NewExtendedSyntaxError(errors.New(s)))
+	l.addSourceWarning(NewExtendedSyntaxError(fmt.Errorf("error: %s", s)))
 }
 
 // TODO: Accept both a start and end offset, and use that to create a span.
@@ -919,46 +969,4 @@ func (l *protoLex) errWithCurrentPos(err error, offset int) reporter.ErrorWithPo
 	}
 	pos := l.info.SourcePos(l.input.offset() + offset)
 	return reporter.Error(ast.NewSourceSpan(pos, pos), err)
-}
-
-func (l *protoLex) shouldInsertVirtualSemicolon(prevSym ast.TerminalNode) bool {
-	if prevSym == nil {
-		return false
-	}
-	switch prev := prevSym.(type) {
-	case *ast.RuneNode:
-		switch prev.Rune {
-		case ']', '}', '>':
-			return true
-			// case '=':
-			// 	return l.matchNextRune('[')
-		}
-	case *ast.StringLiteralNode:
-		// handle compound string literals
-		return !l.matchNextRune('"', '\'')
-	case *ast.UintLiteralNode:
-		// handle the case where compact options are on the next line following
-		// an integer literal
-		return !l.matchNextRune('[')
-	case *ast.IdentNode:
-		if _, ok := keywords[prev.Val]; ok {
-			// keywords are parsed as idents here
-			switch prev.Val {
-			case "optional", "repeated":
-				// matches the production `fieldCardinality ';'` in messageFieldDecl
-				return true
-			default:
-				return false
-			}
-		} else {
-			// only if the ident is not followed immediately by a dot, equals, or
-			// left bracket.
-			return !l.matchNextRune('.', '=', '{', '<')
-		}
-	case *ast.FloatLiteralNode, *ast.SpecialFloatLiteralNode:
-		// these could only be values in a field literal, which don't need
-		// semicolons anyway
-		return false
-	}
-	return false
 }

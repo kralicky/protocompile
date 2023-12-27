@@ -37,11 +37,13 @@ type FieldDeclNode interface {
 	GetOptions() *CompactOptionsNode
 }
 
-var _ FieldDeclNode = (*FieldNode)(nil)
-var _ FieldDeclNode = (*GroupNode)(nil)
-var _ FieldDeclNode = (*MapFieldNode)(nil)
-var _ FieldDeclNode = (*SyntheticMapField)(nil)
-var _ FieldDeclNode = NoSourceNode{}
+var (
+	_ FieldDeclNode = (*FieldNode)(nil)
+	_ FieldDeclNode = (*GroupNode)(nil)
+	_ FieldDeclNode = (*MapFieldNode)(nil)
+	_ FieldDeclNode = (*SyntheticMapField)(nil)
+	_ FieldDeclNode = NoSourceNode{}
+)
 
 // FieldNode represents a normal field declaration (not groups or maps). It
 // can represent extension fields as well as non-extension fields (both inside
@@ -67,6 +69,11 @@ func (*FieldNode) msgElement()    {}
 func (*FieldNode) oneofElement()  {}
 func (*FieldNode) extendElement() {}
 
+func (m *FieldNode) AddSemicolon(semi *RuneNode) {
+	m.Semicolon = semi
+	m.children = append(m.children, semi)
+}
+
 // NewFieldNode creates a new *FieldNode. The label and options arguments may be
 // nil but the others must be non-nil.
 //   - label: The token corresponding to the label keyword if present ("optional",
@@ -76,8 +83,7 @@ func (*FieldNode) extendElement() {}
 //   - equals: The token corresponding to the '=' rune after the name.
 //   - tag: The token corresponding to the field's tag number.
 //   - opts: Optional set of field options.
-//   - semicolon: The token corresponding to the ";" rune that ends the declaration.
-func NewFieldNode(label *KeywordNode, fieldType IdentValueNode, name *IdentNode, equals *RuneNode, tag *UintLiteralNode, opts *CompactOptionsNode, semicolon *RuneNode) *FieldNode {
+func NewFieldNode(label *KeywordNode, fieldType IdentValueNode, name *IdentNode, equals *RuneNode, tag *UintLiteralNode, opts *CompactOptionsNode) *FieldNode {
 	if fieldType == nil {
 		panic("fieldType is nil")
 	}
@@ -90,10 +96,7 @@ func NewFieldNode(label *KeywordNode, fieldType IdentValueNode, name *IdentNode,
 	if tag == nil {
 		panic("tag is nil")
 	}
-	if semicolon == nil {
-		panic("semicolon is nil")
-	}
-	numChildren := 5
+	numChildren := 4
 	if label != nil {
 		numChildren++
 	}
@@ -108,19 +111,17 @@ func NewFieldNode(label *KeywordNode, fieldType IdentValueNode, name *IdentNode,
 	if opts != nil {
 		children = append(children, opts)
 	}
-	children = append(children, semicolon)
 
 	return &FieldNode{
 		compositeNode: compositeNode{
 			children: children,
 		},
-		Label:     newFieldLabel(label),
-		FldType:   fieldType,
-		Name:      name,
-		Equals:    equals,
-		Tag:       tag,
-		Options:   opts,
-		Semicolon: semicolon,
+		Label:   newFieldLabel(label),
+		FldType: fieldType,
+		Name:    name,
+		Equals:  equals,
+		Tag:     tag,
+		Options: opts,
 	}
 }
 
@@ -210,11 +211,7 @@ func (f *FieldLabel) IsPresent() bool {
 //   - equals: The token corresponding to the '=' rune after the name.
 //   - tag: The token corresponding to the field's tag number.
 //   - opts: Optional set of field options.
-//   - semicolon: The token corresponding to the ";" rune that ends the declaration.
-func NewIncompleteFieldNode(label *KeywordNode, fieldType IdentValueNode, name *IdentNode, equals *RuneNode, tag *UintLiteralNode, opts *CompactOptionsNode, semicolon *RuneNode) *FieldNode {
-	if semicolon == nil {
-		panic("semicolon is nil")
-	}
+func NewIncompleteFieldNode(label *KeywordNode, fieldType IdentValueNode, name *IdentNode, equals *RuneNode, tag *UintLiteralNode, opts *CompactOptionsNode) *FieldNode {
 	var children []Node
 	if label != nil {
 		children = append(children, label)
@@ -235,19 +232,17 @@ func NewIncompleteFieldNode(label *KeywordNode, fieldType IdentValueNode, name *
 	if opts != nil {
 		children = append(children, opts)
 	}
-	children = append(children, semicolon)
 
 	return &FieldNode{
 		compositeNode: compositeNode{
 			children: children,
 		},
-		Label:     newFieldLabel(label),
-		FldType:   fieldType,
-		Name:      name,
-		Equals:    equals,
-		Tag:       tag,
-		Options:   opts,
-		Semicolon: semicolon,
+		Label:   newFieldLabel(label),
+		FldType: fieldType,
+		Name:    name,
+		Equals:  equals,
+		Tag:     tag,
+		Options: opts,
 	}
 }
 
@@ -479,10 +474,12 @@ type OneofElement interface {
 	oneofElement()
 }
 
-var _ OneofElement = (*OptionNode)(nil)
-var _ OneofElement = (*FieldNode)(nil)
-var _ OneofElement = (*GroupNode)(nil)
-var _ OneofElement = (*EmptyDeclNode)(nil)
+var (
+	_ OneofElement = (*OptionNode)(nil)
+	_ OneofElement = (*FieldNode)(nil)
+	_ OneofElement = (*GroupNode)(nil)
+	_ OneofElement = (*EmptyDeclNode)(nil)
+)
 
 // SyntheticOneof is not an actual node in the AST but a synthetic node
 // that represents the oneof implied by a proto3 optional field.
@@ -585,6 +582,11 @@ type MapFieldNode struct {
 	Semicolon *RuneNode
 }
 
+func (m *MapFieldNode) AddSemicolon(semi *RuneNode) {
+	m.Semicolon = semi
+	m.children = append(m.children, semi)
+}
+
 func (*MapFieldNode) msgElement() {}
 
 // NewMapFieldNode creates a new *MapFieldNode. All arguments must be non-nil
@@ -594,8 +596,7 @@ func (*MapFieldNode) msgElement() {}
 //   - equals: The token corresponding to the '=' rune after the name.
 //   - tag: The token corresponding to the field's tag number.
 //   - opts: Optional set of field options.
-//   - semicolon: The token corresponding to the ";" rune that ends the declaration.
-func NewMapFieldNode(mapType *MapTypeNode, name *IdentNode, equals *RuneNode, tag *UintLiteralNode, opts *CompactOptionsNode, semicolon *RuneNode) *MapFieldNode {
+func NewMapFieldNode(mapType *MapTypeNode, name *IdentNode, equals *RuneNode, tag *UintLiteralNode, opts *CompactOptionsNode) *MapFieldNode {
 	if mapType == nil {
 		panic("mapType is nil")
 	}
@@ -608,10 +609,7 @@ func NewMapFieldNode(mapType *MapTypeNode, name *IdentNode, equals *RuneNode, ta
 	if tag == nil {
 		panic("tag is nil")
 	}
-	if semicolon == nil {
-		panic("semicolon is nil")
-	}
-	numChildren := 5
+	numChildren := 4
 	if opts != nil {
 		numChildren++
 	}
@@ -620,18 +618,16 @@ func NewMapFieldNode(mapType *MapTypeNode, name *IdentNode, equals *RuneNode, ta
 	if opts != nil {
 		children = append(children, opts)
 	}
-	children = append(children, semicolon)
 
 	return &MapFieldNode{
 		compositeNode: compositeNode{
 			children: children,
 		},
-		MapType:   mapType,
-		Name:      name,
-		Equals:    equals,
-		Tag:       tag,
-		Options:   opts,
-		Semicolon: semicolon,
+		MapType: mapType,
+		Name:    name,
+		Equals:  equals,
+		Tag:     tag,
+		Options: opts,
 	}
 }
 
