@@ -35,6 +35,11 @@ type FileNode struct {
 	compositeNode
 	fileInfo *FileInfo
 
+	// A map of implementation-specific key-value pairs parsed from comments on
+	// the syntax or edition declaration. These work like the //go: comments in
+	// Go source files.
+	Pragmas map[string]string
+
 	// A file has either a Syntax or Edition node, never both.
 	// If both are nil, neither declaration is present and the
 	// file is assumed to use "proto2" syntax.
@@ -73,11 +78,14 @@ func newFileNode(info *FileInfo, syntax *SyntaxNode, edition *EditionNode, decls
 	if syntax != nil || edition != nil {
 		numChildren++
 	}
+	var pragmas map[string]string
 	children := make([]Node, 0, numChildren)
 	if syntax != nil {
 		children = append(children, syntax)
+		pragmas = parsePragmas(info.NodeInfo(syntax).LeadingComments())
 	} else if edition != nil {
 		children = append(children, edition)
+		pragmas = parsePragmas(info.NodeInfo(edition).LeadingComments())
 	}
 	for _, decl := range decls {
 		switch decl := decl.(type) {
@@ -97,6 +105,7 @@ func newFileNode(info *FileInfo, syntax *SyntaxNode, edition *EditionNode, decls
 			children: children,
 		},
 		fileInfo: info,
+		Pragmas:  pragmas,
 		Syntax:   syntax,
 		Edition:  edition,
 		Decls:    decls,
@@ -144,6 +153,14 @@ func (f *FileNode) SourcePos(offset int) SourcePos {
 
 func (f *FileNode) TokenAtOffset(offset int) Token {
 	return f.fileInfo.TokenAtOffset(offset)
+}
+
+func (f *FileNode) Pragma(key string) (string, bool) {
+	if f.Pragmas == nil {
+		return "", false
+	}
+	val, ok := f.Pragmas[key]
+	return val, ok
 }
 
 // FileElement is an interface implemented by all AST nodes that are
