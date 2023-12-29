@@ -232,19 +232,19 @@ var protoExca = [...]int16{
 	56, 172,
 	-2, 0,
 	-1, 108,
-	56, 209,
+	56, 210,
 	-2, 0,
 	-1, 110,
-	56, 221,
+	56, 222,
 	-2, 0,
 	-1, 177,
 	56, 173,
 	-2, 0,
 	-1, 229,
-	56, 210,
+	56, 211,
 	-2, 0,
 	-1, 280,
-	56, 222,
+	56, 223,
 	-2, 0,
 	-1, 403,
 	56, 58,
@@ -257,10 +257,10 @@ var protoExca = [...]int16{
 	56, 121,
 	-2, 0,
 	-1, 657,
-	56, 233,
+	56, 234,
 	-2, 0,
 	-1, 678,
-	56, 234,
+	56, 235,
 	-2, 0,
 }
 
@@ -553,39 +553,40 @@ var protoR1 = [...]int8{
 	69, 78, 81, 81, 80, 80, 79, 79, 79, 79,
 	82, 82, 61, 64, 64, 63, 63, 62, 62, 62,
 	62, 62, 62, 62, 62, 62, 62, 62, 53, 53,
-	53, 53, 53, 53, 53, 53, 53, 53, 83, 86,
-	86, 85, 85, 84, 84, 84, 55, 55, 55, 55,
-	87, 90, 90, 89, 89, 88, 88, 88, 88, 91,
-	92, 96, 96, 95, 95, 94, 94, 93, 93, 28,
+	53, 53, 53, 53, 53, 53, 53, 53, 53, 83,
+	86, 86, 85, 85, 84, 84, 84, 55, 55, 55,
+	55, 87, 90, 90, 89, 89, 88, 88, 88, 88,
+	91, 92, 96, 96, 95, 95, 94, 94, 93, 93,
 	28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
 	28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
 	28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
-	28, 28, 29, 29, 29, 29, 29, 29, 29, 29,
+	28, 28, 28, 29, 29, 29, 29, 29, 29, 29,
 	29, 29, 29, 29, 29, 29, 29, 29, 29, 29,
 	29, 29, 29, 29, 29, 29, 29, 29, 29, 29,
 	29, 29, 29, 29, 29, 29, 29, 29, 29, 29,
-	29, 29, 33, 33, 33, 33, 33, 33, 33, 33,
+	29, 29, 29, 33, 33, 33, 33, 33, 33, 33,
 	33, 33, 33, 33, 33, 33, 33, 33, 33, 33,
 	33, 33, 33, 33, 33, 33, 33, 33, 33, 33,
 	33, 33, 33, 33, 33, 33, 33, 33, 33, 33,
-	33, 33, 33, 33, 30, 30, 30, 30, 30, 30,
+	33, 33, 33, 33, 33, 30, 30, 30, 30, 30,
 	30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
 	30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
 	30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
-	30, 30, 30, 31, 31, 31, 31, 31, 31, 31,
+	30, 30, 30, 30, 31, 31, 31, 31, 31, 31,
 	31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
 	31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
 	31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
-	31, 31, 31, 31, 31, 31, 32, 32, 32, 32,
+	31, 31, 31, 31, 31, 31, 31, 32, 32, 32,
 	32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
 	32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
 	32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
-	32, 32, 32, 32, 32, 32, 32, 32, 32, 26,
+	32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
 	26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
 	26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
 	26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
 	26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
-	26, 26, 26, 98, 98, 99, 99, 97, 97, 100,
+	26, 26, 26, 26, 98, 98, 99, 99, 97, 97,
+	100,
 }
 
 var protoR2 = [...]int8{
@@ -609,10 +610,10 @@ var protoR2 = [...]int8{
 	3, 5, 0, 1, 2, 1, 2, 2, 2, 1,
 	3, 4, 5, 0, 1, 2, 1, 2, 2, 2,
 	2, 2, 2, 2, 2, 2, 2, 1, 5, 6,
-	4, 5, 4, 3, 2, 3, 2, 1, 5, 0,
-	1, 2, 1, 2, 2, 1, 5, 6, 4, 5,
-	5, 0, 1, 2, 1, 2, 2, 2, 1, 5,
-	8, 4, 3, 0, 1, 2, 1, 2, 1, 1,
+	4, 5, 4, 3, 2, 3, 2, 1, 1, 5,
+	0, 1, 2, 1, 2, 2, 1, 5, 6, 4,
+	5, 5, 0, 1, 2, 1, 2, 2, 2, 1,
+	5, 8, 4, 3, 0, 1, 2, 1, 2, 1,
 	1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 	1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 	1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
@@ -641,7 +642,8 @@ var protoR2 = [...]int8{
 	1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 	1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 	1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-	1, 1, 1, 1, 0, 1, 0, 1, 1, 1,
+	1, 1, 1, 1, 1, 0, 1, 0, 1, 1,
+	1,
 }
 
 var protoChk = [...]int16{
@@ -721,74 +723,74 @@ var protoChk = [...]int16{
 var protoDef = [...]int16{
 	-2, -2, 0, 0, -2, 0, 0, 8, 0, 0,
 	0, 0, 0, 0, 0, 16, 0, 0, 0, 0,
-	0, 0, 0, -2, 529, -2, 7, 0, 0, 9,
+	0, 0, 0, -2, 530, -2, 7, 0, 0, 9,
 	10, 11, 12, 13, 14, 15, 19, 0, 0, 22,
-	23, 479, 480, 481, 482, 483, 484, 485, 486, 487,
-	488, 489, 490, 491, 492, 493, 494, 495, 496, 497,
-	498, 499, 500, 501, 502, 503, 504, 505, 506, 507,
-	508, 509, 510, 511, 512, 513, 514, 515, 516, 517,
-	518, 519, 520, 521, 522, 526, 36, 38, 0, 0,
+	23, 480, 481, 482, 483, 484, 485, 486, 487, 488,
+	489, 490, 491, 492, 493, 494, 495, 496, 497, 498,
+	499, 500, 501, 502, 503, 504, 505, 506, 507, 508,
+	509, 510, 511, 512, 513, 514, 515, 516, 517, 518,
+	519, 520, 521, 522, 523, 527, 36, 38, 0, 0,
 	0, 0, 95, 0, 0, -2, -2, 17, 18, 20,
-	21, 0, 0, 525, 0, 41, 183, -2, -2, 96,
+	21, 0, 0, 526, 0, 41, 183, -2, -2, 96,
 	-2, 24, 0, 37, 39, 40, 0, 184, 186, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 197,
-	0, 207, 0, 0, 0, 0, 162, 107, 108, 109,
-	97, 0, 265, 25, 239, 240, 241, 242, 243, 244,
-	245, 246, 247, 248, 249, 250, 251, 252, 253, 254,
-	255, 256, 257, 258, 259, 260, 261, 262, 263, 264,
-	266, 267, 268, 269, 270, 271, 0, -2, 175, 0,
-	0, 0, 179, 0, 0, 164, 312, 313, 314, 315,
-	316, 317, 318, 319, 320, 321, 322, 323, 324, 325,
-	326, 327, 328, 329, 330, 331, 332, 333, 334, 335,
-	336, 337, 338, 339, 340, 341, 342, 343, 344, 345,
-	346, 347, 348, 349, 350, 351, 352, 353, 0, -2,
-	212, 0, 0, 215, 0, 0, 99, 0, 27, 272,
-	273, 274, 275, 276, 277, 278, 279, 280, 281, 282,
-	283, 284, 285, 286, 287, 288, 289, 290, 291, 292,
-	293, 294, 295, 296, 297, 298, 299, 300, 301, 302,
-	303, 304, 305, 306, 307, 308, 309, 310, 311, 0,
-	-2, 224, 0, 0, 0, 228, 0, 35, 42, 0,
+	208, 207, 0, 0, 0, 0, 162, 107, 108, 109,
+	97, 0, 266, 25, 240, 241, 242, 243, 244, 245,
+	246, 247, 248, 249, 250, 251, 252, 253, 254, 255,
+	256, 257, 258, 259, 260, 261, 262, 263, 264, 265,
+	267, 268, 269, 270, 271, 272, 0, -2, 175, 0,
+	0, 0, 179, 0, 0, 164, 313, 314, 315, 316,
+	317, 318, 319, 320, 321, 322, 323, 324, 325, 326,
+	327, 328, 329, 330, 331, 332, 333, 334, 335, 336,
+	337, 338, 339, 340, 341, 342, 343, 344, 345, 346,
+	347, 348, 349, 350, 351, 352, 353, 354, 0, -2,
+	213, 0, 0, 216, 0, 0, 99, 0, 27, 273,
+	274, 275, 276, 277, 278, 279, 280, 281, 282, 283,
+	284, 285, 286, 287, 288, 289, 290, 291, 292, 293,
+	294, 295, 296, 297, 298, 299, 300, 301, 302, 303,
+	304, 305, 306, 307, 308, 309, 310, 311, 312, 0,
+	-2, 225, 0, 0, 0, 229, 0, 35, 42, 0,
 	44, 45, 46, 0, 47, 0, 0, 52, 182, 185,
 	187, 188, 189, 190, 191, 192, 193, 194, 195, 196,
-	0, 204, 103, 0, 31, 393, 394, 395, 396, 397,
-	398, 399, 400, 401, 402, 403, 404, 405, 406, 407,
-	408, 409, 410, 411, 412, 413, 414, 415, 416, 417,
-	418, 419, 420, 421, 422, 423, 424, 425, 426, 427,
-	428, 429, 430, 431, 432, 433, 434, 435, 206, 524,
-	149, 151, 0, 0, 524, 524, 166, 167, 169, 0,
-	98, 0, 171, 174, 176, 177, 527, 528, 178, 0,
-	524, 154, 156, 159, 0, 208, 211, 213, 214, 0,
-	0, 0, 100, 220, 223, 225, 226, 227, 0, 43,
+	0, 204, 103, 0, 31, 394, 395, 396, 397, 398,
+	399, 400, 401, 402, 403, 404, 405, 406, 407, 408,
+	409, 410, 411, 412, 413, 414, 415, 416, 417, 418,
+	419, 420, 421, 422, 423, 424, 425, 426, 427, 428,
+	429, 430, 431, 432, 433, 434, 435, 436, 206, 525,
+	149, 151, 0, 0, 525, 525, 166, 167, 169, 0,
+	98, 0, 171, 174, 176, 177, 528, 529, 178, 0,
+	525, 154, 156, 159, 0, 209, 212, 214, 215, 0,
+	0, 0, 100, 221, 224, 226, 227, 228, 0, 43,
 	0, 56, 57, -2, 60, 65, 0, 69, 0, 48,
 	51, 54, 49, 50, 53, 0, 203, 0, 104, 205,
-	147, 523, 0, -2, 0, 161, 165, 523, 0, 26,
+	147, 524, 0, -2, 0, 161, 165, 524, 0, 26,
 	0, 135, 136, 137, 138, 139, 140, 141, 142, 143,
-	144, 145, 146, 180, 523, 163, 0, 160, 0, 0,
+	144, 145, 146, 180, 524, 163, 0, 160, 0, 0,
 	28, 0, 0, 55, 59, 61, 62, 63, 64, 0,
 	0, 67, 0, 0, 78, 0, 0, 0, 0, 0,
 	202, 32, 200, 148, 114, 150, 152, 153, 0, -2,
 	123, 0, 0, 0, 127, 0, 0, 101, 0, 29,
-	354, 355, 356, 357, 358, 359, 360, 361, 362, 363,
-	364, 365, 366, 367, 368, 369, 370, 371, 372, 373,
-	374, 375, 376, 377, 378, 379, 380, 381, 382, 383,
-	384, 385, 386, 387, 388, 389, 390, 391, 392, 132,
-	168, 170, 0, 181, 155, 157, 158, 0, 218, 0,
-	0, 0, 105, 0, 33, 436, 437, 438, 439, 440,
-	441, 442, 443, 444, 445, 446, 447, 448, 449, 450,
-	451, 452, 453, 454, 455, 456, 457, 458, 459, 460,
-	461, 462, 463, 464, 465, 466, 467, 468, 469, 470,
-	471, 472, 473, 474, 475, 476, 477, 478, 68, 73,
-	0, 0, 0, 66, 76, 77, 0, 80, 524, 91,
-	0, 0, 0, 0, 0, 0, 198, 201, 524, 112,
+	355, 356, 357, 358, 359, 360, 361, 362, 363, 364,
+	365, 366, 367, 368, 369, 370, 371, 372, 373, 374,
+	375, 376, 377, 378, 379, 380, 381, 382, 383, 384,
+	385, 386, 387, 388, 389, 390, 391, 392, 393, 132,
+	168, 170, 0, 181, 155, 157, 158, 0, 219, 0,
+	0, 0, 105, 0, 33, 437, 438, 439, 440, 441,
+	442, 443, 444, 445, 446, 447, 448, 449, 450, 451,
+	452, 453, 454, 455, 456, 457, 458, 459, 460, 461,
+	462, 463, 464, 465, 466, 467, 468, 469, 470, 471,
+	472, 473, 474, 475, 476, 477, 478, 479, 68, 73,
+	0, 0, 0, 66, 76, 77, 0, 80, 525, 91,
+	0, 0, 0, 0, 0, 0, 198, 201, 525, 112,
 	116, 119, 122, 124, 125, 126, 0, 0, 0, 102,
-	133, 0, 216, 219, 229, 0, 232, 0, 106, 74,
-	75, 524, 83, 0, 85, 87, 0, 79, 0, 523,
-	92, 93, 70, 0, 72, 183, 0, 199, 0, 523,
-	0, 0, 0, 0, 30, 0, 217, -2, 231, 34,
-	0, 523, 84, 88, 89, 0, 0, 0, 0, 0,
-	110, 0, 113, 115, 128, 0, 134, 0, -2, 236,
-	0, 238, 81, 0, 86, 90, 94, 71, 117, 183,
-	111, 129, 183, 0, 230, 235, 237, 82, 0, 0,
+	133, 0, 217, 220, 230, 0, 233, 0, 106, 74,
+	75, 525, 83, 0, 85, 87, 0, 79, 0, 524,
+	92, 93, 70, 0, 72, 183, 0, 199, 0, 524,
+	0, 0, 0, 0, 30, 0, 218, -2, 232, 34,
+	0, 524, 84, 88, 89, 0, 0, 0, 0, 0,
+	110, 0, 113, 115, 128, 0, 134, 0, -2, 237,
+	0, 239, 81, 0, 86, 90, 94, 71, 117, 183,
+	111, 129, 183, 0, 231, 236, 238, 82, 0, 0,
 	0, 118, 130, 183, 0, 131,
 }
 
@@ -2275,16 +2277,22 @@ protodefault:
 			protoVAL.fld = ast.NewIncompleteFieldNode(nil, protoDollar[1].tid, nil, nil, nil, nil)
 		}
 	case 208:
+		protoDollar = protoS[protopt-1 : protopt+1]
+		{
+			protolex.(*protoLex).ErrExtendedSyntax("missing field type")
+			protoVAL.fld = ast.NewIncompleteFieldNode(protoDollar[1].id.ToKeyword(), nil, nil, nil, nil, nil)
+		}
+	case 209:
 		protoDollar = protoS[protopt-5 : protopt+1]
 		{
 			protoVAL.extend = ast.NewExtendNode(protoDollar[1].id.ToKeyword(), protoDollar[2].tid, protoDollar[3].b, protoDollar[4].extElements, protoDollar[5].b)
 		}
-	case 209:
+	case 210:
 		protoDollar = protoS[protopt-0 : protopt+1]
 		{
 			protoVAL.extElements = nil
 		}
-	case 211:
+	case 212:
 		protoDollar = protoS[protopt-2 : protopt+1]
 		{
 			if protoDollar[2].extElement != nil {
@@ -2293,7 +2301,7 @@ protodefault:
 				protoVAL.extElements = protoDollar[1].extElements
 			}
 		}
-	case 212:
+	case 213:
 		protoDollar = protoS[protopt-1 : protopt+1]
 		{
 			if protoDollar[1].extElement != nil {
@@ -2302,54 +2310,54 @@ protodefault:
 				protoVAL.extElements = nil
 			}
 		}
-	case 213:
+	case 214:
 		protoDollar = protoS[protopt-2 : protopt+1]
 		{
 			protoDollar[1].fld.AddSemicolon(protoDollar[2].b)
 			protoVAL.extElement = protoDollar[1].fld
 		}
-	case 214:
+	case 215:
 		protoDollar = protoS[protopt-2 : protopt+1]
 		{
 			ast.AddVirtualSemicolon(protoDollar[1].grp, protoDollar[2].b)
 			protoVAL.extElement = protoDollar[1].grp
 		}
-	case 215:
+	case 216:
 		protoDollar = protoS[protopt-1 : protopt+1]
 		{
 			protoVAL.extElement = nil
 		}
-	case 216:
+	case 217:
 		protoDollar = protoS[protopt-5 : protopt+1]
 		{
 			protoVAL.fld = ast.NewFieldNode(protoDollar[1].id.ToKeyword(), protoDollar[2].tid, protoDollar[3].id, protoDollar[4].b, protoDollar[5].i, nil)
 		}
-	case 217:
+	case 218:
 		protoDollar = protoS[protopt-6 : protopt+1]
 		{
 			protoVAL.fld = ast.NewFieldNode(protoDollar[1].id.ToKeyword(), protoDollar[2].tid, protoDollar[3].id, protoDollar[4].b, protoDollar[5].i, protoDollar[6].cmpctOpts)
 		}
-	case 218:
+	case 219:
 		protoDollar = protoS[protopt-4 : protopt+1]
 		{
 			protoVAL.fld = ast.NewFieldNode(nil, protoDollar[1].tid, protoDollar[2].id, protoDollar[3].b, protoDollar[4].i, nil)
 		}
-	case 219:
+	case 220:
 		protoDollar = protoS[protopt-5 : protopt+1]
 		{
 			protoVAL.fld = ast.NewFieldNode(nil, protoDollar[1].tid, protoDollar[2].id, protoDollar[3].b, protoDollar[4].i, protoDollar[5].cmpctOpts)
 		}
-	case 220:
+	case 221:
 		protoDollar = protoS[protopt-5 : protopt+1]
 		{
 			protoVAL.svc = ast.NewServiceNode(protoDollar[1].id.ToKeyword(), protoDollar[2].id, protoDollar[3].b, protoDollar[4].svcElements, protoDollar[5].b)
 		}
-	case 221:
+	case 222:
 		protoDollar = protoS[protopt-0 : protopt+1]
 		{
 			protoVAL.svcElements = nil
 		}
-	case 223:
+	case 224:
 		protoDollar = protoS[protopt-2 : protopt+1]
 		{
 			if protoDollar[2].svcElement != nil {
@@ -2358,7 +2366,7 @@ protodefault:
 				protoVAL.svcElements = protoDollar[1].svcElements
 			}
 		}
-	case 224:
+	case 225:
 		protoDollar = protoS[protopt-1 : protopt+1]
 		{
 			if protoDollar[1].svcElement != nil {
@@ -2367,55 +2375,55 @@ protodefault:
 				protoVAL.svcElements = nil
 			}
 		}
-	case 225:
+	case 226:
 		protoDollar = protoS[protopt-2 : protopt+1]
 		{
 			protoDollar[1].opt.AddSemicolon(protoDollar[2].b)
 			protoVAL.svcElement = protoDollar[1].opt
 		}
-	case 226:
+	case 227:
 		protoDollar = protoS[protopt-2 : protopt+1]
 		{
 			protoDollar[1].mtd.AddSemicolon(protoDollar[2].b)
 			protoVAL.svcElement = protoDollar[1].mtd
 		}
-	case 227:
+	case 228:
 		protoDollar = protoS[protopt-2 : protopt+1]
 		{
 			ast.AddVirtualSemicolon(protoDollar[1].mtd, protoDollar[2].b)
 			protoVAL.svcElement = protoDollar[1].mtd
 		}
-	case 228:
+	case 229:
 		protoDollar = protoS[protopt-1 : protopt+1]
 		{
 			protoVAL.svcElement = nil
 		}
-	case 229:
+	case 230:
 		protoDollar = protoS[protopt-5 : protopt+1]
 		{
 			protoVAL.mtd = ast.NewRPCNode(protoDollar[1].id.ToKeyword(), protoDollar[2].id, protoDollar[3].mtdMsgType, protoDollar[4].id.ToKeyword(), protoDollar[5].mtdMsgType)
 		}
-	case 230:
+	case 231:
 		protoDollar = protoS[protopt-8 : protopt+1]
 		{
 			protoVAL.mtd = ast.NewRPCNodeWithBody(protoDollar[1].id.ToKeyword(), protoDollar[2].id, protoDollar[3].mtdMsgType, protoDollar[4].id.ToKeyword(), protoDollar[5].mtdMsgType, protoDollar[6].b, protoDollar[7].mtdElements, protoDollar[8].b)
 		}
-	case 231:
+	case 232:
 		protoDollar = protoS[protopt-4 : protopt+1]
 		{
 			protoVAL.mtdMsgType = ast.NewRPCTypeNode(protoDollar[1].b, protoDollar[2].id.ToKeyword(), protoDollar[3].tid, protoDollar[4].b)
 		}
-	case 232:
+	case 233:
 		protoDollar = protoS[protopt-3 : protopt+1]
 		{
 			protoVAL.mtdMsgType = ast.NewRPCTypeNode(protoDollar[1].b, nil, protoDollar[2].tid, protoDollar[3].b)
 		}
-	case 233:
+	case 234:
 		protoDollar = protoS[protopt-0 : protopt+1]
 		{
 			protoVAL.mtdElements = nil
 		}
-	case 235:
+	case 236:
 		protoDollar = protoS[protopt-2 : protopt+1]
 		{
 			if protoDollar[2].mtdElement != nil {
@@ -2424,7 +2432,7 @@ protodefault:
 				protoVAL.mtdElements = protoDollar[1].mtdElements
 			}
 		}
-	case 236:
+	case 237:
 		protoDollar = protoS[protopt-1 : protopt+1]
 		{
 			if protoDollar[1].mtdElement != nil {
@@ -2433,51 +2441,51 @@ protodefault:
 				protoVAL.mtdElements = nil
 			}
 		}
-	case 237:
+	case 238:
 		protoDollar = protoS[protopt-2 : protopt+1]
 		{
 			protoDollar[1].opt.AddSemicolon(protoDollar[2].b)
 			protoVAL.mtdElement = protoDollar[1].opt
 		}
-	case 238:
+	case 239:
 		protoDollar = protoS[protopt-1 : protopt+1]
 		{
 			protoVAL.mtdElement = nil
 		}
-	case 523:
+	case 524:
 		protoDollar = protoS[protopt-1 : protopt+1]
 		{
 			protolex.(*protoLex).ErrExtendedSyntax("unexpected trailing comma")
 			protoVAL.b = protoDollar[1].b
 		}
-	case 524:
+	case 525:
 		protoDollar = protoS[protopt-0 : protopt+1]
 		{
 			protoVAL.b = nil
 		}
-	case 525:
+	case 526:
 		protoDollar = protoS[protopt-1 : protopt+1]
 		{
 			protolex.(*protoLex).ErrExtendedSyntax("unexpected trailing '.'")
 			protoVAL.b = protoDollar[1].b
 		}
-	case 526:
+	case 527:
 		protoDollar = protoS[protopt-0 : protopt+1]
 		{
 			protoVAL.b = nil
 		}
-	case 527:
+	case 528:
 		protoDollar = protoS[protopt-1 : protopt+1]
 		{
 			protoVAL.b = protoDollar[1].b
 		}
-	case 528:
+	case 529:
 		protoDollar = protoS[protopt-1 : protopt+1]
 		{
 			protolex.(*protoLex).ErrExtendedSyntax("expected ';', found ','")
 			protoVAL.b = protoDollar[1].b
 		}
-	case 529:
+	case 530:
 		protoDollar = protoS[protopt-1 : protopt+1]
 		{
 			if protoDollar[1].b.Virtual {

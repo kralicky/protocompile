@@ -369,7 +369,7 @@ func (r *result) addExtensions(ext *ast.ExtendNode, flds *[]*descriptorpb.FieldD
 		}
 	}
 	if count == 0 {
-		nodeInfo := r.file.NodeInfo(ext)
+		nodeInfo := r.file.NodeInfo(ext.CloseBrace)
 		_ = handler.HandleErrorf(nodeInfo, "extend sections must define at least one extension")
 	}
 }

@@ -1082,6 +1082,10 @@ messageFieldDecl
 		protolex.(*protoLex).ErrExtendedSyntax("missing field name")
 		$$ = ast.NewIncompleteFieldNode(nil, $1, nil, nil, nil, nil)
 	}
+	| fieldCardinality {
+		protolex.(*protoLex).ErrExtendedSyntax("missing field type")
+		$$ = ast.NewIncompleteFieldNode($1.ToKeyword(), nil, nil, nil, nil, nil)
+	}
 
 extensionDecl
 	: _EXTEND typeName '{' extensionBody '}' {

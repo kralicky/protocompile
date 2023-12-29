@@ -308,13 +308,17 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 			// identifier
 			l.readIdentifier()
 			str := l.input.getMark()
+			l.maybeProcessPartialField(str)
 			if t, ok := keywords[str]; ok {
 				l.setIdent(lval, str)
 				return t
 			}
-			if lval.id != nil && lval.id.Val == "package" {
-				// package expressions are a bit ambiguous when no semicolon is present
-				l.insertSemi |= atNextNewline | onlyIfMissing | onlyIfLastTokenOnLine
+			if lval.id != nil {
+				switch lval.id.Val {
+				case "package":
+					// package expressions are a bit ambiguous when no semicolon is present
+					l.insertSemi |= atNextNewline | onlyIfMissing | onlyIfLastTokenOnLine
+				}
 			}
 			l.setIdent(lval, str)
 			return _NAME
@@ -863,12 +867,10 @@ func (l *protoLex) skipToEndOfBlockComment(lval *protoSymType) (ok, hasErr bool)
 	}
 }
 
-func (l *protoLex) matchNextRune(targets ...rune) bool {
-	var found bool
-	l.input.save()
+func (l *protoLex) skipToNextRune() (nextRune rune) {
 LOOKAHEAD:
 	for {
-		cn, _, err := l.input.readRune()
+		cn, sz, err := l.input.readRune()
 		if err != nil {
 			break
 		}
@@ -892,17 +894,42 @@ LOOKAHEAD:
 		case '\n', '\r', '\t', '\f', '\v', ' ':
 			// skip whitespace
 		default:
-			for _, target := range targets {
-				if cn == target {
-					found = true
-					break
-				}
-			}
+			nextRune = cn
+			l.input.unreadRune(sz)
 			break LOOKAHEAD
 		}
 	}
-	l.input.restore()
+	return
+}
+
+func (l *protoLex) matchNextRune(targets ...rune) bool {
+	var found bool
+	l.input.save()
+	defer l.input.restore()
+	l.skipToNextRune()
+	c, _, err := l.input.readRune()
+	if err == nil {
+		for _, t := range targets {
+			if c == t {
+				found = true
+				break
+			}
+		}
+	}
 	return found
+}
+
+func (l *protoLex) peekNextIdent() (ident string, nextRune rune, ok bool) {
+	l.input.save()
+	defer l.input.restore()
+	nextRune = l.skipToNextRune()
+	mark := l.input.offset()
+	l.readIdentifier()
+	if l.input.offset() > mark {
+		ok = true
+		ident = string(l.input.data[mark:l.input.offset()])
+	}
+	return
 }
 
 func readToEndOfLineComment(input *runeReader) {
@@ -969,4 +996,90 @@ func (l *protoLex) errWithCurrentPos(err error, offset int) reporter.ErrorWithPo
 	}
 	pos := l.info.SourcePos(l.input.offset() + offset)
 	return reporter.Error(ast.NewSourceSpan(pos, pos), err)
+}
+
+func (l *protoLex) maybeProcessPartialField(ident string) {
+	// Determine if this ident terminates a partial field declaration, then
+	// insert virtual semicolons as appropriate.
+	// These are very difficult to parse correctly as the protobuf grammar makes
+	// them ambiguous, so we must rely on heuristic rules.
+	//
+	// Form 1:
+	//  message Foo {
+	//    optional
+	//    optional int32 bar = 1;
+	//  }
+	//
+	// Form 2:
+	//  message Foo {
+	//    int32
+	//    optional int32 bar = 1;
+	//  }
+	//
+	// Form 3:
+	//  message Foo {
+	//    int32
+	//    optional int32 bar = 1;
+	//  }
+	//
+	// Form 3:
+	//  message Foo {
+	//    optional
+	//    int32 bar = 1
+	//  }
+
+	// Forms 1 and 2 can be detected by analyzing the surrounding tokens to see
+	// whether they would form a valid field declaration. Form 3 is impossible
+	// to detect, as it is an actual valid field declaration.
+
+	var canStartField bool
+	if l.prevSym != nil {
+		switch prev := l.prevSym.(type) {
+		case *ast.RuneNode:
+			if prev.Rune == '{' || prev.Rune == ';' {
+				canStartField = true
+			}
+		}
+	}
+
+	if !canStartField {
+		return
+	}
+
+	nextIdent, nextRune, ok := l.peekNextIdent()
+	if !ok {
+		if nextRune == '}' {
+			// if next rune is '}', then we're at the end of a message
+			// and can insert a semicolon
+			l.insertSemi |= immediate | onlyIfMissing
+		}
+		return
+	}
+
+	var syntax string
+	if l.res == nil || l.res.Syntax == nil {
+		syntax = "proto2"
+	} else {
+		syntax = l.res.Syntax.Syntax.AsString()
+	}
+
+	matchKeyword := func(ident string) bool {
+		switch syntax {
+		case "proto2":
+			switch ident {
+			case "optional", "required", "repeated":
+				return true
+			}
+		case "proto3":
+			switch ident {
+			case "optional", "repeated":
+				return true
+			}
+		}
+		return false
+	}
+
+	if matchKeyword(nextIdent) {
+		l.insertSemi |= atNextNewline | onlyIfMissing
+	}
 }
