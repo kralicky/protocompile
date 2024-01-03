@@ -1,3 +1,4 @@
+//protols:nofmt
 /*1*/ syntax /*2*/ = /*3*/ "proto2" /*4*/; /*5*/ /*6*/
 
 /*1*/ package /*2*/ extsyntax.comments /*3*/; /*4*/ /*5*/

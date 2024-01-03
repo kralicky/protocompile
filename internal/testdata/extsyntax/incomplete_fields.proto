@@ -1,0 +1,27 @@
+//protols:nofmt
+syntax = "proto2"
+
+message Foo {
+  optional
+  optional
+    int32
+      foo
+        =
+          1
+  optional
+}
+
+message Foo2 {
+  optional
+  optional int32 foo = 1
+  optional
+  option () = {}
+}
+
+message Foo3 {
+  optional
+}
+
+extend google.protobuf.FieldOptions {
+
+}

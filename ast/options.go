@@ -14,7 +14,10 @@
 
 package ast
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 // OptionDeclNode is a placeholder interface for AST nodes that represent
 // options. This allows NoSourceNode to be used in place of *OptionNode
@@ -215,31 +218,37 @@ type OptionNameNode struct {
 // length that is one less than the length of parts. The parts arg must not be
 // empty.
 func NewOptionNameNode(parts []*FieldReferenceNode, dots []*RuneNode) *OptionNameNode {
-	if len(parts) == 0 {
-		panic("must have at least one part")
-	}
-	if len(dots) != len(parts)-1 {
-		panic(fmt.Sprintf("%d parts requires %d dots, not %d", len(parts), len(parts)-1, len(dots)))
-	}
-	children := make([]Node, 0, len(parts)*2-1)
-	for i, part := range parts {
-		if part == nil {
-			panic(fmt.Sprintf("parts[%d] is nil", i))
-		}
-		if i > 0 {
-			if dots[i-1] == nil {
-				panic(fmt.Sprintf("dots[%d] is nil", i-1))
-			}
-			children = append(children, dots[i-1])
-		}
+	children := make([]Node, 0, len(parts)+len(dots))
+	for _, part := range parts {
 		children = append(children, part)
 	}
+	for _, dot := range dots {
+		children = append(children, dot)
+	}
+	sort.Slice(children, func(i, j int) bool {
+		return children[i].Start() < children[j].Start()
+	})
 	return &OptionNameNode{
 		compositeNode: compositeNode{
 			children: children,
 		},
 		Parts: parts,
 		Dots:  dots,
+	}
+}
+
+func OptionNameNodeFromIdentValue(ident IdentValueNode) *OptionNameNode {
+	switch ident := ident.(type) {
+	case *IdentNode:
+		return NewOptionNameNode([]*FieldReferenceNode{NewFieldReferenceNode(ident)}, nil)
+	case *CompoundIdentNode:
+		parts := make([]*FieldReferenceNode, len(ident.Components))
+		for i, comp := range ident.Components {
+			parts[i] = NewFieldReferenceNode(comp)
+		}
+		return NewOptionNameNode(parts, ident.Dots)
+	default:
+		panic(fmt.Sprintf("unknown ident type: %T", ident))
 	}
 }
 

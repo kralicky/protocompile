@@ -151,8 +151,12 @@ func (f *FileNode) SourcePos(offset int) SourcePos {
 	return f.fileInfo.SourcePos(offset)
 }
 
+func (f *FileNode) ItemAtOffset(offset int) Token {
+	return f.fileInfo.TokenAtOffset(offset, true)
+}
+
 func (f *FileNode) TokenAtOffset(offset int) Token {
-	return f.fileInfo.TokenAtOffset(offset)
+	return f.fileInfo.TokenAtOffset(offset, false)
 }
 
 func (f *FileNode) Pragma(key string) (string, bool) {

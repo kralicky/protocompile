@@ -2,8 +2,8 @@ syntax = "proto3";
 
 package c;
 
-import "github.com/bufbuild/protocompile/internal/testdata/more/a/b/b1.proto";
-import "github.com/bufbuild/protocompile/internal/testdata/more/a/b/b2.proto";
+import "github.com/kralicky/protocompile/internal/testdata/more/a/b/b1.proto";
+import "github.com/kralicky/protocompile/internal/testdata/more/a/b/b2.proto";
 import "google/protobuf/timestamp.proto";
 
 message See {

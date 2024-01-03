@@ -16,6 +16,7 @@ package parser
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -370,7 +371,11 @@ func (r *result) addExtensions(ext *ast.ExtendNode, flds *[]*descriptorpb.FieldD
 	}
 	if count == 0 {
 		nodeInfo := r.file.NodeInfo(ext.CloseBrace)
-		_ = handler.HandleErrorf(nodeInfo, "extend sections must define at least one extension")
+		if ast.ExtendedSyntaxEnabled {
+			handler.HandleWarningWithPos(nodeInfo, NewExtendedSyntaxError(errors.New("extend sections must define at least one extension")))
+		} else {
+			_ = handler.HandleErrorf(nodeInfo, "extend sections must define at least one extension")
+		}
 	}
 }
 

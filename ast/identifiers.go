@@ -15,7 +15,7 @@
 package ast
 
 import (
-	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -30,9 +30,11 @@ type IdentValueNode interface {
 	AsIdentifier() Identifier
 }
 
-var _ IdentValueNode = (*IdentNode)(nil)
-var _ IdentValueNode = (*CompoundIdentNode)(nil)
-var _ IdentValueNode = (*IncompleteIdentNode)(nil)
+var (
+	_ IdentValueNode = (*IdentNode)(nil)
+	_ IdentValueNode = (*CompoundIdentNode)(nil)
+	_ IdentValueNode = (*IncompleteIdentNode)(nil)
+)
 
 // IdentNode represents a simple, unqualified identifier. These are used to name
 // elements declared in a protobuf file or to refer to elements. Example:
@@ -93,30 +95,27 @@ type CompoundIdentNode struct {
 // The dots arg must have a length that is one less than the length of
 // components. The components arg must not be empty.
 func NewCompoundIdentNode(leadingDot *RuneNode, components []*IdentNode, dots []*RuneNode) *CompoundIdentNode {
-	if len(components) == 0 {
-		panic("must have at least one component")
-	}
-	if len(dots) != len(components)-1 {
-		panic(fmt.Sprintf("%d components requires %d dots, not %d", len(components), len(components)-1, len(dots)))
-	}
-	numChildren := len(components)*2 - 1
-	if leadingDot != nil {
-		numChildren++
-	}
-	children := make([]Node, 0, numChildren)
-	var b strings.Builder
+	children := make([]Node, 0, len(components)+len(dots)+1)
 	if leadingDot != nil {
 		children = append(children, leadingDot)
-		b.WriteRune(leadingDot.Rune)
 	}
-	for i, comp := range components {
-		if i > 0 {
-			dot := dots[i-1]
-			children = append(children, dot)
-			b.WriteRune(dot.Rune)
+	for _, part := range components {
+		children = append(children, part)
+	}
+	for _, dot := range dots {
+		children = append(children, dot)
+	}
+	sort.Slice(children, func(i, j int) bool {
+		return children[i].Start() < children[j].Start()
+	})
+	b := strings.Builder{}
+	for _, node := range children {
+		switch node := node.(type) {
+		case *IdentNode:
+			b.WriteString(node.Val)
+		case *RuneNode:
+			b.WriteRune(node.Rune)
 		}
-		children = append(children, comp)
-		b.WriteString(comp.Val)
 	}
 	return &CompoundIdentNode{
 		compositeNode: compositeNode{

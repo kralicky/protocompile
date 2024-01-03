@@ -34,7 +34,10 @@ func init() {
 	setTokenName(_STRING_LIT, "string literal")
 	setTokenName(_INT_LIT, "int literal")
 	setTokenName(_FLOAT_LIT, "float literal")
-	setTokenName(_NAME, "identifier")
+	setTokenName(_SINGULAR_IDENT, "identifier")
+	setTokenName(_QUALIFIED_IDENT, "qualified identifier")
+	setTokenName(_FULLY_QUALIFIED_IDENT, "fully-qualified identifier")
+	setTokenName(_EXTENSION_IDENT, "extension identifier")
 	setTokenName(_ERROR, "error")
 	// for keywords, just show the keyword itself wrapped in quotes
 	for str, i := range keywords {

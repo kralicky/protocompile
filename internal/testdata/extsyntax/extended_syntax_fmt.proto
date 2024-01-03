@@ -26,9 +26,9 @@ message /* a */ /* b */ Message /* c */ { // d
   ]; // virtual semicolon ->
 
   optional int32 c = 3; // virtual semicolon ->
-  optional int32 d = 4 [
-    /* test */
-  ]; // virtual semicolon ->
+  optional int32 d = 4 [default = 1
+   /* test */
+   , ]; // virtual semicolon ->
 
   extensions 249, 300 /*bar*/ to /*foo*/ 350, 500 to 550, 20000 to max [
     (label) = "jazz",

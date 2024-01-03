@@ -1,6 +1,9 @@
 package ast
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 var ExtendedSyntaxEnabled = true
 
@@ -24,29 +27,20 @@ func createCommaSeparatedNodes[T Node](
 		if len(commas) != len(nodes)-1 {
 			panic(fmt.Sprintf("%d nodes requires %d commas, not %d", len(nodes), len(nodes)-1, len(commas)))
 		}
-	} else {
-		if len(commas) != len(nodes)-1 && len(commas) != len(nodes) {
-			panic(fmt.Sprintf("%[1]d nodes requires %d or %[1]d commas, not %d", len(nodes), len(nodes)-1, len(commas)))
-		}
 	}
 
 	children := make([]Node, 0, len(leadingNodes)+len(nodes)+len(commas)+len(trailingNodes))
 	children = append(children, leadingNodes...)
-	for i, node := range nodes {
-		if i > 0 {
-			if commas[i-1] == nil {
-				panic(fmt.Sprintf("commas[%d] is nil", i-1))
-			}
-			children = append(children, commas[i-1])
-		}
-		if Node(node) == nil {
-			panic(fmt.Sprintf("nodes[%d] is nil", i))
-		}
+	for _, node := range nodes {
 		children = append(children, node)
 	}
-	if ExtendedSyntaxEnabled && len(nodes) > 0 && len(commas) == len(nodes) {
-		children = append(children, commas[len(commas)-1])
+	for _, comma := range commas {
+		children = append(children, comma)
 	}
+	off := len(leadingNodes)
+	sort.Slice(children[off:], func(i, j int) bool {
+		return children[off+i].Start() < children[off+j].Start()
+	})
 	children = append(children, trailingNodes...)
 	return children
 }

@@ -1,3 +1,4 @@
+//protols:nofmt
 syntax = "proto2";
 
 package foo.bar;

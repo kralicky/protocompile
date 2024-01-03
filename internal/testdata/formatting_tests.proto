@@ -2,8 +2,8 @@ syntax = "proto2";
 
 package testprotos;
 
-import "github.com/bufbuild/protocompile/internal/testdata/desc_test_complex.proto";
-import "github.com/bufbuild/protocompile/internal/testdata/desc_test_options.proto";
+import "github.com/kralicky/protocompile/internal/testdata/desc_test_complex.proto";
+import "github.com/kralicky/protocompile/internal/testdata/desc_test_options.proto";
 import "google/protobuf/descriptor.proto";
 
 option go_package = "github.com/bufbuild/protocompile/internal/testprotos";

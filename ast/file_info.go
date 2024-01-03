@@ -423,19 +423,55 @@ func (f *FileInfo) SourcePos(offset int) SourcePos {
 	}
 }
 
-func (f *FileInfo) TokenAtOffset(offset int) Token {
+func (f *FileInfo) TokenAtOffset(offset int, includeComments bool) Token {
 	if offset < 0 || offset > len(f.data) {
 		return TokenError
 	}
 
-	i := sort.Search(len(f.items), func(n int) bool {
-		item := f.items[n]
-		return item.offset+item.length > offset
-	})
-	if i < 0 {
+	// search for the token that contains the given offset, or if there is no
+	// such token, the closest token on the same line as the given offset.
+	// If there are no tokens on the same line, then TokenError is returned.
+	i, j := 0, len(f.lines)
+	targetLine := -1
+	for i < j {
+		h := int(uint(i+j) >> 1)
+		lineOffset := f.lines[h]
+		if lineOffset > offset {
+			// went past the target line
+			j = h
+		} else if h < len(f.lines)-1 && f.lines[h+1] <= offset {
+			// not yet at the target line
+			i = h + 1
+		} else {
+			targetLine = h
+			break
+		}
+	}
+	if targetLine < 0 {
 		return TokenError
 	}
-	return Token(i)
+	offsetMin := f.lines[targetLine]
+	offsetMax := len(f.data)
+	if targetLine < len(f.lines)-1 {
+		offsetMax = f.lines[targetLine+1]
+	}
+	targetIdx := sort.Search(len(f.items), func(n int) bool {
+		item := f.items[n]
+		return item.offset >= offsetMin && item.offset+item.length >= offset
+	})
+	if targetIdx < 0 {
+		return TokenError
+	}
+
+	target := Token(targetIdx)
+	if f.items[target].offset >= offsetMax {
+		// no tokens on the target line
+		return TokenError
+	}
+	if f.isComment(Item(targetIdx)) && !includeComments {
+		return TokenError
+	}
+	return target
 }
 
 // Token represents a single lexed token.

@@ -17,10 +17,12 @@ package parser
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -39,14 +41,17 @@ type runeReader struct {
 	utf8Strict bool
 
 	savedPos int
+	savedErr error
 }
 
 func (rr *runeReader) save() {
 	rr.savedPos = rr.pos
+	rr.savedErr = rr.err
 }
 
 func (rr *runeReader) restore() {
 	rr.pos = rr.savedPos
+	rr.err = rr.savedErr
 }
 
 func (rr *runeReader) readRune() (r rune, size int, err error) {
@@ -114,6 +119,10 @@ type protoLex struct {
 	// if true, the lexer will insert a semicolon and set insertSemi to false
 	insertSemi              insertSemiMode
 	inCompoundStringLiteral bool
+	inCompoundIdent         bool
+	inExtensionIdent        bool
+	inMethodDecl            bool
+	inMethodTypeDecl        bool
 
 	comments []ast.Token
 }
@@ -215,7 +224,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 		l.input.setMark()
 
 		l.prevOffset = l.input.offset()
-		c, _, err := l.input.readRune()
+		c, sz, err := l.input.readRune()
 		if err == io.EOF {
 			// insert a semicolon if the last token was the '}' rune (i.e. end of message)
 			if l.insertSemi != 0 {
@@ -250,9 +259,9 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 
 		switch c {
 		case '}':
-			l.insertSemi = immediate | always
+			l.insertSemi = immediate | onlyIfMissing
 		case '>':
-			l.insertSemi = immediate | always
+			l.insertSemi = immediate | onlyIfMissing
 		case ']':
 			l.insertSemi = immediate | onlyIfMissing
 		case '\n':
@@ -266,6 +275,13 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 					}
 				}
 				if (l.insertSemi&always == always) || !prevRuneIsSemi {
+					if l.inCompoundIdent {
+						// complete the compound ident first.
+						// this can happen when a '.' in a partial compound ident is
+						// immediately followed by a newline
+						l.input.unreadRune(sz)
+						return l.endCompoundIdent(lval)
+					}
 					l.insertSemi = 0
 					return l.writeVirtualSemi(lval)
 				}
@@ -297,22 +313,125 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 					return _ERROR
 				}
 				l.setFloat(lval, f)
+				if _, ok := l.matchNextRune(',', ']'); !ok {
+					l.insertSemi |= atNextNewline | onlyIfMissing | onlyIfLastTokenOnLine
+				}
 				return _FLOAT_LIT
 			}
 			l.input.unreadRune(szn)
-			l.setRune(lval, c)
-			return int(c)
 		}
 
-		if c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') {
-			// identifier
+		if c == '(' {
+			// distinguish between extension names and rpc methods
+			isExtensionLeftParen := true
+			if l.inMethodDecl {
+				// rpc Foo ( ... ) returns ( ... )
+				//         ^
+				isExtensionLeftParen = false
+			} else if kw, ok := l.prevSym.(*ast.IdentNode); ok && kw.Val == "returns" {
+				// rpc Foo ( ... ) returns ( ... )
+				//                         ^
+				isExtensionLeftParen = false
+			}
+
+			if isExtensionLeftParen {
+				if l.inExtensionIdent {
+					// syntax error, e.g. '(('
+					l.setError(lval, errors.New("unexpected '(' in extension identifier"))
+					return _ERROR
+				}
+				l.beginExtensionIdent(lval)
+				l.setRune(lval, c)
+				lval.refp.open = lval.b
+				continue
+			} else {
+				l.inMethodTypeDecl = true
+			}
+		} else if c == ')' {
+			if l.inMethodTypeDecl {
+				// rpc Foo ( ... ) returns ( ... )
+				//               ^               ^
+				if l.inCompoundIdent {
+					l.input.unreadRune(sz)
+					return l.endCompoundIdent(lval)
+				}
+
+				l.inMethodTypeDecl = false // order is important here
+			} else {
+				if l.inExtensionIdent {
+					l.setRune(lval, c)
+					lval.refp.close = lval.b
+					l.endExtensionIdent(lval)
+				} else if !l.inMethodTypeDecl {
+					// syntax error, e.g. '())'
+					l.setError(lval, errors.New("unexpected ')'"))
+					return _ERROR
+				}
+
+				_, nextDot := l.matchNextRune('.')
+				if !nextDot {
+					return l.endCompoundIdent(lval)
+				}
+				continue // continue reading compound ident
+			}
+		}
+
+		if c == '.' || c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') {
+			if c == '.' {
+				if !l.inCompoundIdent {
+					l.beginCompoundIdent(lval)
+				}
+				if l.peekWhitespace() {
+					l.maybeProcessPartialField(".")
+				}
+				l.setRune(lval, c)
+				lval.cid.dots = append(lval.cid.dots, lval.b)
+				continue
+			}
+
 			l.readIdentifier()
 			str := l.input.getMark()
 			l.maybeProcessPartialField(str)
-			if t, ok := keywords[str]; ok {
-				l.setIdent(lval, str)
-				return t
+			// check if we are about to read (or continue) a compound identifier
+			if next, ok := l.matchNextRune('.', ')'); ok {
+				if !l.inCompoundIdent && next == '.' {
+					// need to consider whitespace here for keywords, so that we don't
+					// treat e.g. 'option .foo' as a compound ident 'option.foo'
+					if kw, ok := keywords[str]; ok {
+						if l.peekWhitespace() {
+							// this is a keyword, not a compound ident
+							l.setIdent(lval, str)
+							return kw
+						}
+					}
+					l.beginCompoundIdent(lval)
+					l.setIdent(lval, str)
+					lval.cid.idents = append(lval.cid.idents, lval.id)
+					continue
+				}
+				if l.inCompoundIdent {
+					l.setIdent(lval, str)
+					lval.cid.idents = append(lval.cid.idents, lval.id)
+					if next == ')' {
+						if l.inMethodTypeDecl {
+							return l.endCompoundIdent(lval)
+						} else if !l.inExtensionIdent {
+							// syntax error - something like 'foo.bar)'
+							l.setError(lval, errors.New("unexpected ')' in compound identifier"))
+							return _ERROR
+						}
+					}
+					continue
+				}
+			} else {
+				if l.inCompoundIdent {
+					// end of compound ident
+					l.setIdent(lval, str)
+					lval.cid.idents = append(lval.cid.idents, lval.id)
+					return l.endCompoundIdent(lval)
+				}
 			}
+
 			if lval.id != nil {
 				switch lval.id.Val {
 				case "package":
@@ -320,8 +439,24 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 					l.insertSemi |= atNextNewline | onlyIfMissing | onlyIfLastTokenOnLine
 				}
 			}
+
+			if keyword, ok := keywords[str]; ok {
+				switch keyword {
+				case _RPC:
+					if l.canStartField() {
+						if next, nextRune := l.peekNextIdentsFast(2); len(next) == 1 && !strings.Contains(next[0], ".") && nextRune == '(' {
+							l.inMethodDecl = true
+						}
+					}
+				case _RETURNS:
+					l.inMethodDecl = false
+				}
+				l.setIdent(lval, str)
+				return keyword
+			}
+
 			l.setIdent(lval, str)
-			return _NAME
+			return _SINGULAR_IDENT
 		}
 
 		if c >= '0' && c <= '9' {
@@ -336,6 +471,9 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 					return _ERROR
 				}
 				l.setInt(lval, ui)
+				if _, ok := l.matchNextRune(',', ']'); !ok {
+					l.insertSemi |= atNextNewline | onlyIfMissing | onlyIfLastTokenOnLine
+				}
 				return _INT_LIT
 			}
 			if strings.ContainsAny(token, ".eE") {
@@ -346,6 +484,9 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 					return _ERROR
 				}
 				l.setFloat(lval, f)
+				if _, ok := l.matchNextRune(',', ']'); !ok {
+					l.insertSemi |= atNextNewline | onlyIfMissing | onlyIfLastTokenOnLine
+				}
 				return _FLOAT_LIT
 			}
 			// integer! (decimal or octal)
@@ -371,7 +512,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 				l.setError(lval, numError(err, kind, token))
 				return _ERROR
 			}
-			if !l.matchNextRune('[') {
+			if _, ok := l.matchNextRune('[', ',', ']'); !ok {
 				l.insertSemi |= atNextNewline | onlyIfMissing | onlyIfLastTokenOnLine
 			}
 			l.setInt(lval, ui)
@@ -387,13 +528,15 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 			}
 			l.setString(lval, str)
 			// check if this is a compound string literal
-			if l.matchNextRune('"', '\'') {
+			if _, ok := l.matchNextRune('"', '\''); ok {
 				l.inCompoundStringLiteral = true
 				// continue reading
 				continue
 			}
 			l.inCompoundStringLiteral = false
-			l.insertSemi |= atNextNewline | onlyIfMissing | onlyIfLastTokenOnLine
+			if _, ok := l.matchNextRune(',', ']'); !ok {
+				l.insertSemi |= atNextNewline | onlyIfMissing | onlyIfLastTokenOnLine
+			}
 			return _STRING_LIT
 		}
 
@@ -424,6 +567,11 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 				continue
 			}
 			l.input.unreadRune(szn)
+		}
+
+		if l.inCompoundIdent {
+			l.input.unreadRune(sz)
+			return l.endCompoundIdent(lval)
 		}
 
 		if c < 32 || c == 127 {
@@ -557,6 +705,110 @@ func (l *protoLex) setVirtualRune(lval *protoSymType, val rune) {
 
 func (l *protoLex) setError(lval *protoSymType, err error) {
 	lval.err, _ = l.addSourceError(err)
+}
+
+func (l *protoLex) beginCompoundIdent(lval *protoSymType) {
+	l.inCompoundIdent = true
+	lval.cid = &identSlices{}
+}
+
+func (l *protoLex) beginExtensionIdent(lval *protoSymType) {
+	if l.inExtensionIdent {
+		panic("bug: already in extension ident")
+	}
+	if !l.inCompoundIdent {
+		l.beginCompoundIdent(lval)
+	}
+	l.inExtensionIdent = true
+	lval.cid, lval.xid = &identSlices{}, lval.cid
+	lval.refp = &fieldRefParens{}
+}
+
+func (l *protoLex) endExtensionIdent(lval *protoSymType) {
+	var name ast.IdentValueNode
+	nDots := len(lval.cid.dots)
+	nIdents := len(lval.cid.idents)
+	switch {
+	case nDots == 0 && nIdents == 1:
+		name = lval.cid.idents[0]
+	case nDots > 0 && nIdents == 0:
+		name = ast.NewCompoundIdentNode(lval.cid.dots[0], nil, lval.cid.dots[1:])
+	case nDots > 0 && nIdents > 0:
+		if lval.cid.dots[0].Token() < lval.cid.idents[0].Token() {
+			name = ast.NewCompoundIdentNode(lval.cid.dots[0], lval.cid.idents, lval.cid.dots[1:])
+		} else {
+			name = ast.NewCompoundIdentNode(nil, lval.cid.idents, lval.cid.dots)
+		}
+	default:
+		if ast.ExtendedSyntaxEnabled {
+			l.ErrExtendedSyntax("extension name cannot be empty")
+		} else {
+			l.Error("extension name cannot be empty")
+		}
+	}
+
+	if name == nil || lval.refp.close == nil {
+		lval.xid.refs = append(lval.xid.refs, ast.NewIncompleteExtensionFieldReferenceNode(lval.refp.open, name, lval.refp.close))
+	} else {
+		lval.xid.refs = append(lval.xid.refs, ast.NewExtensionFieldReferenceNode(lval.refp.open, name, lval.refp.close))
+	}
+	lval.cid, lval.xid = lval.xid, nil
+	lval.refp = nil
+	l.inExtensionIdent = false
+}
+
+func (l *protoLex) endCompoundIdent(lval *protoSymType) int {
+	// possible compound identifiers:
+	// 1. _QUALIFIED_IDENT: compound ident without a leading dot
+	//   ex: 'foo.bar.baz', 'foo.Bar', 'foo.'
+	// 2. _FULLY_QUALIFIED_IDENT: compound ident with a leading dot
+	//   ex: '.foo.bar.baz', '.foo.Bar', '.foo.'
+	// 3. _EXTENSION_NAME: compound ident where one or more components is an
+	//    extension name. cannot start with a dot.
+	//   ex: '(foo.bar).baz', '(foo.Bar)', '(foo.)', 'foo.(bar).'
+
+	if l.inExtensionIdent {
+		panic("bug (lexer): cannot call endCompoundIdent() before endExtensionIdent()")
+	}
+	if lval.cid == nil {
+		panic("bug (lexer): compound ident is nil")
+	}
+	if len(lval.cid.idents) > 0 && len(lval.cid.dots) == 0 {
+		panic("bug (lexer): compound ident has no dots")
+	}
+
+	defer func() {
+		lval.cid = nil
+		l.inCompoundIdent = false
+	}()
+
+	if len(lval.cid.idents) == 0 && len(lval.cid.refs) == 0 {
+		lval.idv = ast.NewCompoundIdentNode(lval.cid.dots[0], nil, nil)
+		return _FULLY_QUALIFIED_IDENT // '.' (invalid, but important for completion)
+	}
+
+	if len(lval.cid.refs) > 0 {
+		parts := lval.cid.refs
+		if len(lval.cid.idents) > 0 {
+			// interleave idents and refs by position
+			for _, id := range lval.cid.idents {
+				parts = append(parts, ast.NewFieldReferenceNode(id))
+			}
+			slices.SortFunc(parts, func(a, b *ast.FieldReferenceNode) int {
+				return cmp.Compare(a.Start(), b.Start())
+			})
+		}
+		lval.optName = ast.NewOptionNameNode(parts, lval.cid.dots)
+		return _EXTENSION_IDENT
+	}
+
+	// if the first dot appears before the first ident, this is a fully qualified ident
+	if lval.cid.dots[0].Token() < lval.cid.idents[0].Token() {
+		lval.idv = ast.NewCompoundIdentNode(lval.cid.dots[0], lval.cid.idents, lval.cid.dots[1:])
+		return _FULLY_QUALIFIED_IDENT
+	}
+	lval.idv = ast.NewCompoundIdentNode(nil, lval.cid.idents, lval.cid.dots)
+	return _QUALIFIED_IDENT
 }
 
 func (l *protoLex) readNumber() {
@@ -867,12 +1119,12 @@ func (l *protoLex) skipToEndOfBlockComment(lval *protoSymType) (ok, hasErr bool)
 	}
 }
 
-func (l *protoLex) skipToNextRune() (nextRune rune) {
+func (l *protoLex) skipToNextRune() (nextRune rune, err error) {
 LOOKAHEAD:
 	for {
 		cn, sz, err := l.input.readRune()
 		if err != nil {
-			break
+			return 0, err
 		}
 		switch cn {
 		case '/':
@@ -902,8 +1154,7 @@ LOOKAHEAD:
 	return
 }
 
-func (l *protoLex) matchNextRune(targets ...rune) bool {
-	var found bool
+func (l *protoLex) matchNextRune(targets ...rune) (rune, bool) {
 	l.input.save()
 	defer l.input.restore()
 	l.skipToNextRune()
@@ -911,23 +1162,71 @@ func (l *protoLex) matchNextRune(targets ...rune) bool {
 	if err == nil {
 		for _, t := range targets {
 			if c == t {
-				found = true
-				break
+				return c, true
 			}
 		}
 	}
-	return found
+	return 0, false
 }
 
-func (l *protoLex) peekNextIdent() (ident string, nextRune rune, ok bool) {
+// returns true if the next rune is a whitespace rune, otherwise false.
+func (l *protoLex) peekWhitespace() bool {
 	l.input.save()
 	defer l.input.restore()
-	nextRune = l.skipToNextRune()
-	mark := l.input.offset()
-	l.readIdentifier()
-	if l.input.offset() > mark {
+	rn, _, err := l.input.readRune()
+	if err != nil {
+		return true // eof is considered whitespace here
+	}
+	switch rn {
+	case '\n', '\r', '\t', '\f', '\v', ' ':
+		return true
+	default:
+		return false
+	}
+}
+
+func (l *protoLex) peekNextIdentFast() (ident string, nextRune rune, ok bool) {
+	var idents []string
+	idents, nextRune = l.peekNextIdentsFast(1)
+	if len(idents) > 0 {
 		ok = true
-		ident = string(l.input.data[mark:l.input.offset()])
+		ident = idents[0]
+	}
+	return
+}
+
+func (l *protoLex) peekNextIdentsFast(n int) (idents []string, nextRune rune) {
+	l.input.save()
+	defer l.input.restore()
+	for i := 0; i < n; i++ {
+		nr, err := l.skipToNextRune()
+		if err != nil {
+			return
+		}
+		nextRune = nr
+		mark := l.input.offset()
+		for {
+			c, sz, err := l.input.readRune()
+			if err != nil {
+				break
+			}
+			var ok bool
+			switch c {
+			case '\n', '\r', '\t', '\f', '\v', ' ':
+				ok = false
+			case '_', '.':
+				ok = true
+			default:
+				ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+			}
+			if !ok {
+				l.input.unreadRune(sz)
+				break
+			}
+		}
+		if l.input.offset() > mark {
+			idents = append(idents, string(l.input.data[mark:l.input.offset()]))
+		}
 	}
 	return
 }
@@ -972,11 +1271,11 @@ func (l *protoLex) addSourceError(err error) (reporter.ErrorWithPos, bool) {
 	return ewp, handlerErr == nil
 }
 
-func (l *protoLex) addSourceWarning(err error) {
+func (l *protoLex) addSourceWarning(err error, span ast.SourceSpan) {
 	ewp, ok := err.(reporter.ErrorWithPos)
 	if !ok {
 		// TODO: Store the previous span instead of just the position.
-		ewp = reporter.Error(ast.NewSourceSpan(l.prev(), l.prev()), err)
+		ewp = reporter.Error(span, err)
 	}
 	l.handler.HandleWarning(ewp)
 }
@@ -986,7 +1285,11 @@ func (l *protoLex) Error(s string) {
 }
 
 func (l *protoLex) ErrExtendedSyntax(s string) {
-	l.addSourceWarning(NewExtendedSyntaxError(fmt.Errorf("error: %s", s)))
+	l.addSourceWarning(NewExtendedSyntaxError(fmt.Errorf("error: %s", s)), ast.NewSourceSpan(l.prev(), l.prev()))
+}
+
+func (l *protoLex) ErrExtendedSyntaxAt(s string, node ast.Node) {
+	l.addSourceWarning(NewExtendedSyntaxError(fmt.Errorf("error: %s", s)), l.info.NodeInfo(node))
 }
 
 // TODO: Accept both a start and end offset, and use that to create a span.
@@ -996,6 +1299,18 @@ func (l *protoLex) errWithCurrentPos(err error, offset int) reporter.ErrorWithPo
 	}
 	pos := l.info.SourcePos(l.input.offset() + offset)
 	return reporter.Error(ast.NewSourceSpan(pos, pos), err)
+}
+
+func (l *protoLex) canStartField() bool {
+	if l.prevSym != nil {
+		switch prev := l.prevSym.(type) {
+		case *ast.RuneNode:
+			if prev.Rune == '{' || prev.Rune == ';' {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (l *protoLex) maybeProcessPartialField(ident string) {
@@ -1032,27 +1347,7 @@ func (l *protoLex) maybeProcessPartialField(ident string) {
 	// whether they would form a valid field declaration. Form 3 is impossible
 	// to detect, as it is an actual valid field declaration.
 
-	var canStartField bool
-	if l.prevSym != nil {
-		switch prev := l.prevSym.(type) {
-		case *ast.RuneNode:
-			if prev.Rune == '{' || prev.Rune == ';' {
-				canStartField = true
-			}
-		}
-	}
-
-	if !canStartField {
-		return
-	}
-
-	nextIdent, nextRune, ok := l.peekNextIdent()
-	if !ok {
-		if nextRune == '}' {
-			// if next rune is '}', then we're at the end of a message
-			// and can insert a semicolon
-			l.insertSemi |= immediate | onlyIfMissing
-		}
+	if !l.canStartField() {
 		return
 	}
 
@@ -1064,22 +1359,32 @@ func (l *protoLex) maybeProcessPartialField(ident string) {
 	}
 
 	matchKeyword := func(ident string) bool {
-		switch syntax {
-		case "proto2":
-			switch ident {
-			case "optional", "required", "repeated":
-				return true
-			}
-		case "proto3":
-			switch ident {
-			case "optional", "repeated":
-				return true
-			}
+		// match any keyword that can start a field declaration
+		switch ident {
+		case "message", "enum", "option", "reserved", "extensions", "oneof", "optional", "repeated":
+			return true
+		case "required", "extend", "group":
+			return syntax == "proto2"
 		}
 		return false
 	}
 
-	if matchKeyword(nextIdent) {
-		l.insertSemi |= atNextNewline | onlyIfMissing
+	nextIdents, nextRune := l.peekNextIdentsFast(2)
+	switch len(nextIdents) {
+	case 2:
+		if matchKeyword(nextIdents[0]) || matchKeyword(nextIdents[1]) {
+			l.insertSemi |= atNextNewline | onlyIfMissing
+		}
+	case 1:
+		if matchKeyword(nextIdents[0]) {
+			l.insertSemi |= atNextNewline | onlyIfMissing
+		}
+	case 0:
+		if nextRune == '}' {
+			// if next rune is '}', then we're at the end of a message
+			// and can insert a semicolon
+			l.insertSemi |= immediate | onlyIfMissing
+		}
+		return
 	}
 }

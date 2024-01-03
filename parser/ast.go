@@ -48,13 +48,14 @@ type valueSlices struct {
 	commas []*ast.RuneNode
 }
 
-type fieldRefSlices struct {
-	refs []*ast.FieldReferenceNode
-	dots []*ast.RuneNode
+type fieldRefParens struct {
+	open  *ast.RuneNode
+	close *ast.RuneNode
 }
 
 type identSlices struct {
 	idents []*ast.IdentNode
+	refs   []*ast.FieldReferenceNode
 	dots   []*ast.RuneNode
 }
 
