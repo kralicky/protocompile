@@ -1,6 +1,7 @@
 //protols:nofmt
-syntax = "proto2"; // foo
+//protols:debug Wnoerror=all
+syntax = "proto2" // foo
 
-package extsyntax.single.line;
+package extsyntax.single.line
 
-message Compact1 {} /*foo*/ message Compact2 {message A{}message B{message C{oneof Foo{int32 a = 1;int32 b = 2[default=1] /*1*/}/*2*/}/*3*/}/*4*/} // 5
+message Compact1 {} /*foo*/ message Compact2 {message A{}message B{message C{oneof Foo{int32 a = 1; int32 b = 2[default=1] /*1*/}/*2*/}/*3*/}/*4*/} // 5

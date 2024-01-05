@@ -49,20 +49,32 @@ func (e *parseError) Unwrap() error {
 	return e.base
 }
 
-func NewExtendedSyntaxError(base error) ExtendedSyntaxError {
+const (
+	CategoryEmptyDecl      = "empty_decl"
+	CategoryIncompleteDecl = "incomplete_decl"
+	CategoryExtraTokens    = "extra_tokens"
+	CategoryIncorrectToken = "wrong_token"
+	CategoryMissingToken   = "missing_token"
+)
+
+func NewExtendedSyntaxError(base error, category string) ExtendedSyntaxError {
 	return &extendedSyntaxError{
-		base: base,
+		base:     base,
+		category: category,
 	}
 }
 
 type ExtendedSyntaxError interface {
 	error
 
+	Category() string
+
 	isExtendedSyntaxError()
 }
 
 type extendedSyntaxError struct {
-	base error
+	base     error
+	category string
 }
 
 func (*extendedSyntaxError) isExtendedSyntaxError() {}
@@ -73,4 +85,8 @@ func (e *extendedSyntaxError) Error() string {
 
 func (e *extendedSyntaxError) Unwrap() error {
 	return e.base
+}
+
+func (e *extendedSyntaxError) Category() string {
+	return e.category
 }

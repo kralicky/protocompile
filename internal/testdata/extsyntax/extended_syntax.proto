@@ -1,4 +1,5 @@
 //protols:nofmt
+//protols:debug Wnoerror=all
 syntax = "proto2" // virtual semicolon ->
 
 package extsyntax // virtual semicolon ->

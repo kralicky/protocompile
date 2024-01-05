@@ -258,7 +258,7 @@ optionDecl
 		$$ = ast.NewOptionNode($1.ToKeyword(), $2, $3, $4)
 	}
 	| _OPTION optionName {
-		protolex.(*protoLex).ErrExtendedSyntax("expected '='")
+		protolex.(*protoLex).ErrExtendedSyntax("expected '='", CategoryIncompleteDecl)
 		$$ = ast.NewIncompleteOptionNode($1.ToKeyword(), $2, nil, nil)
 	}
 
@@ -619,7 +619,7 @@ compactOptions
 			$2.commas = append($2.commas, $3)
 		}
 		if len($2.options) == 0 {
-			protolex.(*protoLex).ErrExtendedSyntax("compact options list cannot be empty")
+			protolex.(*protoLex).ErrExtendedSyntax("compact options list cannot be empty", CategoryEmptyDecl)
 		}
 		$$ = ast.NewCompactOptionsNode($1, $2.options, $2.commas, $4)
 	}
@@ -630,7 +630,7 @@ compactOptionDecls :
 	}
 	| compactOptionDecls ',' compactOption {
 		if len($1.options) == 0 {
-			protolex.(*protoLex).ErrExtendedSyntaxAt("expected option before ','", $2)
+			protolex.(*protoLex).ErrExtendedSyntaxAt("expected option before ','", $2, CategoryExtraTokens)
 		}
 		$1.options = append($1.options, $3)
 		$1.commas = append($1.commas, $2)
@@ -645,7 +645,7 @@ compactOption
 		$$ = ast.NewCompactOptionNode($1, $2, $3)
 	}
 	| optionName {
-		protolex.(*protoLex).ErrExtendedSyntax("expected '='")
+		protolex.(*protoLex).ErrExtendedSyntax("expected '='", CategoryIncompleteDecl)
 		$$ = ast.NewIncompleteCompactOptionNode($1, nil, nil)
 	}
 
@@ -996,31 +996,31 @@ messageFieldDecl
 		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, $5)
 	}
 	| fieldCardinality notGroupElementTypeIdent singularIdent '=' {
-		protolex.(*protoLex).ErrExtendedSyntax("missing field number after '='")
+		protolex.(*protoLex).ErrExtendedSyntax("missing field number after '='", CategoryIncompleteDecl)
 		$$ = ast.NewIncompleteFieldNode($1.ToKeyword(), $2, $3, $4, nil, nil)
 	}
 	| fieldCardinality notGroupElementTypeIdent singularIdent {
-		protolex.(*protoLex).ErrExtendedSyntax("missing '=' after field name")
+		protolex.(*protoLex).ErrExtendedSyntax("missing '=' after field name", CategoryIncompleteDecl)
 		$$ = ast.NewIncompleteFieldNode($1.ToKeyword(), $2, $3, nil, nil, nil)
 	}
 	| fieldCardinality notGroupElementTypeIdent {
-		protolex.(*protoLex).ErrExtendedSyntax("missing field name")
+		protolex.(*protoLex).ErrExtendedSyntax("missing field name", CategoryIncompleteDecl)
 		$$ = ast.NewIncompleteFieldNode($1.ToKeyword(), $2, nil, nil, nil, nil)
 	}
 	| msgElementTypeIdent singularIdent '=' {
-		protolex.(*protoLex).ErrExtendedSyntax("missing field number after '='")
+		protolex.(*protoLex).ErrExtendedSyntax("missing field number after '='", CategoryIncompleteDecl)
 		$$ = ast.NewIncompleteFieldNode(nil, $1, $2, $3, nil, nil)
 	}
 	| msgElementTypeIdent singularIdent {
-		protolex.(*protoLex).ErrExtendedSyntax("missing '=' after field name")
+		protolex.(*protoLex).ErrExtendedSyntax("missing '=' after field name", CategoryIncompleteDecl)
 		$$ = ast.NewIncompleteFieldNode(nil, $1, $2, nil, nil, nil)
 	}
 	| msgElementTypeIdent {
-		protolex.(*protoLex).ErrExtendedSyntax("missing field name")
+		protolex.(*protoLex).ErrExtendedSyntax("missing field name", CategoryIncompleteDecl)
 		$$ = ast.NewIncompleteFieldNode(nil, $1, nil, nil, nil, nil)
 	}
 	| fieldCardinality {
-		protolex.(*protoLex).ErrExtendedSyntax("missing field type")
+		protolex.(*protoLex).ErrExtendedSyntax("missing field type", CategoryIncompleteDecl)
 		$$ = ast.NewIncompleteFieldNode($1.ToKeyword(), nil, nil, nil, nil, nil)
 	}
 
@@ -1477,7 +1477,7 @@ identKeywordName
 
 optionalTrailingComma
 	: ',' {
-		protolex.(*protoLex).ErrExtendedSyntaxAt("unexpected trailing comma", $1)
+		protolex.(*protoLex).ErrExtendedSyntaxAt("unexpected trailing comma", $1, CategoryExtraTokens)
 		$$ = $1
 	}
 	| {
@@ -1489,14 +1489,14 @@ nonVirtualSemicolonOrInvalidComma
 		$$ = $1
 	}
 	| ',' {
-		protolex.(*protoLex).ErrExtendedSyntaxAt("expected ';', found ','", $1)
+		protolex.(*protoLex).ErrExtendedSyntaxAt("expected ';', found ','", $1, CategoryIncorrectToken)
 		$$ = $1
 	}
 
 nonVirtualSemicolon
 	: ';' {
 		if $1.Virtual {
-			protolex.(*protoLex).ErrExtendedSyntaxAt("expected ';'", $1)
+			protolex.(*protoLex).ErrExtendedSyntaxAt("expected ';'", $1, CategoryMissingToken)
 		}
 		$$ = $1
 	}

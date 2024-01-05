@@ -18,33 +18,34 @@ extend google.protobuf.MessageOptions {
 }
 
 extend google.protobuf.FieldOptions {
-  repeated string ffubar = 10101;
-  optional bytes ffubarb = 10102;
+  repeated string ffubar  = 10101;
+  optional bytes  ffubarb = 10102;
 }
 
 extend google.protobuf.EnumOptions {
-  optional int32 efubar = 10101;
-  optional sint32 efubars = 10102;
+  optional int32    efubar   = 10101;
+  optional sint32   efubars  = 10102;
   optional sfixed32 efubarsf = 10103;
-  optional uint32 efubaru = 10104;
-  optional fixed32 efubaruf = 10105;
+  optional uint32   efubaru  = 10104;
+  optional fixed32  efubaruf = 10105;
 }
 
 extend google.protobuf.EnumValueOptions {
-  optional int64 evfubar = 10101;
-  optional sint64 evfubars = 10102;
-  optional sfixed64 evfubarsf = 10103;
-  optional uint64 evfubaru = 10104;
-  optional fixed64 evfubaruf = 10105;
+  optional int64    evfubar    = 10101;
+  optional sint64   evfubars   = 10102;
+  optional sfixed64 evfubarsf  = 10103;
+  optional uint64   evfubaru   = 10104;
+  optional fixed64  evfubaruf  = 10105;
+  optional string   evfubarstr = 10106;
 }
 
 extend google.protobuf.ServiceOptions {
-  optional ReallySimpleMessage sfubar = 10101;
-  optional ReallySimpleEnum sfubare = 10102;
+  optional ReallySimpleMessage sfubar  = 10101;
+  optional ReallySimpleEnum    sfubare = 10102;
 }
 
 extend google.protobuf.MethodOptions {
-  repeated float mtfubar = 10101;
+  repeated float  mtfubar  = 10101;
   optional double mtfubard = 10102;
 }
 
@@ -60,16 +61,16 @@ enum ReallySimpleEnum {
 }
 
 extend google.protobuf.ExtensionRangeOptions {
-  repeated string exfubar = 10101;
-  optional bytes exfubarb = 10102;
+  repeated string exfubar  = 10101;
+  optional bytes  exfubarb = 10102;
 }
 
 extend google.protobuf.OneofOptions {
-  repeated string oofubar = 10101;
-  optional bytes oofubarb = 10102;
+  repeated string oofubar  = 10101;
+  optional bytes  oofubarb = 10102;
 }
 
 extend google.protobuf.FileOptions {
-  repeated string flfubar = 10101;
-  optional bytes flfubarb = 10102;
+  repeated string flfubar  = 10101;
+  optional bytes  flfubarb = 10102;
 }

@@ -1293,7 +1293,7 @@ protodefault:
 	case 24:
 		protoDollar = protoS[protopt-2 : protopt+1]
 		{
-			protolex.(*protoLex).ErrExtendedSyntax("expected '='")
+			protolex.(*protoLex).ErrExtendedSyntax("expected '='", CategoryIncompleteDecl)
 			protoVAL.opt = ast.NewIncompleteOptionNode(protoDollar[1].id.ToKeyword(), protoDollar[2].optName, nil, nil)
 		}
 	case 25:
@@ -1695,7 +1695,7 @@ protodefault:
 				protoDollar[2].opts.commas = append(protoDollar[2].opts.commas, protoDollar[3].b)
 			}
 			if len(protoDollar[2].opts.options) == 0 {
-				protolex.(*protoLex).ErrExtendedSyntax("compact options list cannot be empty")
+				protolex.(*protoLex).ErrExtendedSyntax("compact options list cannot be empty", CategoryEmptyDecl)
 			}
 			protoVAL.cmpctOpts = ast.NewCompactOptionsNode(protoDollar[1].b, protoDollar[2].opts.options, protoDollar[2].opts.commas, protoDollar[4].b)
 		}
@@ -1708,7 +1708,7 @@ protodefault:
 		protoDollar = protoS[protopt-3 : protopt+1]
 		{
 			if len(protoDollar[1].opts.options) == 0 {
-				protolex.(*protoLex).ErrExtendedSyntaxAt("expected option before ','", protoDollar[2].b)
+				protolex.(*protoLex).ErrExtendedSyntaxAt("expected option before ','", protoDollar[2].b, CategoryExtraTokens)
 			}
 			protoDollar[1].opts.options = append(protoDollar[1].opts.options, protoDollar[3].opt)
 			protoDollar[1].opts.commas = append(protoDollar[1].opts.commas, protoDollar[2].b)
@@ -1727,7 +1727,7 @@ protodefault:
 	case 118:
 		protoDollar = protoS[protopt-1 : protopt+1]
 		{
-			protolex.(*protoLex).ErrExtendedSyntax("expected '='")
+			protolex.(*protoLex).ErrExtendedSyntax("expected '='", CategoryIncompleteDecl)
 			protoVAL.opt = ast.NewIncompleteCompactOptionNode(protoDollar[1].optName, nil, nil)
 		}
 	case 119:
@@ -2137,43 +2137,43 @@ protodefault:
 	case 204:
 		protoDollar = protoS[protopt-4 : protopt+1]
 		{
-			protolex.(*protoLex).ErrExtendedSyntax("missing field number after '='")
+			protolex.(*protoLex).ErrExtendedSyntax("missing field number after '='", CategoryIncompleteDecl)
 			protoVAL.fld = ast.NewIncompleteFieldNode(protoDollar[1].id.ToKeyword(), protoDollar[2].idv, protoDollar[3].id, protoDollar[4].b, nil, nil)
 		}
 	case 205:
 		protoDollar = protoS[protopt-3 : protopt+1]
 		{
-			protolex.(*protoLex).ErrExtendedSyntax("missing '=' after field name")
+			protolex.(*protoLex).ErrExtendedSyntax("missing '=' after field name", CategoryIncompleteDecl)
 			protoVAL.fld = ast.NewIncompleteFieldNode(protoDollar[1].id.ToKeyword(), protoDollar[2].idv, protoDollar[3].id, nil, nil, nil)
 		}
 	case 206:
 		protoDollar = protoS[protopt-2 : protopt+1]
 		{
-			protolex.(*protoLex).ErrExtendedSyntax("missing field name")
+			protolex.(*protoLex).ErrExtendedSyntax("missing field name", CategoryIncompleteDecl)
 			protoVAL.fld = ast.NewIncompleteFieldNode(protoDollar[1].id.ToKeyword(), protoDollar[2].idv, nil, nil, nil, nil)
 		}
 	case 207:
 		protoDollar = protoS[protopt-3 : protopt+1]
 		{
-			protolex.(*protoLex).ErrExtendedSyntax("missing field number after '='")
+			protolex.(*protoLex).ErrExtendedSyntax("missing field number after '='", CategoryIncompleteDecl)
 			protoVAL.fld = ast.NewIncompleteFieldNode(nil, protoDollar[1].idv, protoDollar[2].id, protoDollar[3].b, nil, nil)
 		}
 	case 208:
 		protoDollar = protoS[protopt-2 : protopt+1]
 		{
-			protolex.(*protoLex).ErrExtendedSyntax("missing '=' after field name")
+			protolex.(*protoLex).ErrExtendedSyntax("missing '=' after field name", CategoryIncompleteDecl)
 			protoVAL.fld = ast.NewIncompleteFieldNode(nil, protoDollar[1].idv, protoDollar[2].id, nil, nil, nil)
 		}
 	case 209:
 		protoDollar = protoS[protopt-1 : protopt+1]
 		{
-			protolex.(*protoLex).ErrExtendedSyntax("missing field name")
+			protolex.(*protoLex).ErrExtendedSyntax("missing field name", CategoryIncompleteDecl)
 			protoVAL.fld = ast.NewIncompleteFieldNode(nil, protoDollar[1].idv, nil, nil, nil, nil)
 		}
 	case 210:
 		protoDollar = protoS[protopt-1 : protopt+1]
 		{
-			protolex.(*protoLex).ErrExtendedSyntax("missing field type")
+			protolex.(*protoLex).ErrExtendedSyntax("missing field type", CategoryIncompleteDecl)
 			protoVAL.fld = ast.NewIncompleteFieldNode(protoDollar[1].id.ToKeyword(), nil, nil, nil, nil, nil)
 		}
 	case 211:
@@ -2349,7 +2349,7 @@ protodefault:
 	case 519:
 		protoDollar = protoS[protopt-1 : protopt+1]
 		{
-			protolex.(*protoLex).ErrExtendedSyntaxAt("unexpected trailing comma", protoDollar[1].b)
+			protolex.(*protoLex).ErrExtendedSyntaxAt("unexpected trailing comma", protoDollar[1].b, CategoryExtraTokens)
 			protoVAL.b = protoDollar[1].b
 		}
 	case 520:
@@ -2365,14 +2365,14 @@ protodefault:
 	case 522:
 		protoDollar = protoS[protopt-1 : protopt+1]
 		{
-			protolex.(*protoLex).ErrExtendedSyntaxAt("expected ';', found ','", protoDollar[1].b)
+			protolex.(*protoLex).ErrExtendedSyntaxAt("expected ';', found ','", protoDollar[1].b, CategoryIncorrectToken)
 			protoVAL.b = protoDollar[1].b
 		}
 	case 523:
 		protoDollar = protoS[protopt-1 : protopt+1]
 		{
 			if protoDollar[1].b.Virtual {
-				protolex.(*protoLex).ErrExtendedSyntaxAt("expected ';'", protoDollar[1].b)
+				protolex.(*protoLex).ErrExtendedSyntaxAt("expected ';'", protoDollar[1].b, CategoryMissingToken)
 			}
 			protoVAL.b = protoDollar[1].b
 		}

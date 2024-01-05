@@ -741,7 +741,7 @@ func (l *protoLex) endExtensionIdent(lval *protoSymType) {
 		}
 	default:
 		if ast.ExtendedSyntaxEnabled {
-			l.ErrExtendedSyntax("extension name cannot be empty")
+			l.ErrExtendedSyntax("extension name cannot be empty", CategoryEmptyDecl)
 		} else {
 			l.Error("extension name cannot be empty")
 		}
@@ -1284,12 +1284,12 @@ func (l *protoLex) Error(s string) {
 	_, _ = l.addSourceError(NewParseError(errors.New(s)))
 }
 
-func (l *protoLex) ErrExtendedSyntax(s string) {
-	l.addSourceWarning(NewExtendedSyntaxError(fmt.Errorf("error: %s", s)), ast.NewSourceSpan(l.prev(), l.prev()))
+func (l *protoLex) ErrExtendedSyntax(s string, category string) {
+	l.addSourceWarning(NewExtendedSyntaxError(fmt.Errorf("error: %s", s), category), ast.NewSourceSpan(l.prev(), l.prev()))
 }
 
-func (l *protoLex) ErrExtendedSyntaxAt(s string, node ast.Node) {
-	l.addSourceWarning(NewExtendedSyntaxError(fmt.Errorf("error: %s", s)), l.info.NodeInfo(node))
+func (l *protoLex) ErrExtendedSyntaxAt(s string, node ast.Node, category string) {
+	l.addSourceWarning(NewExtendedSyntaxError(fmt.Errorf("error: %s", s), category), l.info.NodeInfo(node))
 }
 
 // TODO: Accept both a start and end offset, and use that to create a span.

@@ -1,4 +1,5 @@
 //protols:nofmt
+//protols:debug Wnoerror=all
 syntax = "proto2"
 
 message Foo {

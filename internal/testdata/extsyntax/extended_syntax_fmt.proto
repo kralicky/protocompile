@@ -1,6 +1,7 @@
+//protols:debug Wnoerror=empty_decl
 syntax = "proto2"; // virtual semicolon ->
 
-package extsyntax.fmt; // virtual semicolon ->
+package extsyntaxfmt; // virtual semicolon ->
 
 import "google/protobuf/descriptor.proto"; // virtual semicolon ->
 
@@ -17,18 +18,16 @@ message /* a */ /* b */ Message /* c */ { // d
     One  = 1; // virtual semicolon ->
   } // <- optional semicolon
 
-  optional int32 a = 1 [
-    default = 2
-  ]; // virtual semicolon ->
+  optional int32 a = 1 [default = 2]; // virtual semicolon ->
   optional int32 b = 2 [
     json_name  = "b",
     deprecated = true
   ]; // virtual semicolon ->
 
   optional int32 c = 3; // virtual semicolon ->
-  optional int32 d = 4 [default = 1
-   /* test */
-   , ]; // virtual semicolon ->
+  optional int32 d = 4 [
+    /* test */
+  ]; // virtual semicolon ->
 
   extensions 249, 300 /*bar*/ to /*foo*/ 350, 500 to 550, 20000 to max [
     (label) = "jazz",

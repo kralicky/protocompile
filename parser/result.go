@@ -372,7 +372,8 @@ func (r *result) addExtensions(ext *ast.ExtendNode, flds *[]*descriptorpb.FieldD
 	if count == 0 {
 		nodeInfo := r.file.NodeInfo(ext.CloseBrace)
 		if ast.ExtendedSyntaxEnabled {
-			handler.HandleWarningWithPos(nodeInfo, NewExtendedSyntaxError(errors.New("extend sections must define at least one extension")))
+			handler.HandleWarningWithPos(nodeInfo,
+				NewExtendedSyntaxError(errors.New("extend sections must define at least one extension"), CategoryEmptyDecl))
 		} else {
 			_ = handler.HandleErrorf(nodeInfo, "extend sections must define at least one extension")
 		}
