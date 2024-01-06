@@ -390,11 +390,16 @@ func (interp *interpreter) interpretFieldPseudoOptions(fqn string, fld *descript
 	if index, err := interp.processDefaultOption(scope, fqn, fld, uo); err != nil && !interp.lenient {
 		return err
 	} else if index >= 0 {
-		interp.descriptorIndex.OptionsToFieldDescriptors[uo[index]] = resolveDescriptor[protoreflect.FieldDescriptor](interp.resolver, fqn)
+		fldDesc := resolveDescriptor[protoreflect.FieldDescriptor](interp.resolver, fqn)
+		interp.descriptorIndex.OptionsToFieldDescriptors[uo[index]] = fldDesc
 		// attribute source code info
 		optNode := interp.file.OptionNode(uo[index])
 		if on, ok := optNode.(*ast.OptionNode); ok {
 			interp.index[on] = &sourceinfo.OptionSourceInfo{Path: []int32{-1, internal.FieldDefaultTag}}
+
+			if fldDesc.Kind() == protoreflect.EnumKind {
+				interp.indexEnumValueRef(fldDesc, on.Val)
+			}
 		}
 		uo = internal.RemoveOption(uo, index)
 	}
@@ -1340,12 +1345,7 @@ func (interp *interpreter) interpretField(mc *internal.MessageContext, msg proto
 		// index enum value references used as extension values:
 		// option (foo) = SomeEnumValue;
 		if fld.Kind() == protoreflect.EnumKind {
-			enumDesc := fld.Enum()
-			switch v := optValNode.(type) {
-			case ast.IdentValueNode:
-				interp.descriptorIndex.EnumValueIdentNodesToEnumValueDescriptors[v] =
-					enumDesc.Values().ByName(protoreflect.Name(v.AsIdentifier()))
-			}
+			interp.indexEnumValueRef(fld, optValNode)
 		}
 	}
 	if err != nil {
@@ -1369,14 +1369,9 @@ func (interp *interpreter) interpretField(mc *internal.MessageContext, msg proto
 		//   baz: SomeOtherEnumValue
 		// };
 		if fieldDesc.Kind() == protoreflect.EnumKind {
-			enumDesc := fieldDesc.Enum()
 			switch v := interpretedField.node.(type) {
 			case *ast.MessageFieldNode:
-				switch v := v.Val.(type) {
-				case ast.IdentValueNode:
-					interp.descriptorIndex.EnumValueIdentNodesToEnumValueDescriptors[v] =
-						enumDesc.Values().ByName(protoreflect.Name(v.AsIdentifier()))
-				}
+				interp.indexEnumValueRef(fieldDesc, v.Val)
 			}
 		}
 	}
@@ -1395,6 +1390,14 @@ func (interp *interpreter) interpretField(mc *internal.MessageContext, msg proto
 			// in packed format)
 		},
 	}, nil
+}
+
+func (interp *interpreter) indexEnumValueRef(fld protoreflect.FieldDescriptor, optValNode ast.ValueNode) {
+	enumDesc := fld.Enum()
+	switch v := optValNode.(type) {
+	case ast.IdentValueNode:
+		interp.descriptorIndex.EnumValueIdentNodesToEnumValueDescriptors[v] = enumDesc.Values().ByName(protoreflect.Name(v.AsIdentifier()))
+	}
 }
 
 // setOptionField sets the value for field fld in the given message msg to the value represented
@@ -2295,6 +2298,10 @@ func (interp *interpreter) messageLiteralValue(mc *internal.MessageContext, fiel
 				return interpretedFieldValue{}, reporter.Errorf(interp.nodeInfo(fieldNode.Val), "syntax error: unexpected value, expecting ':'")
 			}
 			res, index, err := interp.setOptionField(mc, msg, ffld, fieldNode.Name, fieldNode.Val, true)
+
+			if ffld.Kind() == protoreflect.EnumKind {
+				interp.indexEnumValueRef(ffld, fieldNode.Val)
+			}
 			if err != nil {
 				return interpretedFieldValue{}, err
 			}

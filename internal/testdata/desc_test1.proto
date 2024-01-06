@@ -45,7 +45,7 @@ message TestMessage {
     // Comment for anm
     optional AnotherNestedMessage anm = 1;
     // Comment for yanm
-    optional AnotherNestedMessage.YetAnotherNestedMessage /* multi-line type ref */ yanm = 2;
+    optional AnotherNestedMessage.YetAnotherNestedMessage  /* multi-line type ref */ yanm = 2;
   }
   // Comment for NestedEnum
   enum NestedEnum {

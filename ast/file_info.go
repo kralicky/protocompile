@@ -715,6 +715,37 @@ func (n NodeInfo) RawText() string {
 	return string(n.fileInfo.data[startTok.offset : endTok.offset+endTok.length])
 }
 
+type FileInfoInterface interface {
+	Name() string
+	SourcePos(int) SourcePos
+	NodeInfo(Node) NodeInfo
+	TokenInfo(Token) NodeInfo
+	ItemInfo(Item) ItemInfo
+	GetItem(Item) (Token, Comment)
+}
+
+type nodeInfoInternal interface {
+	// ParentFile returns a limited interface which can be used to look up
+	// node information for other nodes within the same file as this node.
+	ParentFile() FileInfoInterface
+}
+
+// Returns an interface that allows limited access to internal node information.
+// This should only be used for optimization purposes in places where this info
+// would otherwise still be obtainable, but with a performance cost.
+// This should not be considered part of the public NodeInfo API.
+func (n NodeInfo) Internal() nodeInfoInternal {
+	return nodeInfoInternalImpl{n}
+}
+
+type nodeInfoInternalImpl struct {
+	NodeInfo
+}
+
+func (n nodeInfoInternalImpl) ParentFile() FileInfoInterface {
+	return n.fileInfo
+}
+
 // SourcePos identifies a location in a proto source file.
 type SourcePos struct {
 	Filename string
@@ -830,4 +861,16 @@ func (c Comment) String() string {
 
 	start, end := c.Start(), c.End()
 	return fmt.Sprintf("%s:%d:%d-%d:%d: %s", start.Filename, start.Line, start.Col, end.Line, end.Col, c.RawText())
+}
+
+type NodeReference struct {
+	Node
+	NodeInfo
+}
+
+func NewNodeReference[F interface{ NodeInfo(Node) NodeInfo }](f F, node Node) NodeReference {
+	return NodeReference{
+		Node:     node,
+		NodeInfo: f.NodeInfo(node),
+	}
 }

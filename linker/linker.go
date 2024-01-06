@@ -115,7 +115,7 @@ dependencies_ok:
 		usedImports:          map[string]struct{}{},
 		prefix:               prefix,
 		optionQualifiedNames: map[ast.IdentValueNode]string{},
-		resolvedReferences:   map[protoreflect.Descriptor][]ast.SourceSpan{},
+		resolvedReferences:   map[protoreflect.Descriptor][]ast.NodeReference{},
 	}
 
 	// First, we put all symbols into a single pool, which lets us ensure there
@@ -182,7 +182,7 @@ type Result interface {
 
 	FindDescriptorsByPrefix(ctx context.Context, prefix string, filter ...func(protoreflect.Descriptor) bool) ([]protoreflect.Descriptor, error)
 
-	FindReferences(to protoreflect.Descriptor) []ast.SourceSpan
+	FindReferences(to protoreflect.Descriptor) []ast.NodeReference
 
 	FindOptionSourceInfo(*ast.OptionNode) *sourceinfo.OptionSourceInfo
 	FindOptionNameFieldDescriptor(name *descriptorpb.UninterpretedOption_NamePart) protoreflect.FieldDescriptor

@@ -311,7 +311,7 @@ func resolveFieldTypes(f *fldDescriptor, handler *reporter.Handler, s *Symbols, 
 	scope := fmt.Sprintf("field %s", f.fqn)
 	if fld.GetExtendee() != "" {
 		scope := fmt.Sprintf("extension %s", f.fqn)
-		dsc := r.resolve(file.NodeInfo(node.FieldExtendee()), fld.GetExtendee(), false, scopes)
+		dsc := r.resolve(ast.NewNodeReference(file, node.FieldExtendee()), fld.GetExtendee(), false, scopes)
 		if dsc == nil {
 			return handler.HandleErrorf(file.NodeInfo(node.FieldExtendee()), "unknown extendee type %s", fld.GetExtendee())
 		}
@@ -358,7 +358,7 @@ func resolveFieldTypes(f *fldDescriptor, handler *reporter.Handler, s *Symbols, 
 		return nil
 	}
 
-	dsc := r.resolve(file.NodeInfo(node.FieldType()), fld.GetTypeName(), true, scopes)
+	dsc := r.resolve(ast.NewNodeReference(file, node.FieldType()), fld.GetTypeName(), true, scopes)
 	if dsc == nil {
 		return handler.HandleErrorWithPos(file.NodeInfo(node.FieldType()), &errUndeclaredName{
 			scope:      scope,
@@ -455,7 +455,7 @@ func resolveMethodTypes(m *mtdDescriptor, handler *reporter.Handler, scopes []sc
 	mtd := m.proto
 	file := r.FileNode()
 	node := r.MethodNode(mtd)
-	dsc := r.resolve(file.NodeInfo(node.GetInputType()), mtd.GetInputType(), false, scopes)
+	dsc := r.resolve(ast.NewNodeReference(file, node.GetInputType()), mtd.GetInputType(), false, scopes)
 	if dsc == nil {
 		if err := handler.HandleErrorWithPos(file.NodeInfo(node.GetInputType()), &errUndeclaredName{
 			scope:      scope,
@@ -482,7 +482,7 @@ func resolveMethodTypes(m *mtdDescriptor, handler *reporter.Handler, scopes []sc
 	}
 
 	// TODO: make input and output type resolution more DRY
-	dsc = r.resolve(file.NodeInfo(node.GetOutputType()), mtd.GetOutputType(), false, scopes)
+	dsc = r.resolve(ast.NewNodeReference(file, node.GetOutputType()), mtd.GetOutputType(), false, scopes)
 	if dsc == nil {
 		if err := handler.HandleErrorWithPos(file.NodeInfo(node.GetOutputType()), &errUndeclaredName{
 			scope:      scope,
@@ -524,7 +524,7 @@ opts:
 		for _, nm := range opt.Name {
 			if nm.GetIsExtension() {
 				node := r.OptionNamePartNode(nm)
-				desc, err := r.resolveExtensionName(file.NodeInfo(node), nm.GetNamePart(), scopes)
+				desc, err := r.resolveExtensionName(ast.NewNodeReference(file, node), nm.GetNamePart(), scopes)
 				if err != nil {
 					if err := handler.HandleErrorf(file.NodeInfo(node), "%v%v", mc, err); err != nil {
 						return err
@@ -574,7 +574,7 @@ func (r *result) resolveOptionValue(handler *reporter.Handler, mc *internal.Mess
 				// likely due to how it re-uses C++ text format implementation, and normal text
 				// format doesn't expect that kind of relative reference.)
 				scopes := scopes[:1] // first scope is file, the rest are enclosing messages
-				desc, err := r.resolveExtensionName(r.FileNode().NodeInfo(fld.Name.Name), string(fld.Name.Name.AsIdentifier()), scopes)
+				desc, err := r.resolveExtensionName(ast.NewNodeReference(r.FileNode(), fld.Name.Name), string(fld.Name.Name.AsIdentifier()), scopes)
 				if err != nil {
 					if err := handler.HandleErrorf(r.FileNode().NodeInfo(fld.Name.Name), "%v%v", mc, err); err != nil {
 						return err
@@ -604,7 +604,22 @@ func (r *result) resolveOptionValue(handler *reporter.Handler, mc *internal.Mess
 	return nil
 }
 
-func (r *result) resolveExtensionName(whence ast.SourceSpan, name string, scopes []scope) (protoreflect.FieldDescriptor, error) {
+func (r *result) indexCompoundIdentRefs(fullIdent *ast.CompoundIdentNode, desc protoreflect.Descriptor) {
+	componentIdx := len(fullIdent.Components) - 1
+
+	for componentIdx >= 0 && desc != nil {
+		switch desc := desc.(type) {
+		case protoreflect.FileDescriptor:
+			break
+		case protoreflect.MessageDescriptor:
+			r.resolvedReferences[desc] = append(r.resolvedReferences[desc], ast.NewNodeReference(r.AST(), fullIdent.Components[componentIdx]))
+		}
+		desc = desc.Parent()
+		componentIdx--
+	}
+}
+
+func (r *result) resolveExtensionName(whence ast.NodeReference, name string, scopes []scope) (protoreflect.FieldDescriptor, error) {
 	dsc := r.resolve(whence, name, false, scopes)
 	if dsc == nil {
 		return nil, fmt.Errorf("unknown extension %s", name)
@@ -621,10 +636,16 @@ func (r *result) resolveExtensionName(whence ast.SourceSpan, name string, scopes
 	}
 }
 
-func (r *result) resolve(whence ast.SourceSpan, name string, onlyTypes bool, scopes []scope) (resolved protoreflect.Descriptor) {
+func (r *result) resolve(whence ast.NodeReference, name string, onlyTypes bool, scopes []scope) (resolved protoreflect.Descriptor) {
 	defer func() {
 		if resolved != nil {
 			r.resolvedReferences[resolved] = append(r.resolvedReferences[resolved], whence)
+
+			switch node := whence.Node.(type) {
+			case *ast.CompoundIdentNode:
+				// when resolving deeply nested messages, we need to keep track of each message in the path.
+				r.indexCompoundIdentRefs(node, resolved)
+			}
 		}
 	}()
 	if strings.HasPrefix(name, ".") {

@@ -168,7 +168,7 @@ type result struct {
 	// A map of descriptors to all resolved references to them. The reference
 	// locations contain the start and end position of the relevant identifier
 	// referencing the descriptor.
-	resolvedReferences map[protoreflect.Descriptor][]ast.SourceSpan
+	resolvedReferences map[protoreflect.Descriptor][]ast.NodeReference
 
 	imports       fileImports
 	messages      msgDescriptors
@@ -180,9 +180,11 @@ type result struct {
 	optsDescIndex sourceinfo.OptionDescriptorIndex
 }
 
-var _ protoreflect.FileDescriptor = (*result)(nil)
-var _ Result = (*result)(nil)
-var _ protoutil.DescriptorProtoWrapper = (*result)(nil)
+var (
+	_ protoreflect.FileDescriptor      = (*result)(nil)
+	_ Result                           = (*result)(nil)
+	_ protoutil.DescriptorProtoWrapper = (*result)(nil)
+)
 
 func (r *result) Dependencies() Files {
 	return r.deps
@@ -276,10 +278,17 @@ func (r *result) PopulateSourceCodeInfo(optsIndex sourceinfo.OptionIndex, optsDe
 	r.optsDescIndex = optsDescIndex
 	a := r.AST()
 	for node, desc := range optsDescIndex.FieldReferenceNodesToFieldDescriptors {
-		r.resolvedReferences[desc] = append(r.resolvedReferences[desc], a.NodeInfo(node))
+		r.resolvedReferences[desc] = append(r.resolvedReferences[desc], ast.NewNodeReference(a, node))
+
+		if ref, ok := node.(*ast.FieldReferenceNode); ok {
+			switch name := ref.Name.(type) {
+			case *ast.CompoundIdentNode:
+				r.indexCompoundIdentRefs(name, desc)
+			}
+		}
 	}
 	for node, desc := range optsDescIndex.EnumValueIdentNodesToEnumValueDescriptors {
-		r.resolvedReferences[desc] = append(r.resolvedReferences[desc], a.NodeInfo(node))
+		r.resolvedReferences[desc] = append(r.resolvedReferences[desc], ast.NewNodeReference(a, node))
 	}
 }
 
@@ -319,7 +328,7 @@ func (r *result) FindDescriptorsByPrefix(ctx context.Context, prefix string, fil
 	return
 }
 
-func (r *result) FindReferences(to protoreflect.Descriptor) (results []ast.SourceSpan) {
+func (r *result) FindReferences(to protoreflect.Descriptor) (results []ast.NodeReference) {
 	if r.resolvedReferences == nil {
 		return nil
 	}
@@ -637,8 +646,10 @@ type msgDescriptor struct {
 	rsvdNames  names
 }
 
-var _ protoreflect.MessageDescriptor = (*msgDescriptor)(nil)
-var _ protoutil.DescriptorProtoWrapper = (*msgDescriptor)(nil)
+var (
+	_ protoreflect.MessageDescriptor   = (*msgDescriptor)(nil)
+	_ protoutil.DescriptorProtoWrapper = (*msgDescriptor)(nil)
+)
 
 func (r *result) createMessageDescriptor(md *descriptorpb.DescriptorProto, parent protoreflect.Descriptor, index int, fqn string) *msgDescriptor {
 	ret := &msgDescriptor{MessageDescriptor: noOpMessage, file: r, parent: parent, index: index, proto: md, fqn: fqn}
@@ -875,8 +886,10 @@ type enumDescriptor struct {
 	rsvdNames  names
 }
 
-var _ protoreflect.EnumDescriptor = (*enumDescriptor)(nil)
-var _ protoutil.DescriptorProtoWrapper = (*enumDescriptor)(nil)
+var (
+	_ protoreflect.EnumDescriptor      = (*enumDescriptor)(nil)
+	_ protoutil.DescriptorProtoWrapper = (*enumDescriptor)(nil)
+)
 
 func (r *result) createEnumDescriptor(ed *descriptorpb.EnumDescriptorProto, parent protoreflect.Descriptor, index int, fqn string) *enumDescriptor {
 	ret := &enumDescriptor{EnumDescriptor: noOpEnum, file: r, parent: parent, index: index, proto: ed, fqn: fqn}
@@ -1026,8 +1039,10 @@ type enValDescriptor struct {
 	fqn    string
 }
 
-var _ protoreflect.EnumValueDescriptor = (*enValDescriptor)(nil)
-var _ protoutil.DescriptorProtoWrapper = (*enValDescriptor)(nil)
+var (
+	_ protoreflect.EnumValueDescriptor = (*enValDescriptor)(nil)
+	_ protoutil.DescriptorProtoWrapper = (*enValDescriptor)(nil)
+)
 
 func (r *result) createEnumValueDescriptor(ed *descriptorpb.EnumValueDescriptorProto, parent *enumDescriptor, index int, fqn string) *enValDescriptor {
 	ret := &enValDescriptor{EnumValueDescriptor: noOpEnumValue, file: r, parent: parent, index: index, proto: ed, fqn: fqn}
@@ -1196,8 +1211,10 @@ type fldDescriptor struct {
 	oneof    protoreflect.OneofDescriptor
 }
 
-var _ protoreflect.FieldDescriptor = (*fldDescriptor)(nil)
-var _ protoutil.DescriptorProtoWrapper = (*fldDescriptor)(nil)
+var (
+	_ protoreflect.FieldDescriptor     = (*fldDescriptor)(nil)
+	_ protoutil.DescriptorProtoWrapper = (*fldDescriptor)(nil)
+)
 
 func (r *result) createFieldDescriptor(fd *descriptorpb.FieldDescriptorProto, parent *msgDescriptor, index int, fqn string) *fldDescriptor {
 	ret := &fldDescriptor{FieldDescriptor: noOpField, file: r, parent: parent, index: index, proto: fd, fqn: fqn}
@@ -1585,6 +1602,7 @@ func isOctal(b byte) bool { return b >= '0' && b <= '7' }
 func isHex(b byte) bool {
 	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
 }
+
 func matchPrefix(s string, limit int, fn func(byte) bool) int {
 	l := len(s)
 	if l > limit {
@@ -1673,8 +1691,10 @@ type oneofDescriptor struct {
 	fields fldDescriptors
 }
 
-var _ protoreflect.OneofDescriptor = (*oneofDescriptor)(nil)
-var _ protoutil.DescriptorProtoWrapper = (*oneofDescriptor)(nil)
+var (
+	_ protoreflect.OneofDescriptor     = (*oneofDescriptor)(nil)
+	_ protoutil.DescriptorProtoWrapper = (*oneofDescriptor)(nil)
+)
 
 func (r *result) createOneofDescriptor(ood *descriptorpb.OneofDescriptorProto, parent *msgDescriptor, index int, fqn string) *oneofDescriptor {
 	ret := &oneofDescriptor{OneofDescriptor: noOpOneof, file: r, parent: parent, index: index, proto: ood, fqn: fqn}
@@ -1784,8 +1804,10 @@ type svcDescriptor struct {
 	methods mtdDescriptors
 }
 
-var _ protoreflect.ServiceDescriptor = (*svcDescriptor)(nil)
-var _ protoutil.DescriptorProtoWrapper = (*svcDescriptor)(nil)
+var (
+	_ protoreflect.ServiceDescriptor   = (*svcDescriptor)(nil)
+	_ protoutil.DescriptorProtoWrapper = (*svcDescriptor)(nil)
+)
 
 func (r *result) createServiceDescriptor(sd *descriptorpb.ServiceDescriptorProto, index int, fqn string) *svcDescriptor {
 	ret := &svcDescriptor{ServiceDescriptor: noOpService, file: r, index: index, proto: sd, fqn: fqn}
@@ -1882,8 +1904,10 @@ type mtdDescriptor struct {
 	inputType, outputType protoreflect.MessageDescriptor
 }
 
-var _ protoreflect.MethodDescriptor = (*mtdDescriptor)(nil)
-var _ protoutil.DescriptorProtoWrapper = (*mtdDescriptor)(nil)
+var (
+	_ protoreflect.MethodDescriptor    = (*mtdDescriptor)(nil)
+	_ protoutil.DescriptorProtoWrapper = (*mtdDescriptor)(nil)
+)
 
 func (r *result) createMethodDescriptor(mtd *descriptorpb.MethodDescriptorProto, parent *svcDescriptor, index int, fqn string) *mtdDescriptor {
 	ret := &mtdDescriptor{MethodDescriptor: noOpMethod, file: r, parent: parent, index: index, proto: mtd, fqn: fqn}

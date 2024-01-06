@@ -1376,7 +1376,7 @@ func (l *protoLex) maybeProcessPartialField(ident string) {
 			l.insertSemi |= atNextNewline | onlyIfMissing
 		}
 	case 1:
-		if matchKeyword(nextIdents[0]) {
+		if nextRune != '{' && matchKeyword(nextIdents[0]) {
 			l.insertSemi |= atNextNewline | onlyIfMissing
 		}
 	case 0:
