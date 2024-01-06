@@ -261,6 +261,10 @@ optionDecl
 		protolex.(*protoLex).ErrExtendedSyntax("expected '='", CategoryIncompleteDecl)
 		$$ = ast.NewIncompleteOptionNode($1.ToKeyword(), $2, nil, nil)
 	}
+	| _OPTION {
+		protolex.(*protoLex).ErrExtendedSyntax("expected option name", CategoryIncompleteDecl)
+		$$ = ast.NewIncompleteOptionNode($1.ToKeyword(), nil, nil, nil)
+	}
 
 optionName
 	: anyIdentifier {

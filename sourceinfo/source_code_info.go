@@ -236,11 +236,13 @@ func generateSourceCodeInfoForOption(opts OptionIndex, sci *sourceCodeInfo, n *a
 	if valTag != 0 {
 		sci.newLoc(n.Val, append(optPath, valTag))
 	}
-	for j, nn := range n.Name.Parts {
-		optNmPath := optPath
-		optNmPath = append(optNmPath, internal.UninterpretedNameTag, int32(j))
-		sci.newLoc(nn, optNmPath)
-		sci.newLoc(nn.Name, append(optNmPath, internal.UninterpretedNameNameTag))
+	if n.Name != nil {
+		for j, nn := range n.Name.Parts {
+			optNmPath := optPath
+			optNmPath = append(optNmPath, internal.UninterpretedNameTag, int32(j))
+			sci.newLoc(nn, optNmPath)
+			sci.newLoc(nn.Name, append(optNmPath, internal.UninterpretedNameNameTag))
+		}
 	}
 }
 

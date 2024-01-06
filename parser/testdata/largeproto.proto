@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//protols:debug Wnoerror=all
 syntax = "proto3";
 
 package google.privacy.dlp.v2;
 
+import "google/api/annotations.proto";
 import "google/api/client.proto";
 import "google/api/field_behavior.proto";
 import "google/api/resource.proto";
@@ -28,22 +30,21 @@ import "google/rpc/status.proto";
 import "google/type/date.proto";
 import "google/type/dayofweek.proto";
 import "google/type/timeofday.proto";
-import "google/api/annotations.proto";
 
-option csharp_namespace = "Google.Cloud.Dlp.V2";
-option go_package = "google.golang.org/genproto/googleapis/privacy/dlp/v2;dlp";
-option java_multiple_files = true;
-option java_outer_classname = "DlpProto";
-option java_package = "com.google.privacy.dlp.v2";
-option php_namespace = "Google\\Cloud\\Dlp\\V2";
-option ruby_package = "Google::Cloud::Dlp::V2";
+option csharp_namespace                 = "Google.Cloud.Dlp.V2";
+option go_package                       = "google.golang.org/genproto/googleapis/privacy/dlp/v2;dlp";
+option java_multiple_files              = true;
+option java_outer_classname             = "DlpProto";
+option java_package                     = "com.google.privacy.dlp.v2";
+option php_namespace                    = "Google\\Cloud\\Dlp\\V2";
+option ruby_package                     = "Google::Cloud::Dlp::V2";
 option (google.api.resource_definition) = {
-  type: "dlp.googleapis.com/DlpContent"
+  type:    "dlp.googleapis.com/DlpContent"
   pattern: "projects/{project}/dlpContent"
   pattern: "projects/{project}/locations/{location}/dlpContent"
 };
 option (google.api.resource_definition) = {
-  type: "dlp.googleapis.com/OrganizationLocation"
+  type:    "dlp.googleapis.com/OrganizationLocation"
   pattern: "organizations/{organization}/locations/{location}"
 };
 
@@ -174,18 +175,18 @@ service DlpService {
   rpc UpdateInspectTemplate(UpdateInspectTemplateRequest) returns (InspectTemplate) {
     option (google.api.http) = {
       patch: "/v2/{name=organizations/*/inspectTemplates/*}"
-      body: "*"
+      body:  "*"
       additional_bindings {
         patch: "/v2/{name=organizations/*/locations/*/inspectTemplates/*}"
-        body: "*"
+        body:  "*"
       }
       additional_bindings {
         patch: "/v2/{name=projects/*/inspectTemplates/*}"
-        body: "*"
+        body:  "*"
       }
       additional_bindings {
         patch: "/v2/{name=projects/*/locations/*/inspectTemplates/*}"
-        body: "*"
+        body:  "*"
       }
     };
     option (google.api.method_signature) = "name,inspect_template,update_mask";
@@ -275,18 +276,18 @@ service DlpService {
   rpc UpdateDeidentifyTemplate(UpdateDeidentifyTemplateRequest) returns (DeidentifyTemplate) {
     option (google.api.http) = {
       patch: "/v2/{name=organizations/*/deidentifyTemplates/*}"
-      body: "*"
+      body:  "*"
       additional_bindings {
         patch: "/v2/{name=organizations/*/locations/*/deidentifyTemplates/*}"
-        body: "*"
+        body:  "*"
       }
       additional_bindings {
         patch: "/v2/{name=projects/*/deidentifyTemplates/*}"
-        body: "*"
+        body:  "*"
       }
       additional_bindings {
         patch: "/v2/{name=projects/*/locations/*/deidentifyTemplates/*}"
-        body: "*"
+        body:  "*"
       }
     };
     option (google.api.method_signature) = "name,deidentify_template,update_mask";
@@ -369,10 +370,10 @@ service DlpService {
   rpc UpdateJobTrigger(UpdateJobTriggerRequest) returns (JobTrigger) {
     option (google.api.http) = {
       patch: "/v2/{name=projects/*/jobTriggers/*}"
-      body: "*"
+      body:  "*"
       additional_bindings {
         patch: "/v2/{name=projects/*/locations/*/jobTriggers/*}"
-        body: "*"
+        body:  "*"
       }
     };
     option (google.api.method_signature) = "name,job_trigger,update_mask";
@@ -548,18 +549,18 @@ service DlpService {
   rpc UpdateStoredInfoType(UpdateStoredInfoTypeRequest) returns (StoredInfoType) {
     option (google.api.http) = {
       patch: "/v2/{name=organizations/*/storedInfoTypes/*}"
-      body: "*"
+      body:  "*"
       additional_bindings {
         patch: "/v2/{name=organizations/*/locations/*/storedInfoTypes/*}"
-        body: "*"
+        body:  "*"
       }
       additional_bindings {
         patch: "/v2/{name=projects/*/storedInfoTypes/*}"
-        body: "*"
+        body:  "*"
       }
       additional_bindings {
         patch: "/v2/{name=projects/*/locations/*/storedInfoTypes/*}"
-        body: "*"
+        body:  "*"
       }
     };
     option (google.api.method_signature) = "name,config,update_mask";
@@ -879,7 +880,7 @@ message InspectResult {
 // Represents a piece of potentially sensitive content.
 message Finding {
   option (google.api.resource) = {
-    type: "dlp.googleapis.com/Finding"
+    type:    "dlp.googleapis.com/Finding"
     pattern: "projects/{project}/locations/{location}/findings/{finding}"
   };
 
@@ -915,13 +916,13 @@ message Finding {
 
   // The job that stored the finding.
   string resource_name = 8 [(google.api.resource_reference) = {
-                              type: "dlp.googleapis.com/DlpJob"
-                            }];
+    type: "dlp.googleapis.com/DlpJob"
+  }];
 
   // Job trigger name, if applicable, for this finding.
   string trigger_name = 9 [(google.api.resource_reference) = {
-                             type: "dlp.googleapis.com/JobTrigger"
-                           }];
+    type: "dlp.googleapis.com/JobTrigger"
+  }];
 
   // The labels associated with this `Finding`.
   //
@@ -943,8 +944,8 @@ message Finding {
 
   // The job that stored the finding.
   string job_name = 13 [(google.api.resource_reference) = {
-                          type: "dlp.googleapis.com/DlpJob"
-                        }];
+    type: "dlp.googleapis.com/DlpJob"
+  }];
 }
 
 // Specifies the location of the finding.
@@ -1171,8 +1172,8 @@ message RedactImageRequest {
   //
   //     parent=projects/example-project/locations/europe-west3
   string parent = 1 [(google.api.resource_reference) = {
-                       child_type: "dlp.googleapis.com/DlpContent"
-                     }];
+    child_type: "dlp.googleapis.com/DlpContent"
+  }];
 
   // Deprecated. This field has no effect.
   string location_id = 8;
@@ -1236,8 +1237,8 @@ message DeidentifyContentRequest {
   //
   //     parent=projects/example-project/locations/europe-west3
   string parent = 1 [(google.api.resource_reference) = {
-                       child_type: "dlp.googleapis.com/DlpContent"
-                     }];
+    child_type: "dlp.googleapis.com/DlpContent"
+  }];
 
   // Configuration for the de-identification of the content item.
   // Items specified here will override the template referenced by the
@@ -1298,7 +1299,7 @@ message ReidentifyContentRequest {
   //
   //     parent=projects/example-project/locations/europe-west3
   string parent = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       child_type: "dlp.googleapis.com/DlpContent"
     }
@@ -1370,8 +1371,8 @@ message InspectContentRequest {
   //
   //     parent=projects/example-project/locations/europe-west3
   string parent = 1 [(google.api.resource_reference) = {
-                       child_type: "dlp.googleapis.com/DlpContent"
-                     }];
+    child_type: "dlp.googleapis.com/DlpContent"
+  }];
 
   // Configuration for the inspector. What specified here will override
   // the template referenced by the inspect_template_name argument.
@@ -2175,17 +2176,13 @@ message DeidentifyConfig {
 // `TransformationOverviews`.
 message TransformationErrorHandling {
   // Throw an error and fail the request when a transformation error occurs.
-  message ThrowError {
-
-  }
+  message ThrowError {}
 
   // Skips the data without modifying it if the requested transformation would
   // cause an error. For example, if a `DateShift` transformation were applied
   // an an IP address, this mode would leave the IP address unchanged in the
   // response.
-  message LeaveUntransformed {
-
-  }
+  message LeaveUntransformed {}
 
   // How transformation errors should be handled.
   oneof mode {
@@ -2347,16 +2344,12 @@ message ReplaceValueConfig {
 }
 
 // Replace each matching finding with the name of the info_type.
-message ReplaceWithInfoTypeConfig {
-
-}
+message ReplaceWithInfoTypeConfig {}
 
 // Redact a given value. For example, if used with an `InfoTypeTransformation`
 // transforming PHONE_NUMBER, and input 'My phone number is 206-555-0123', the
 // output would be 'My phone number is '.
-message RedactConfig {
-
-}
+message RedactConfig {}
 
 // Characters to skip when doing deidentification of a value. These will be left
 // alone and skipped.
@@ -2885,9 +2878,7 @@ message Schedule {
 
 // Job trigger option for hybrid jobs. Jobs must be manually created
 // and finished.
-message Manual {
-
-}
+message Manual {}
 
 // The inspectTemplate contains a configuration (set of types of sensitive data
 // to be detected) to be used anywhere you otherwise would normally specify
@@ -2895,7 +2886,7 @@ message Manual {
 // to learn more.
 message InspectTemplate {
   option (google.api.resource) = {
-    type: "dlp.googleapis.com/InspectTemplate"
+    type:    "dlp.googleapis.com/InspectTemplate"
     pattern: "organizations/{organization}/inspectTemplates/{inspect_template}"
     pattern: "projects/{project}/inspectTemplates/{inspect_template}"
     pattern: "organizations/{organization}/locations/{location}/inspectTemplates/{inspect_template}"
@@ -2929,7 +2920,7 @@ message InspectTemplate {
 // See https://cloud.google.com/dlp/docs/concepts-templates to learn more.
 message DeidentifyTemplate {
   option (google.api.resource) = {
-    type: "dlp.googleapis.com/DeidentifyTemplate"
+    type:    "dlp.googleapis.com/DeidentifyTemplate"
     pattern: "organizations/{organization}/deidentifyTemplates/{deidentify_template}"
     pattern: "projects/{project}/deidentifyTemplates/{deidentify_template}"
     pattern: "organizations/{organization}/locations/{location}/deidentifyTemplates/{deidentify_template}"
@@ -2973,7 +2964,7 @@ message Error {
 // See https://cloud.google.com/dlp/docs/concepts-job-triggers to learn more.
 message JobTrigger {
   option (google.api.resource) = {
-    type: "dlp.googleapis.com/JobTrigger"
+    type:    "dlp.googleapis.com/JobTrigger"
     pattern: "projects/{project}/jobTriggers/{job_trigger}"
     pattern: "projects/{project}/locations/{location}/jobTriggers/{job_trigger}"
   };
@@ -3086,9 +3077,7 @@ message Action {
   // service-specific policy, see https://cloud.google.com/terms/service-terms
   // Only a single instance of this action can be specified.
   // Compatible with: Inspect
-  message PublishSummaryToCscc {
-
-  }
+  message PublishSummaryToCscc {}
 
   // Publish findings of a DlpJob to Cloud Data Catalog. Labels summarizing the
   // results of the DlpJob will be applied to the entry for the resource scanned
@@ -3100,23 +3089,17 @@ message Action {
   // Only a single instance of this action can be specified and only allowed if
   // all resources being scanned are BigQuery tables.
   // Compatible with: Inspect
-  message PublishFindingsToCloudDataCatalog {
-
-  }
+  message PublishFindingsToCloudDataCatalog {}
 
   // Enable email notification to project owners and editors on jobs's
   // completion/failure.
-  message JobNotificationEmails {
-
-  }
+  message JobNotificationEmails {}
 
   // Enable Stackdriver metric dlp.googleapis.com/finding_count. This
   // will publish a metric to stack driver on each infotype requested and
   // how many findings were found for it. CustomDetectors will be bucketed
   // as 'Custom' under the Stackdriver label 'info_type'.
-  message PublishToStackdriver {
-
-  }
+  message PublishToStackdriver {}
 
   oneof action {
     // Save resulting findings in a provided location.
@@ -3163,7 +3146,7 @@ message CreateInspectTemplateRequest {
   //
   //     parent=projects/example-project/locations/europe-west3
   string parent = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       child_type: "dlp.googleapis.com/InspectTemplate"
     }
@@ -3188,7 +3171,7 @@ message UpdateInspectTemplateRequest {
   // example `organizations/433245324/inspectTemplates/432452342` or
   // projects/project-id/inspectTemplates/432452342.
   string name = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       type: "dlp.googleapis.com/InspectTemplate"
     }
@@ -3207,7 +3190,7 @@ message GetInspectTemplateRequest {
   // example `organizations/433245324/inspectTemplates/432452342` or
   // projects/project-id/inspectTemplates/432452342.
   string name = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       type: "dlp.googleapis.com/InspectTemplate"
     }
@@ -3237,7 +3220,7 @@ message ListInspectTemplatesRequest {
   //
   //     parent=projects/example-project/locations/europe-west3
   string parent = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       child_type: "dlp.googleapis.com/InspectTemplate"
     }
@@ -3286,7 +3269,7 @@ message DeleteInspectTemplateRequest {
   // example `organizations/433245324/inspectTemplates/432452342` or
   // projects/project-id/inspectTemplates/432452342.
   string name = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       type: "dlp.googleapis.com/InspectTemplate"
     }
@@ -3312,7 +3295,7 @@ message CreateJobTriggerRequest {
   //
   //     parent=projects/example-project/locations/europe-west3
   string parent = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       child_type: "dlp.googleapis.com/JobTrigger"
     }
@@ -3336,7 +3319,7 @@ message ActivateJobTriggerRequest {
   // Required. Resource name of the trigger to activate, for example
   // `projects/dlp-test-project/jobTriggers/53234423`.
   string name = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       type: "dlp.googleapis.com/JobTrigger"
     }
@@ -3348,7 +3331,7 @@ message UpdateJobTriggerRequest {
   // Required. Resource name of the project and the triggeredJob, for example
   // `projects/dlp-test-project/jobTriggers/53234423`.
   string name = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       type: "dlp.googleapis.com/JobTrigger"
     }
@@ -3366,7 +3349,7 @@ message GetJobTriggerRequest {
   // Required. Resource name of the project and the triggeredJob, for example
   // `projects/dlp-test-project/jobTriggers/53234423`.
   string name = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       type: "dlp.googleapis.com/JobTrigger"
     }
@@ -3394,7 +3377,7 @@ message CreateDlpJobRequest {
   //
   //     parent=projects/example-project/locations/europe-west3
   string parent = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       child_type: "dlp.googleapis.com/DlpJob"
     }
@@ -3438,7 +3421,7 @@ message ListJobTriggersRequest {
   //
   //     parent=projects/example-project/locations/europe-west3
   string parent = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       child_type: "dlp.googleapis.com/JobTrigger"
     }
@@ -3514,7 +3497,7 @@ message DeleteJobTriggerRequest {
   // Required. Resource name of the project and the triggeredJob, for example
   // `projects/dlp-test-project/jobTriggers/53234423`.
   string name = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       type: "dlp.googleapis.com/JobTrigger"
     }
@@ -3541,7 +3524,7 @@ message InspectJobConfig {
 // Combines all of the information about a DLP job.
 message DlpJob {
   option (google.api.resource) = {
-    type: "dlp.googleapis.com/DlpJob"
+    type:    "dlp.googleapis.com/DlpJob"
     pattern: "projects/{project}/dlpJobs/{dlp_job}"
     pattern: "projects/{project}/locations/{location}/dlpJobs/{dlp_job}"
   };
@@ -3612,7 +3595,7 @@ message DlpJob {
 message GetDlpJobRequest {
   // Required. The name of the DlpJob resource.
   string name = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       type: "dlp.googleapis.com/DlpJob"
     }
@@ -3638,7 +3621,7 @@ message ListDlpJobsRequest {
   //
   //     parent=projects/example-project/locations/europe-west3
   string parent = 4 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       child_type: "dlp.googleapis.com/DlpJob"
     }
@@ -3715,7 +3698,7 @@ message ListDlpJobsResponse {
 message CancelDlpJobRequest {
   // Required. The name of the DlpJob resource to be cancelled.
   string name = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       type: "dlp.googleapis.com/DlpJob"
     }
@@ -3726,7 +3709,7 @@ message CancelDlpJobRequest {
 message FinishDlpJobRequest {
   // Required. The name of the DlpJob resource to be cancelled.
   string name = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       type: "dlp.googleapis.com/DlpJob"
     }
@@ -3737,7 +3720,7 @@ message FinishDlpJobRequest {
 message DeleteDlpJobRequest {
   // Required. The name of the DlpJob resource to be deleted.
   string name = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       type: "dlp.googleapis.com/DlpJob"
     }
@@ -3767,7 +3750,7 @@ message CreateDeidentifyTemplateRequest {
   //
   //     parent=projects/example-project/locations/europe-west3
   string parent = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       child_type: "dlp.googleapis.com/DeidentifyTemplate"
     }
@@ -3792,7 +3775,7 @@ message UpdateDeidentifyTemplateRequest {
   // example `organizations/433245324/deidentifyTemplates/432452342` or
   // projects/project-id/deidentifyTemplates/432452342.
   string name = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       type: "dlp.googleapis.com/DeidentifyTemplate"
     }
@@ -3811,7 +3794,7 @@ message GetDeidentifyTemplateRequest {
   // example `organizations/433245324/deidentifyTemplates/432452342` or
   // projects/project-id/deidentifyTemplates/432452342.
   string name = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       type: "dlp.googleapis.com/DeidentifyTemplate"
     }
@@ -3841,7 +3824,7 @@ message ListDeidentifyTemplatesRequest {
   //
   //     parent=projects/example-project/locations/europe-west3
   string parent = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       child_type: "dlp.googleapis.com/DeidentifyTemplate"
     }
@@ -3891,7 +3874,7 @@ message DeleteDeidentifyTemplateRequest {
   // for example `organizations/433245324/deidentifyTemplates/432452342` or
   // projects/project-id/deidentifyTemplates/432452342.
   string name = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       type: "dlp.googleapis.com/DeidentifyTemplate"
     }
@@ -3995,7 +3978,7 @@ message StoredInfoTypeVersion {
 // version and any pending updates.
 message StoredInfoType {
   option (google.api.resource) = {
-    type: "dlp.googleapis.com/StoredInfoType"
+    type:    "dlp.googleapis.com/StoredInfoType"
     pattern: "organizations/{organization}/storedInfoTypes/{stored_info_type}"
     pattern: "projects/{project}/storedInfoTypes/{stored_info_type}"
     pattern: "organizations/{organization}/locations/{location}/storedInfoTypes/{stored_info_type}"
@@ -4036,7 +4019,7 @@ message CreateStoredInfoTypeRequest {
   //
   //     parent=projects/example-project/locations/europe-west3
   string parent = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       child_type: "dlp.googleapis.com/StoredInfoType"
     }
@@ -4061,7 +4044,7 @@ message UpdateStoredInfoTypeRequest {
   // example `organizations/433245324/storedInfoTypes/432452342` or
   // projects/project-id/storedInfoTypes/432452342.
   string name = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       type: "dlp.googleapis.com/StoredInfoType"
     }
@@ -4082,7 +4065,7 @@ message GetStoredInfoTypeRequest {
   // example `organizations/433245324/storedInfoTypes/432452342` or
   // projects/project-id/storedInfoTypes/432452342.
   string name = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       type: "dlp.googleapis.com/StoredInfoType"
     }
@@ -4112,7 +4095,7 @@ message ListStoredInfoTypesRequest {
   //
   //     parent=projects/example-project/locations/europe-west3
   string parent = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       child_type: "dlp.googleapis.com/StoredInfoType"
     }
@@ -4162,7 +4145,7 @@ message DeleteStoredInfoTypeRequest {
   // example `organizations/433245324/storedInfoTypes/432452342` or
   // projects/project-id/storedInfoTypes/432452342.
   string name = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       type: "dlp.googleapis.com/StoredInfoType"
     }
@@ -4174,7 +4157,7 @@ message HybridInspectJobTriggerRequest {
   // Required. Resource name of the trigger to execute a hybrid inspect on, for example
   // `projects/dlp-test-project/jobTriggers/53234423`.
   string name = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       type: "dlp.googleapis.com/JobTrigger"
     }
@@ -4189,7 +4172,7 @@ message HybridInspectDlpJobRequest {
   // Required. Resource name of the job to execute a hybrid inspect on, for example
   // `projects/dlp-test-project/dlpJob/53234423`.
   string name = 1 [
-    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior)     = REQUIRED,
     (google.api.resource_reference) = {
       type: "dlp.googleapis.com/DlpJob"
     }
@@ -4252,9 +4235,7 @@ message HybridFindingDetails {
 }
 
 // Quota exceeded errors will be thrown once quota has been met.
-message HybridInspectResponse {
-
-}
+message HybridInspectResponse {}
 
 // Operators available for comparing the value of fields.
 enum RelationalOperator {
