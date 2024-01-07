@@ -376,9 +376,13 @@ func NewIncompleteExtensionFieldReferenceNode(openSym *RuneNode, name IdentValue
 	if openSym == nil {
 		panic("openSym is nil")
 	}
+	var nameToken Token
 	children := []Node{openSym}
 	if name != nil {
 		children = append(children, name)
+		nameToken = name.Start()
+	} else {
+		nameToken = openSym.Token()
 	}
 	if closeSym != nil {
 		children = append(children, closeSym)
@@ -388,7 +392,7 @@ func NewIncompleteExtensionFieldReferenceNode(openSym *RuneNode, name IdentValue
 			children: children,
 		},
 		Open:       openSym,
-		Name:       NewIncompleteIdentNode(name, openSym.Token()),
+		Name:       NewIncompleteIdentNode(name, nameToken),
 		Close:      closeSym,
 		incomplete: true,
 	}

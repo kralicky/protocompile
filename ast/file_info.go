@@ -431,23 +431,18 @@ func (f *FileInfo) TokenAtOffset(offset int, includeComments bool) Token {
 	// search for the token that contains the given offset, or if there is no
 	// such token, the closest token on the same line as the given offset.
 	// If there are no tokens on the same line, then TokenError is returned.
-	i, j := 0, len(f.lines)
-	targetLine := -1
-	for i < j {
-		h := int(uint(i+j) >> 1)
-		lineOffset := f.lines[h]
+	targetLine, found := sort.Find(len(f.lines), func(n int) int {
+		lineOffset := f.lines[n]
 		if lineOffset > offset {
 			// went past the target line
-			j = h
-		} else if h < len(f.lines)-1 && f.lines[h+1] <= offset {
+			return -1
+		} else if n < len(f.lines)-1 && f.lines[n+1] <= offset {
 			// not yet at the target line
-			i = h + 1
-		} else {
-			targetLine = h
-			break
+			return 1
 		}
-	}
-	if targetLine < 0 {
+		return 0
+	})
+	if !found {
 		return TokenError
 	}
 	offsetMin := f.lines[targetLine]
@@ -457,10 +452,24 @@ func (f *FileInfo) TokenAtOffset(offset int, includeComments bool) Token {
 	}
 	targetIdx := sort.Search(len(f.items), func(n int) bool {
 		item := f.items[n]
-		return item.offset >= offsetMin && item.offset+item.length > offset
+		return item.offset >= offsetMin &&
+			(item.offset == offset || item.offset+item.length > offset)
 	})
-	if targetIdx < 0 {
+	if targetIdx == len(f.items) {
 		return TokenError
+	}
+
+	// if the target token has a length of 0, check to see if the previous token
+	// would be a better match.
+	if f.items[targetIdx].length == 0 {
+		i := targetIdx - 1
+		for i > 0 && f.items[i].length == 0 {
+			i--
+		}
+		if item := f.items[i]; item.offset+item.length == offset {
+			// only use the previous token if the position is directly after it
+			targetIdx = i
+		}
 	}
 
 	target := Token(targetIdx)
@@ -471,6 +480,7 @@ func (f *FileInfo) TokenAtOffset(offset int, includeComments bool) Token {
 	if f.isComment(Item(targetIdx)) && !includeComments {
 		return TokenError
 	}
+
 	return target
 }
 

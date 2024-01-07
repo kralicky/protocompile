@@ -99,10 +99,9 @@ func (rr *runeReader) getMark() string {
 type insertSemiMode int
 
 const (
-	atNextNewline         = 1
-	immediate             = 2 | atNextNewline
-	onlyIfMissing         = 4
-	always                = 8 | onlyIfMissing
+	atNextNewline = 1
+	immediate     = 2 | atNextNewline
+
 	onlyIfLastTokenOnLine = 16
 )
 
@@ -250,7 +249,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 		}
 
 		if l.insertSemi&immediate == immediate {
-			if (l.insertSemi&always == always) || c != ';' {
+			if c != ';' {
 				l.insertSemi = 0
 				return l.writeVirtualSemi(lval)
 			}
@@ -259,28 +258,37 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 
 		switch c {
 		case '}':
-			l.insertSemi = immediate | onlyIfMissing
+			l.insertSemi = immediate
 		case '>':
-			l.insertSemi = immediate | onlyIfMissing
+			l.insertSemi = immediate
 		case ']':
-			l.insertSemi = immediate | onlyIfMissing
+			l.insertSemi = immediate
 		case '\n':
 			if l.insertSemi&atNextNewline != 0 {
 				prev := l.prevSym
-				prevRuneIsSemi := false
+				canInsert := true
 				switch prev := prev.(type) {
 				case *ast.RuneNode:
-					if prev.Rune == ';' {
-						prevRuneIsSemi = true
-					}
+					canInsert = canDirectlyPrecedeVirtualSemi(prev.Rune)
 				}
-				if (l.insertSemi&always == always) || !prevRuneIsSemi {
+				if canInsert {
 					if l.inCompoundIdent {
-						// complete the compound ident first.
-						// this can happen when a '.' in a partial compound ident is
-						// immediately followed by a newline
-						l.input.unreadRune(sz)
-						return l.endCompoundIdent(lval)
+						l.input.unreadRune(sz) // unread the newline
+
+						if l.inExtensionIdent {
+							// missing ')', as in 'foo.(bar\n'
+							l.endExtensionIdent(lval)
+							// continue here, as to end up in the else block below.
+							// can't return yet because we are still constructing an
+							// extension ident token
+							continue
+						} else {
+							// complete the compound ident first.
+							// this can happen when a '.' in a partial compound ident is
+							// immediately followed by a newline
+
+							return l.endCompoundIdent(lval)
+						}
 					}
 					l.insertSemi = 0
 					return l.writeVirtualSemi(lval)
@@ -314,7 +322,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 				}
 				l.setFloat(lval, f)
 				if _, ok := l.matchNextRune(',', ']'); !ok {
-					l.insertSemi |= atNextNewline | onlyIfMissing | onlyIfLastTokenOnLine
+					l.insertSemi |= atNextNewline | onlyIfLastTokenOnLine
 				}
 				return _FLOAT_LIT
 			}
@@ -425,6 +433,20 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 				}
 			} else {
 				if l.inCompoundIdent {
+					if l.inExtensionIdent {
+						if l.peekNewline() {
+							// missing ')', as in 'foo.(bar\n'
+							l.setIdent(lval, str)
+							lval.cid.idents = append(lval.cid.idents, lval.id)
+							// this case is handled separately above, so we can just continue
+							// and let it encounter the newline as usual
+							continue
+						} else {
+							// an actual syntax error we can't recover from
+							l.setError(lval, fmt.Errorf("unexpected '%s' in extension identifier", string(c)))
+							return _ERROR
+						}
+					}
 					// end of compound ident
 					l.setIdent(lval, str)
 					lval.cid.idents = append(lval.cid.idents, lval.id)
@@ -436,7 +458,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 				switch lval.id.Val {
 				case "package":
 					// package expressions are a bit ambiguous when no semicolon is present
-					l.insertSemi |= atNextNewline | onlyIfMissing | onlyIfLastTokenOnLine
+					l.insertSemi |= atNextNewline | onlyIfLastTokenOnLine
 				}
 			}
 
@@ -472,7 +494,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 				}
 				l.setInt(lval, ui)
 				if _, ok := l.matchNextRune(',', ']'); !ok {
-					l.insertSemi |= atNextNewline | onlyIfMissing | onlyIfLastTokenOnLine
+					l.insertSemi |= atNextNewline | onlyIfLastTokenOnLine
 				}
 				return _INT_LIT
 			}
@@ -485,7 +507,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 				}
 				l.setFloat(lval, f)
 				if _, ok := l.matchNextRune(',', ']'); !ok {
-					l.insertSemi |= atNextNewline | onlyIfMissing | onlyIfLastTokenOnLine
+					l.insertSemi |= atNextNewline | onlyIfLastTokenOnLine
 				}
 				return _FLOAT_LIT
 			}
@@ -513,7 +535,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 				return _ERROR
 			}
 			if _, ok := l.matchNextRune('[', ',', ']'); !ok {
-				l.insertSemi |= atNextNewline | onlyIfMissing | onlyIfLastTokenOnLine
+				l.insertSemi |= atNextNewline | onlyIfLastTokenOnLine
 			}
 			l.setInt(lval, ui)
 			return _INT_LIT
@@ -535,7 +557,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 			}
 			l.inCompoundStringLiteral = false
 			if _, ok := l.matchNextRune(',', ']'); !ok {
-				l.insertSemi |= atNextNewline | onlyIfMissing | onlyIfLastTokenOnLine
+				l.insertSemi |= atNextNewline | onlyIfLastTokenOnLine
 			}
 			return _STRING_LIT
 		}
@@ -571,6 +593,9 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 
 		if l.inCompoundIdent {
 			l.input.unreadRune(sz)
+			if l.inExtensionIdent {
+				l.endExtensionIdent(lval)
+			}
 			return l.endCompoundIdent(lval)
 		}
 
@@ -1119,7 +1144,16 @@ func (l *protoLex) skipToEndOfBlockComment(lval *protoSymType) (ok, hasErr bool)
 	}
 }
 
-func (l *protoLex) skipToNextRune() (nextRune rune, err error) {
+type skipFlags int
+
+const (
+	stopAtNewline skipFlags = 1 << iota
+)
+
+func (l *protoLex) skipToNextRune(flags ...skipFlags) (nextRune rune, err error) {
+	if len(flags) == 0 {
+		flags = append(flags, 0)
+	}
 LOOKAHEAD:
 	for {
 		cn, sz, err := l.input.readRune()
@@ -1143,8 +1177,14 @@ LOOKAHEAD:
 					break LOOKAHEAD
 				}
 			}
-		case '\n', '\r', '\t', '\f', '\v', ' ':
+		case '\r', '\t', '\f', '\v', ' ':
 			// skip whitespace
+			continue
+		case '\n':
+			if flags[0]&stopAtNewline == 0 {
+				continue
+			}
+			fallthrough
 		default:
 			nextRune = cn
 			l.input.unreadRune(sz)
@@ -1183,6 +1223,19 @@ func (l *protoLex) peekWhitespace() bool {
 	default:
 		return false
 	}
+}
+
+// Returns true if a newline is encountered before the next non-whitespace,
+// non-comment rune.
+func (l *protoLex) peekNewline() bool {
+	l.input.save()
+	defer l.input.restore()
+	l.skipToNextRune(stopAtNewline)
+	c, _, err := l.input.readRune()
+	if err != nil {
+		return true // eof is considered a newline here
+	}
+	return c == '\n'
 }
 
 func (l *protoLex) peekNextIdentFast() (ident string, nextRune rune, ok bool) {
@@ -1313,6 +1366,14 @@ func (l *protoLex) canStartField() bool {
 	return false
 }
 
+func canDirectlyPrecedeVirtualSemi(c rune) bool {
+	switch c {
+	case ';', '{', '<':
+		return false
+	}
+	return true
+}
+
 func (l *protoLex) maybeProcessPartialField(ident string) {
 	// Determine if this ident terminates a partial field declaration, then
 	// insert virtual semicolons as appropriate.
@@ -1373,17 +1434,22 @@ func (l *protoLex) maybeProcessPartialField(ident string) {
 	switch len(nextIdents) {
 	case 2:
 		if matchKeyword(nextIdents[0]) || matchKeyword(nextIdents[1]) {
-			l.insertSemi |= atNextNewline | onlyIfMissing
+			l.insertSemi |= atNextNewline
 		}
 	case 1:
 		if nextRune != '{' && matchKeyword(nextIdents[0]) {
-			l.insertSemi |= atNextNewline | onlyIfMissing
+			l.insertSemi |= atNextNewline
 		}
 	case 0:
-		if nextRune == '}' {
+		switch nextRune {
+		case '}':
 			// if next rune is '}', then we're at the end of a message
 			// and can insert a semicolon
-			l.insertSemi |= immediate | onlyIfMissing
+			l.insertSemi |= immediate
+		case '(':
+			if ident == "option" {
+				l.insertSemi |= atNextNewline
+			}
 		}
 		return
 	}
