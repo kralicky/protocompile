@@ -567,6 +567,9 @@ func (r *result) resolveOptionValue(handler *reporter.Handler, mc *internal.Mess
 			mc.OptAggPath = origPath
 		}()
 		for _, fld := range optVal {
+			if fld.IsIncomplete() {
+				continue
+			}
 			// check for extension name
 			if fld.Name.IsExtension() {
 				// Confusingly, an extension reference inside a message literal cannot refer to

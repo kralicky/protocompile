@@ -559,3 +559,32 @@ func NewMessageFieldNode(name *FieldReferenceNode, sep *RuneNode, val ValueNode)
 		Val:  val,
 	}
 }
+
+func NewIncompleteMessageFieldNode(name *FieldReferenceNode, sep *RuneNode, val ValueNode) *MessageFieldNode {
+	var children []Node
+	if name != nil {
+		children = append(children, name)
+	} else {
+		panic("name is nil")
+	}
+	if sep != nil {
+		children = append(children, sep)
+	}
+	if val != nil {
+		children = append(children, val)
+	} else {
+		val = NoSourceNode{}
+	}
+	return &MessageFieldNode{
+		compositeNode: compositeNode{
+			children: children,
+		},
+		Name: name,
+		Sep:  sep,
+		Val:  val,
+	}
+}
+
+func (n *MessageFieldNode) IsIncomplete() bool {
+	return n.Sep == nil || n.Val == NoSourceNode{}
+}

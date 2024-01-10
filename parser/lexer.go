@@ -1451,6 +1451,8 @@ func (l *protoLex) maybeProcessPartialField(ident string) {
 	case 1:
 		if nextRune != '{' && matchKeyword(nextIdents[0]) {
 			l.insertSemi |= atNextNewline
+		} else if nextRune == ':' {
+			l.insertSemi |= atNextNewline | onlyIfLastTokenOnLine
 		}
 	case 0:
 		switch nextRune {

@@ -2187,6 +2187,9 @@ func (interp *interpreter) messageLiteralValue(mc *internal.MessageContext, fiel
 	flds := make([]*interpretedField, 0, len(fieldNodes))
 	var foundAnyNode bool
 	for _, fieldNode := range fieldNodes {
+		if fieldNode.IsIncomplete() {
+			continue
+		}
 		if origPath == "" {
 			mc.OptAggPath = fieldNode.Name.Value()
 		} else {

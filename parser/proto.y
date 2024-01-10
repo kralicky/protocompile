@@ -86,7 +86,7 @@ import (
 %type <ref>          messageLiteralFieldName
 %type <optName>      optionName
 %type <cmpctOpts>    compactOptions
-%type <v>            value optionValue compactOptionValue scalarValue messageLiteralWithBraces messageLiteral numLit listLiteral listElement listOfMessagesLiteral messageValue
+%type <v>            value optionValue compactOptionValue scalarValue messageLiteral numLit listLiteral listElement listOfMessagesLiteral messageValue
 %type <il>           enumValueNumber
 %type <id>           singularIdent identKeywordName mapKeyType fieldCardinality msgElementKeywordName extElementKeywordName oneofElementKeywordName notGroupElementKeywordName mtdElementKeywordName enumValueName enumValueKeywordName
 %type <idv>          anyIdentifier msgElementTypeIdent extElementTypeIdent oneofElementTypeIdent notGroupElementTypeIdent mtdElementTypeIdent
@@ -122,7 +122,7 @@ import (
 %type <mtdElement>   methodElement
 %type <mtdElements>  methodElements methodBody
 %type <mtdMsgType>   methodMessageType
-%type <b>            nonVirtualSemicolonOrInvalidComma optionalTrailingComma nonVirtualSemicolon
+%type <b>            nonVirtualSemicolonOrInvalidComma optionalTrailingComma nonVirtualSemicolon messageLiteralOpen messageLiteralClose
 
 // same for terminals
 %token <sv>      _STRING_LIT
@@ -276,11 +276,11 @@ optionName
 
 optionValue
 	: scalarValue
-	| messageLiteralWithBraces
+	| messageLiteral
 
 compactOptionValue
 	: scalarValue
-	| messageLiteralWithBraces ';' {
+	| messageLiteral ';' {
 		ast.AddVirtualSemicolon($1.(*ast.MessageLiteralNode), $2)
 		$$ = $1
 	}
@@ -327,8 +327,8 @@ numLit
 		}
 	}
 
-messageLiteralWithBraces
-	: '{' messageTextFormat '}' {
+messageLiteral
+	: messageLiteralOpen messageTextFormat messageLiteralClose {
 		if $2 == nil {
 			$$ = ast.NewMessageLiteralNode($1, nil, nil, $3)
 		} else {
@@ -336,7 +336,7 @@ messageLiteralWithBraces
 			$$ = ast.NewMessageLiteralNode($1, fields, delimiters, $3)
 		}
 	}
-	| '{' '}'{
+	| messageLiteralOpen messageLiteralClose {
 		$$ = ast.NewMessageLiteralNode($1, nil, nil, $2)
 	}
 
@@ -401,8 +401,9 @@ messageLiteralField
 			$$ = nil
 		}
 	}
-	| error ':' value {
-		$$ = nil
+	| messageLiteralFieldName ';' {
+		protolex.(*protoLex).ErrExtendedSyntax("expected ':'", CategoryIncompleteDecl)
+		$$ = ast.NewIncompleteMessageFieldNode($1, nil, nil)
 	}
 
 singularIdent
@@ -454,20 +455,6 @@ messageValue
 	| listOfMessagesLiteral ';' {
 		ast.AddVirtualSemicolon($1.(*ast.ArrayLiteralNode), $2)
 		$$ = $1
-	}
-
-messageLiteral
-	: messageLiteralWithBraces
-	| '<' messageTextFormat '>' {
-		if $2 == nil {
-			$$ = ast.NewMessageLiteralNode($1, nil, nil, $3)
-		} else {
-			fields, delimiters := $2.toNodes()
-			$$ = ast.NewMessageLiteralNode($1, fields, delimiters, $3)
-		}
-	}
-	| '<' '>' {
-		$$ = ast.NewMessageLiteralNode($1, nil, nil, $2)
 	}
 
 listLiteral
@@ -1477,8 +1464,6 @@ identKeywordName
 	| _RETURNS
 
 
-// ======== extended syntax rules ========
-
 optionalTrailingComma
 	: ',' {
 		protolex.(*protoLex).ErrExtendedSyntaxAt("unexpected trailing comma", $1, CategoryExtraTokens)
@@ -1505,7 +1490,20 @@ nonVirtualSemicolon
 		$$ = $1
 	}
 
+messageLiteralOpen
+	: '{' {
+		$$ = $1
+	}
+	| '<' {
+		$$ = $1
+	}
 
-// =======================================
+messageLiteralClose
+	: '}' {
+		$$ = $1
+	}
+	| '>' {
+		$$ = $1
+	}
 
 %%
