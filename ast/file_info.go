@@ -459,9 +459,10 @@ func (f *FileInfo) TokenAtOffset(offset int, includeComments bool) Token {
 		return TokenError
 	}
 
-	// if the target token has a length of 0, check to see if the previous token
+	// if the target token has a length of 0, or the next token is 1 or more
+	// characters away from the target offset, check to see if the previous token
 	// would be a better match.
-	if f.items[targetIdx].length == 0 {
+	if f.items[targetIdx].length == 0 || f.items[targetIdx].offset-offset > 0 {
 		i := targetIdx - 1
 		for i > 0 && f.items[i].length == 0 {
 			i--
