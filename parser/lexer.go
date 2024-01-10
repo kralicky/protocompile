@@ -376,9 +376,21 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 					return _ERROR
 				}
 
-				_, nextDot := l.matchNextRune('.')
+				r, nextDot := l.matchNextRune('.', '(')
 				if !nextDot {
 					return l.endCompoundIdent(lval)
+				}
+				if r == '(' {
+					// partial extension followed by another extension, e.g. from typing
+					// '(' to add a new extension to a compact option list (including the
+					// close paren inserted by the ide):
+					//
+					// int32 foo = 1 [
+					//  (<cursor>)
+					//  (a) = 1,
+					//  (b) = 2
+					// ];
+					l.ErrExtendedSyntax("expected '='", CategoryMissingToken)
 				}
 				continue // continue reading compound ident
 			}
