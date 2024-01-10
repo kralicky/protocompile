@@ -170,6 +170,8 @@ type result struct {
 	// referencing the descriptor.
 	resolvedReferences map[protoreflect.Descriptor][]ast.NodeReference
 
+	extensionsByMessage map[protoreflect.FullName][]protoreflect.ExtensionDescriptor
+
 	imports       fileImports
 	messages      msgDescriptors
 	enums         enumDescriptors
@@ -608,6 +610,26 @@ func (r *result) createMessages(prefix string, parent protoreflect.Descriptor, m
 		msgs[i] = r.createMessageDescriptor(msgProto, parent, i, prefix+msgProto.GetName())
 	}
 	return msgDescriptors{msgs: msgs}
+}
+
+func (r *result) populateExtensionRefs() {
+	addExtsByName := func(exts *extDescriptors) {
+		for i, l := 0, exts.Len(); i < l; i++ {
+			x := exts.Get(i)
+			extendee := x.ContainingMessage().FullName()
+			r.extensionsByMessage[extendee] = append(r.extensionsByMessage[extendee], x)
+		}
+	}
+	var addNestedExtsByName func(msgs *msgDescriptors)
+	addNestedExtsByName = func(msgs *msgDescriptors) {
+		for _, m := range msgs.msgs {
+			addExtsByName(&m.nestedExtensions)
+			addNestedExtsByName(&m.nestedMessages)
+		}
+	}
+
+	addExtsByName(&r.extensions)
+	addNestedExtsByName(&r.messages)
 }
 
 func (m *msgDescriptors) Len() int {
@@ -1997,6 +2019,10 @@ func (r *result) FindExtendeeDescriptorByName(fqn protoreflect.FullName) protore
 		}
 	}
 	return nil
+}
+
+func (r *result) FindExtensionsByMessage(fqn protoreflect.FullName) []protoreflect.ExtensionDescriptor {
+	return r.extensionsByMessage[fqn]
 }
 
 func (r *result) hasSource() bool {

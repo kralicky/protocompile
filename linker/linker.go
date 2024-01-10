@@ -116,6 +116,7 @@ dependencies_ok:
 		prefix:               prefix,
 		optionQualifiedNames: map[ast.IdentValueNode]string{},
 		resolvedReferences:   map[protoreflect.Descriptor][]ast.NodeReference{},
+		extensionsByMessage:  map[protoreflect.FullName][]protoreflect.ExtensionDescriptor{},
 	}
 
 	// First, we put all symbols into a single pool, which lets us ensure there
@@ -191,6 +192,7 @@ type Result interface {
 	RangeFieldReferenceNodesWithDescriptors(func(node ast.Node, desc protoreflect.FieldDescriptor) bool)
 	FindMessageDescriptorByTypeReferenceURLNode(node *ast.FieldReferenceNode) protoreflect.MessageDescriptor
 	FindExtendeeDescriptorByName(fqn protoreflect.FullName) protoreflect.MessageDescriptor
+	FindExtensionsByMessage(fqn protoreflect.FullName) []protoreflect.ExtensionDescriptor
 
 	// CanonicalProto returns the file descriptor proto in a form that
 	// will be serialized in a canonical way. The "canonical" way matches

@@ -184,6 +184,8 @@ func (r *result) resolveReferences(handler *reporter.Handler, s *Symbols) error 
 		}
 	}
 
+	defer r.populateExtensionRefs()
+
 	file := r.FileNode()
 
 	return walk.DescriptorsEnterAndExit(r,
