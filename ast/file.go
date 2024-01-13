@@ -347,9 +347,9 @@ type PackageNode struct {
 
 func (*PackageNode) fileElement() {}
 
-func (m *PackageNode) AddSemicolon(semi *RuneNode) {
-	m.Semicolon = semi
-	m.children = append(m.children, semi)
+func (p *PackageNode) AddSemicolon(semi *RuneNode) {
+	p.Semicolon = semi
+	p.children = append(p.children, semi)
 }
 
 // NewPackageNode creates a new *PackageNode. All three arguments must be non-nil:
@@ -371,4 +371,21 @@ func NewPackageNode(keyword *KeywordNode, name IdentValueNode) *PackageNode {
 		Keyword: keyword,
 		Name:    name,
 	}
+}
+
+func NewIncompletePackageNode(keyword *KeywordNode) *PackageNode {
+	if keyword == nil {
+		panic("keyword is nil")
+	}
+	children := []Node{keyword}
+	return &PackageNode{
+		compositeNode: compositeNode{
+			children: children,
+		},
+		Keyword: keyword,
+	}
+}
+
+func (p *PackageNode) IsIncomplete() bool {
+	return p.Name == nil
 }

@@ -252,6 +252,11 @@ packageDecl
 	: _PACKAGE anyIdentifier {
 		$$ = ast.NewPackageNode($1.ToKeyword(), $2)
 	}
+	| _PACKAGE {
+		protolex.(*protoLex).ErrExtendedSyntax("expected package name", CategoryIncompleteDecl)
+		$$ = ast.NewIncompletePackageNode($1.ToKeyword())
+
+	}
 
 optionDecl
 	: _OPTION optionName '=' optionValue {

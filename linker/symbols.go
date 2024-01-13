@@ -820,7 +820,7 @@ func (s *packageSymbols) checkResultLocked(r *result, handler *reporter.Handler)
 func packageNameSpan(r *result) ast.SourceSpan {
 	if node, ok := r.FileNode().(*ast.FileNode); ok {
 		for _, decl := range node.Decls {
-			if pkgNode, ok := decl.(*ast.PackageNode); ok {
+			if pkgNode, ok := decl.(*ast.PackageNode); ok && !pkgNode.IsIncomplete() {
 				return r.FileNode().NodeInfo(pkgNode.Name)
 			}
 		}

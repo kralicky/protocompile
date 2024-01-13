@@ -163,7 +163,7 @@ func descriptorTypeWithArticle(d protoreflect.Descriptor) string {
 	}
 }
 
-func (r *result) resolveReferences(handler *reporter.Handler, s *Symbols) error {
+func (r *result) resolveReferences(handler *reporter.Handler, s *Symbols) (err error) {
 	// first create the full descriptor hierarchy
 	fd := r.FileDescriptorProto()
 	prefix := ""
@@ -184,7 +184,11 @@ func (r *result) resolveReferences(handler *reporter.Handler, s *Symbols) error 
 		}
 	}
 
-	defer r.populateExtensionRefs()
+	defer func() {
+		if err == nil {
+			r.populateExtensionRefs()
+		}
+	}()
 
 	file := r.FileNode()
 

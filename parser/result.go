@@ -238,6 +238,9 @@ func (r *result) createFileDescriptor(filename string, file *ast.FileNode, handl
 		case *ast.ServiceNode:
 			fd.Service = append(fd.Service, r.asServiceDescriptor(decl))
 		case *ast.PackageNode:
+			if decl.IsIncomplete() {
+				continue
+			}
 			if fd.Package != nil {
 				nodeInfo := file.NodeInfo(decl)
 				if handler.HandleErrorf(nodeInfo, "files should have only one package declaration") != nil {

@@ -15,7 +15,6 @@
 package linker
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -213,7 +212,7 @@ func parseAndLink(t *testing.T, contents string) Result {
 func TestDelete(t *testing.T) {
 	// define the content for each of the test protobuf files
 	files := []string{
-		`
+		0: `
 		syntax = "proto3";
 		package test1;
 		message Test1 {
@@ -222,7 +221,7 @@ func TestDelete(t *testing.T) {
 			repeated string field3 = 3;
 		}
 		`,
-		`
+		1: `
 		syntax = "proto3";
 		package test2.subtest;
 		import "test1.proto";
@@ -233,7 +232,7 @@ func TestDelete(t *testing.T) {
 			repeated string field3 = 3;
 		}
 		`,
-		`
+		2: `
 		syntax = "proto3";
 		package test3.subtest.part3;
 		import "test2.proto";
@@ -248,7 +247,7 @@ func TestDelete(t *testing.T) {
 			optional string example = 10001;
 		}
 		`,
-		`
+		3: `
 		syntax = "proto3";
 		package test4.part4;
 		import "test3.proto";
@@ -258,7 +257,7 @@ func TestDelete(t *testing.T) {
 			repeated string field3 = 3;
 		}
 		`,
-		`
+		4: `
 		syntax = "proto3";
 		package test5.sub5;
 		import "test4.proto";
@@ -268,7 +267,7 @@ func TestDelete(t *testing.T) {
 			repeated string field3 = 3;
 		}
 		`,
-		`
+		5: `
 	syntax = "proto2";
 
 	package foo.bar;
@@ -572,34 +571,38 @@ func TestDelete(t *testing.T) {
 	}
 	h := reporter.NewHandler(nil)
 
+	tempSymtab := NewSymbolTable()
+	dep, err := protoregistry.GlobalFiles.FindFileByPath("google/protobuf/descriptor.proto")
+	require.NoError(t, err)
+	tempSymtab.Import(dep, h)
+
 	parseAndLinkNamed := func(name, contents string, prevDeps ...File) Result {
 		t.Helper()
 		fileAst, err := parser.Parse(name, strings.NewReader(contents), h)
 		require.NoError(t, err)
 		parseResult, err := parser.ResultFromAST(fileAst, true, h)
 		require.NoError(t, err)
-		dep, err := protoregistry.GlobalFiles.FindFileByPath("google/protobuf/descriptor.proto")
-		require.NoError(t, err)
-		depAsFile, err := NewFile(dep, nil)
+		depAsFile, err := NewFile(dep, prevDeps)
 		require.NoError(t, err)
 		depFiles := Files{depAsFile}
 		depFiles = append(depFiles, prevDeps...)
-		linkResult, err := Link(parseResult, depFiles, nil, h)
+		linkResult, err := Link(parseResult, depFiles, tempSymtab, h)
 		require.NoError(t, err)
 		return linkResult
 	}
 
-	fds := make(map[string]protoreflect.FileDescriptor, len(files))
-	filenames := make([]string, 0, len(files))
+	fds := make(map[string]File, len(files))
+	desc, _ := NewFile(dep, nil)
+	fds["google/protobuf/descriptor.proto"] = desc
 
-	linkedFiles := make([]File, 0, len(files))
-	for i, content := range files {
-		name := fmt.Sprintf("test%d.proto", i+1)
-		res := parseAndLinkNamed(name, content, linkedFiles...)
-		linkedFiles = append(linkedFiles, res)
-		fds[name] = res
-		filenames = append(filenames, name)
-	}
+	fds["test1.proto"] = parseAndLinkNamed("test1.proto", files[0])
+	fds["test2.proto"] = parseAndLinkNamed("test2.proto", files[1], fds["test1.proto"], fds["google/protobuf/descriptor.proto"])
+	fds["test3.proto"] = parseAndLinkNamed("test3.proto", files[2], fds["test2.proto"], fds["google/protobuf/descriptor.proto"])
+	fds["test4.proto"] = parseAndLinkNamed("test4.proto", files[3], fds["test3.proto"])
+	fds["test5.proto"] = parseAndLinkNamed("test5.proto", files[4], fds["test4.proto"])
+	fds["test6.proto"] = parseAndLinkNamed("test6.proto", files[5], fds["google/protobuf/descriptor.proto"])
+
+	filenames := []string{"test1.proto", "test2.proto", "test3.proto", "test4.proto", "test5.proto", "test6.proto"}
 
 	symtab := NewSymbolTable()
 

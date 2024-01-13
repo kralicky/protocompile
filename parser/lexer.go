@@ -466,14 +466,6 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 				}
 			}
 
-			if lval.id != nil {
-				switch lval.id.Val {
-				case "package":
-					// package expressions are a bit ambiguous when no semicolon is present
-					l.insertSemi |= atNextNewline | onlyIfLastTokenOnLine
-				}
-			}
-
 			if keyword, ok := keywords[str]; ok {
 				switch keyword {
 				case _RPC:
@@ -481,6 +473,11 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 						if next, nextRune := l.peekNextIdentsFast(2); len(next) == 1 && !strings.Contains(next[0], ".") && nextRune == '(' {
 							l.inMethodDecl = true
 						}
+					}
+				case _PACKAGE:
+					// package expressions are a bit ambiguous when no semicolon is present
+					if l.canStartFileElement() && l.peekWhitespace() {
+						l.insertSemi |= atNextNewline
 					}
 				case _RETURNS:
 					l.inMethodDecl = false
@@ -1373,6 +1370,19 @@ func (l *protoLex) canStartField() bool {
 			if prev.Rune == '{' || prev.Rune == ';' {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func (l *protoLex) canStartFileElement() bool {
+	if l.prevSym == nil {
+		return true
+	}
+	switch prev := l.prevSym.(type) {
+	case *ast.RuneNode:
+		if prev.Rune == ';' {
+			return true
 		}
 	}
 	return false
