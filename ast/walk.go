@@ -232,6 +232,8 @@ func Visit(n Node, v Visitor) error {
 		return v.VisitRuneNode(n)
 	case *EmptyDeclNode:
 		return v.VisitEmptyDeclNode(n)
+	case *ErrorNode:
+		return v.VisitErrorNode(n)
 	default:
 		panic(fmt.Sprintf("unexpected type of node: %T", n))
 	}
@@ -393,6 +395,8 @@ type Visitor interface {
 	VisitRuneNode(*RuneNode) error
 	// VisitEmptyDeclNode is invoked when visiting a *EmptyDeclNode in the AST.
 	VisitEmptyDeclNode(*EmptyDeclNode) error
+	// VisitErrorNode is invoked when visiting an *ErrorNode in the AST.
+	VisitErrorNode(*ErrorNode) error
 }
 
 // NoOpVisitor is a visitor implementation that does nothing. All methods
@@ -567,6 +571,10 @@ func (n NoOpVisitor) VisitEmptyDeclNode(_ *EmptyDeclNode) error {
 	return nil
 }
 
+func (n NoOpVisitor) VisitErrorNode(_ *ErrorNode) error {
+	return nil
+}
+
 // SimpleVisitor is a visitor implementation that uses numerous function fields.
 // If a relevant function field is not nil, then it will be invoked when a node
 // is visited.
@@ -635,6 +643,7 @@ type SimpleVisitor struct {
 	DoVisitKeywordNode               func(*KeywordNode) error
 	DoVisitRuneNode                  func(*RuneNode) error
 	DoVisitEmptyDeclNode             func(*EmptyDeclNode) error
+	DoVisitErrorNode                 func(*ErrorNode) error
 
 	DoVisitFieldDeclNode   func(FieldDeclNode) error
 	DoVisitMessageDeclNode func(MessageDeclNode) error
@@ -995,6 +1004,13 @@ func (v *SimpleVisitor) VisitRuneNode(node *RuneNode) error {
 func (v *SimpleVisitor) VisitEmptyDeclNode(node *EmptyDeclNode) error {
 	if v.DoVisitEmptyDeclNode != nil {
 		return v.DoVisitEmptyDeclNode(node)
+	}
+	return v.visitInterface(node)
+}
+
+func (v *SimpleVisitor) VisitErrorNode(node *ErrorNode) error {
+	if v.DoVisitErrorNode != nil {
+		return v.DoVisitErrorNode(node)
 	}
 	return v.visitInterface(node)
 }

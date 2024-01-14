@@ -102,6 +102,7 @@ const (
 	atNextNewline = 1
 	immediate     = 2 | atNextNewline
 
+	atEOF                 = 8
 	onlyIfLastTokenOnLine = 16
 )
 
@@ -225,6 +226,14 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 		l.prevOffset = l.input.offset()
 		c, sz, err := l.input.readRune()
 		if err == io.EOF {
+			if l.inCompoundIdent {
+				l.input.unreadRune(sz)
+				if l.inExtensionIdent {
+					l.endExtensionIdent(lval)
+				}
+				return l.endCompoundIdent(lval)
+			}
+
 			// insert a semicolon if the last token was the '}' rune (i.e. end of message)
 			if l.insertSemi != 0 {
 				l.insertSemi = 0
@@ -309,8 +318,14 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 			// decimal literals could start with a dot
 			cn, szn, err := l.input.readRune()
 			if err != nil {
-				l.setRune(lval, c)
-				return int(c)
+				// only recoverable situation here is if this is part of a compound
+				// identifier, for example 'option (foo).<EOF>'
+				l.input.unreadRune(szn)
+				if l.inCompoundIdent {
+					l.setRune(lval, c)
+					lval.cid.dots = append(lval.cid.dots, lval.b)
+				}
+				continue
 			}
 			if cn >= '0' && cn <= '9' {
 				l.readNumber()
@@ -478,6 +493,10 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 					// package expressions are a bit ambiguous when no semicolon is present
 					if l.canStartFileElement() && l.peekWhitespace() {
 						l.insertSemi |= atNextNewline
+					}
+				case _OPTION:
+					if l.canStartFileElement() {
+						l.insertSemi |= atEOF
 					}
 				case _RETURNS:
 					l.inMethodDecl = false
@@ -1159,7 +1178,7 @@ const (
 	stopAtNewline skipFlags = 1 << iota
 )
 
-func (l *protoLex) skipToNextRune(flags ...skipFlags) (nextRune rune, err error) {
+func (l *protoLex) skipToNextRune(flags ...skipFlags) (nextRune rune) {
 	if len(flags) == 0 {
 		flags = append(flags, 0)
 	}
@@ -1167,7 +1186,9 @@ LOOKAHEAD:
 	for {
 		cn, sz, err := l.input.readRune()
 		if err != nil {
-			return 0, err
+			nextRune = 0
+			l.input.unreadRune(sz)
+			break LOOKAHEAD
 		}
 		switch cn {
 		case '/':
@@ -1261,17 +1282,10 @@ func (l *protoLex) peekNextIdentsFast(n int) (idents []string, nextRune rune) {
 	l.input.save()
 	defer l.input.restore()
 	for i := 0; i < n; i++ {
-		nr, err := l.skipToNextRune()
-		if err != nil {
-			return
-		}
-		nextRune = nr
+		nextRune = l.skipToNextRune()
 		mark := l.input.offset()
 		for {
-			c, sz, err := l.input.readRune()
-			if err != nil {
-				break
-			}
+			c, sz, _ := l.input.readRune()
 			var ok bool
 			switch c {
 			case '\n', '\r', '\t', '\f', '\v', ' ':

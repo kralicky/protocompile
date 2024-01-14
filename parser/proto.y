@@ -223,6 +223,10 @@ fileElement
 		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
 	}
+	| _SINGULAR_IDENT {
+		protolex.(*protoLex).ErrExtendedSyntaxAt("unexpected identifier", $1, CategoryIncompleteDecl)
+		$$ = ast.NewErrorNode($1)
+	}
 	| error {
 		$$ = nil
 	}

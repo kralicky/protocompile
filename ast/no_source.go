@@ -59,11 +59,11 @@ func (n NoSourceNode) Name() string {
 }
 
 func (n NoSourceNode) Start() Token {
-	return 0
+	return -1
 }
 
 func (n NoSourceNode) End() Token {
-	return 0
+	return -1
 }
 
 func (n NoSourceNode) NodeInfo(Node) NodeInfo {

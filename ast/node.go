@@ -151,3 +151,17 @@ func (e *EmptyDeclNode) oneofElement()   {}
 func (e *EmptyDeclNode) enumElement()    {}
 func (e *EmptyDeclNode) serviceElement() {}
 func (e *EmptyDeclNode) methodElement()  {}
+
+type ErrorNode struct {
+	compositeNode
+}
+
+func NewErrorNode(nodes ...Node) *ErrorNode {
+	return &ErrorNode{
+		compositeNode: compositeNode{
+			children: nodes,
+		},
+	}
+}
+
+func (e *ErrorNode) fileElement() {}

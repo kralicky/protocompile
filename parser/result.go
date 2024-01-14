@@ -229,7 +229,9 @@ func (r *result) createFileDescriptor(filename string, file *ast.FileNode, handl
 			fd.MessageType = append(fd.MessageType, r.asMessageDescriptor(decl, syntax, handler, 1))
 		case *ast.OptionNode:
 			if decl.IsIncomplete() {
-				continue
+				if decl.Name == nil || !ast.ExtendedSyntaxEnabled {
+					continue
+				}
 			}
 			if fd.Options == nil {
 				fd.Options = &descriptorpb.FileOptions{}
@@ -282,6 +284,10 @@ func (r *result) asUninterpretedOptions(nodes []*ast.OptionNode) []*descriptorpb
 func (r *result) asUninterpretedOption(node *ast.OptionNode) *descriptorpb.UninterpretedOption {
 	opt := &descriptorpb.UninterpretedOption{Name: r.asUninterpretedOptionName(node.Name.Parts)}
 	r.putOptionNode(opt, node)
+
+	if node.Val == nil && ast.ExtendedSyntaxEnabled {
+		return opt
+	}
 
 	switch val := node.Val.Value().(type) {
 	case bool:
@@ -336,14 +342,17 @@ func flattenNode(f *ast.FileNode, n ast.Node, buf *bytes.Buffer) {
 }
 
 func (r *result) asUninterpretedOptionName(parts []*ast.FieldReferenceNode) []*descriptorpb.UninterpretedOption_NamePart {
-	ret := make([]*descriptorpb.UninterpretedOption_NamePart, len(parts))
-	for i, part := range parts {
+	ret := make([]*descriptorpb.UninterpretedOption_NamePart, 0, len(parts))
+	for _, part := range parts {
+		if part.IsIncomplete() {
+			continue
+		}
 		np := &descriptorpb.UninterpretedOption_NamePart{
 			NamePart:    proto.String(string(part.Name.AsIdentifier())),
 			IsExtension: proto.Bool(part.IsExtension()),
 		}
 		r.putOptionNamePartNode(np, part)
-		ret[i] = np
+		ret = append(ret, np)
 	}
 	return ret
 }

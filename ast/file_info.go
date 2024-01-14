@@ -221,7 +221,11 @@ func (f *FileInfo) TokenInfo(t Token) NodeInfo {
 
 func (f *FileInfo) nodeInfo(start, end int) NodeInfo {
 	if start < 0 || start >= len(f.items) {
-		return NodeInfo{fileInfo: f}
+		return NodeInfo{
+			fileInfo:   f,
+			startIndex: -1,
+			endIndex:   -1,
+		}
 	}
 	if end < 0 || end >= len(f.items) {
 		return NodeInfo{fileInfo: f}
@@ -424,7 +428,7 @@ func (f *FileInfo) SourcePos(offset int) SourcePos {
 }
 
 func (f *FileInfo) TokenAtOffset(offset int, includeComments bool) Token {
-	if offset < 0 || offset > len(f.data) {
+	if offset < 0 || offset > len(f.data) || len(f.items) == 0 {
 		return TokenError
 	}
 
@@ -448,7 +452,7 @@ func (f *FileInfo) TokenAtOffset(offset int, includeComments bool) Token {
 	offsetMin := f.lines[targetLine]
 	offsetMax := len(f.data)
 	if targetLine < len(f.lines)-1 {
-		offsetMax = f.lines[targetLine+1]
+		offsetMax = f.lines[targetLine+1] - 1
 	}
 	targetIdx := sort.Search(len(f.items), func(n int) bool {
 		item := f.items[n]
@@ -456,7 +460,12 @@ func (f *FileInfo) TokenAtOffset(offset int, includeComments bool) Token {
 			(item.offset == offset || item.offset+item.length > offset)
 	})
 	if targetIdx == len(f.items) {
-		return TokenError
+		// if the cursor is at EOF, then the last token is the target
+		if offset == len(f.data) {
+			targetIdx--
+		} else {
+			return TokenError
+		}
 	}
 
 	// if the target token has a length of 0, or the next token is 1 or more
@@ -467,6 +476,9 @@ func (f *FileInfo) TokenAtOffset(offset int, includeComments bool) Token {
 		for i > 0 && f.items[i].length == 0 {
 			i--
 		}
+		if i < 0 {
+			return TokenError
+		}
 		if item := f.items[i]; item.offset+item.length == offset {
 			// only use the previous token if the position is directly after it
 			targetIdx = i
@@ -474,7 +486,7 @@ func (f *FileInfo) TokenAtOffset(offset int, includeComments bool) Token {
 	}
 
 	target := Token(targetIdx)
-	if f.items[target].offset >= offsetMax {
+	if f.items[target].offset > offsetMax {
 		// no tokens on the target line
 		return TokenError
 	}
@@ -557,16 +569,18 @@ var _ ItemInfo = NodeInfo{}
 // IsValid returns true if this node info is valid. If n is a zero-value struct,
 // it is not valid.
 func (n NodeInfo) IsValid() bool {
-	return n.fileInfo != nil
+	return n.fileInfo != nil && n.startIndex >= 0 && n.endIndex >= 0
 }
 
 // Start returns the starting position of the element. This is the first
 // character of the node or token.
 func (n NodeInfo) Start() SourcePos {
-	if n.fileInfo.isDummyFile() {
+	if n.fileInfo == nil {
+		return SourcePos{}
+	}
+	if n.fileInfo.isDummyFile() || !n.IsValid() {
 		return UnknownPos(n.fileInfo.name)
 	}
-
 	tok := n.fileInfo.items[n.startIndex]
 	return n.fileInfo.SourcePos(tok.offset)
 }
@@ -577,7 +591,10 @@ func (n NodeInfo) Start() SourcePos {
 // length of zero (which should only happen for the special EOF token
 // that designates the end of the file).
 func (n NodeInfo) End() SourcePos {
-	if n.fileInfo.isDummyFile() {
+	if n.fileInfo == nil {
+		return SourcePos{}
+	}
+	if n.fileInfo.isDummyFile() || !n.IsValid() {
 		return UnknownPos(n.fileInfo.name)
 	}
 
