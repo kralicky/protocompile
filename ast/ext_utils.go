@@ -23,9 +23,6 @@ type virtualSemiContainerNode interface {
 }
 
 func AddVirtualSemicolon[T virtualSemiContainerNode](node T, semi *RuneNode) {
-	if !semi.Virtual {
-		panic("expected virtual semicolon node")
-	}
 	switch node := Node(node).(type) {
 	case *EnumNode:
 		node.children = append(node.children, semi)

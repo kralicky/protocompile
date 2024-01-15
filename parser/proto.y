@@ -122,7 +122,7 @@ import (
 %type <mtdElement>   methodElement
 %type <mtdElements>  methodElements methodBody
 %type <mtdMsgType>   methodMessageType
-%type <b>            nonVirtualSemicolonOrInvalidComma optionalTrailingComma nonVirtualSemicolon messageLiteralOpen messageLiteralClose
+%type <b>            nonVirtualSemicolonOrInvalidComma optionalTrailingComma nonVirtualSemicolon virtualSemicolon messageLiteralOpen messageLiteralClose
 
 // same for terminals
 %token <sv>      _STRING_LIT
@@ -207,19 +207,19 @@ fileElement
 		$1.AddSemicolon($2)
 		$$ = $1
 	}
-	| messageDecl ';' {
+	| messageDecl virtualSemicolon {
 		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
 	}
-	| enumDecl ';' {
+	| enumDecl virtualSemicolon{
 		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
 	}
-	| extensionDecl ';' {
+	| extensionDecl virtualSemicolon {
 		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
 	}
-	| serviceDecl ';' {
+	| serviceDecl virtualSemicolon {
 		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
 	}
@@ -289,7 +289,7 @@ optionValue
 
 compactOptionValue
 	: scalarValue
-	| messageLiteral ';' {
+	| messageLiteral virtualSemicolon {
 		ast.AddVirtualSemicolon($1.(*ast.MessageLiteralNode), $2)
 		$$ = $1
 	}
@@ -447,21 +447,21 @@ messageLiteralFieldName
 
 value
 	: scalarValue
-	| messageLiteral ';' {
+	| messageLiteral virtualSemicolon {
 		ast.AddVirtualSemicolon($1.(*ast.MessageLiteralNode), $2)
 		$$ = $1
 	}
-	| listLiteral ';' {
+	| listLiteral virtualSemicolon {
 		ast.AddVirtualSemicolon($1.(*ast.ArrayLiteralNode), $2)
 		$$ = $1
 	}
 
 messageValue
-	: messageLiteral ';' {
+	: messageLiteral virtualSemicolon {
 		ast.AddVirtualSemicolon($1.(*ast.MessageLiteralNode), $2)
 		$$ = $1
 	}
-	| listOfMessagesLiteral ';' {
+	| listOfMessagesLiteral virtualSemicolon {
 		ast.AddVirtualSemicolon($1.(*ast.ArrayLiteralNode), $2)
 		$$ = $1
 	}
@@ -506,7 +506,7 @@ listElements
 
 listElement
 	: scalarValue
-	| messageLiteral ';' {
+	| messageLiteral virtualSemicolon {
 		ast.AddVirtualSemicolon($1.(*ast.MessageLiteralNode), $2)
 		$$ = $1
 	}
@@ -540,11 +540,11 @@ listOfMessagesLiteral
 	}
 
 messageLiterals
-	: messageLiteral ';' {
+	: messageLiteral virtualSemicolon {
 		ast.AddVirtualSemicolon($1.(*ast.MessageLiteralNode), $2)
 		$$ = &valueSlices{vals: []ast.ValueNode{$1}}
 	}
-	| messageLiterals ',' messageLiteral ';' {
+	| messageLiterals ',' messageLiteral virtualSemicolon {
 		ast.AddVirtualSemicolon($3.(*ast.MessageLiteralNode), $4)
 		$1.vals = append($1.vals, $3)
 		$1.commas = append($1.commas, $2)
@@ -693,7 +693,7 @@ oneofElement
 		$1.AddSemicolon($2)
 		$$ = $1
 	}
-	| oneofGroupDecl ';' {
+	| oneofGroupDecl virtualSemicolon {
 		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
 	}
@@ -726,7 +726,7 @@ mapFieldDecl
 	}
 
 mapType
-	: _MAP '<' mapKeyType ',' anyIdentifier '>' ';' {
+	: _MAP '<' mapKeyType ',' anyIdentifier '>' virtualSemicolon {
 		$$ = ast.NewMapTypeNode($1.ToKeyword(), $2, $3, $4, $5, $6)
 		ast.AddVirtualSemicolon($$, $7)
 	}
@@ -942,15 +942,15 @@ messageElement
 		$1.AddSemicolon($2)
 		$$ = $1
 	}
-	| enumDecl ';' {
+	| enumDecl virtualSemicolon {
 		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
 	}
-	| messageDecl ';' {
+	| messageDecl virtualSemicolon {
 		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
 	}
-	| extensionDecl ';' {
+	| extensionDecl virtualSemicolon {
 		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
 	}
@@ -958,7 +958,7 @@ messageElement
 		$1.AddSemicolon($2)
 		$$ = $1
 	}
-	| groupDecl ';' {
+	| groupDecl virtualSemicolon {
 		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
 	}
@@ -966,7 +966,7 @@ messageElement
 		$1.AddSemicolon($2)
 		$$ = $1
 	}
-	| oneofDecl ';' {
+	| oneofDecl virtualSemicolon {
 		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
 	}
@@ -1056,7 +1056,7 @@ extensionElement
 		$1.AddSemicolon($2)
 		$$ = $1
 	}
-	| groupDecl ';' {
+	| groupDecl virtualSemicolon {
 		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
 	}
@@ -1495,6 +1495,14 @@ nonVirtualSemicolon
 	: ';' {
 		if $1.Virtual {
 			protolex.(*protoLex).ErrExtendedSyntaxAt("expected ';'", $1, CategoryMissingToken)
+		}
+		$$ = $1
+	}
+
+virtualSemicolon
+	: ';' {
+		if !$1.Virtual {
+			protolex.(*protoLex).ErrExtendedSyntaxAt("unexpected ';'", $1, CategoryExtraTokens)
 		}
 		$$ = $1
 	}
