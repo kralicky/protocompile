@@ -15,6 +15,7 @@
 package parser
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 
@@ -319,9 +320,13 @@ func validateEnum(res *result, syntax syntaxType, name protoreflect.FullName, ed
 
 	if len(ed.Value) == 0 {
 		enNode := res.EnumNode(ed)
-		enNodeInfo := res.file.NodeInfo(enNode)
-		if err := handler.HandleErrorf(enNodeInfo, "%s: enums must define at least one value", scope); err != nil {
-			return err
+		enNodeInfo := res.file.NodeInfo(enNode.GetName())
+
+		if ast.ExtendedSyntaxEnabled {
+			handler.HandleWarningWithPos(enNodeInfo,
+				NewExtendedSyntaxError(errors.New("enums must define at least one value"), CategoryEmptyDecl))
+		} else {
+			_ = handler.HandleErrorf(enNodeInfo, "enums must define at least one value")
 		}
 	}
 

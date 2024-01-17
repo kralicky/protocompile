@@ -239,6 +239,12 @@ func Visit(n Node, v Visitor) error {
 	}
 }
 
+func AncestorTrackerFromPath(path []Node) *AncestorTracker {
+	return &AncestorTracker{
+		ancestors: path,
+	}
+}
+
 // AncestorTracker is used to track the path of nodes during a walk operation.
 // By passing AsWalkOptions to a call to Walk, a visitor can inspect the path to
 // the node being visited using this tracker.

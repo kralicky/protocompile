@@ -894,6 +894,9 @@ func (interp *interpreter) interpretOptions(
 	results := make([]*interpretedOption, 0, len(uninterpreted))
 	var featuresInfo []*interpretedOption
 	for _, uo := range uninterpreted {
+		if len(uo.Name) == 0 {
+			continue
+		}
 		node := interp.file.OptionNode(uo)
 		if !uo.Name[0].GetIsExtension() && uo.Name[0].GetNamePart() == "uninterpreted_option" {
 			if interp.lenient {

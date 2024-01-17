@@ -37,6 +37,9 @@ func FindOption(res hasOptionNode, handler *reporter.Handler, scope string, opts
 func findOption(res hasOptionNode, handler *reporter.Handler, scope string, opts []*descriptorpb.UninterpretedOption, name string, exact, first bool) (int, error) {
 	found := -1
 	for i, opt := range opts {
+		if len(opt.Name) == 0 {
+			continue
+		}
 		if exact && len(opt.Name) != 1 {
 			continue
 		}

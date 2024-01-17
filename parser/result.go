@@ -572,7 +572,9 @@ func (r *result) asMethodDescriptor(node *ast.RPCNode) *descriptorpb.MethodDescr
 		for _, decl := range node.Decls {
 			if option, ok := decl.(*ast.OptionNode); ok {
 				if option.IsIncomplete() {
-					continue
+					if option.Name == nil || !ast.ExtendedSyntaxEnabled {
+						continue
+					}
 				}
 				md.Options.UninterpretedOption = append(md.Options.UninterpretedOption, r.asUninterpretedOption(option))
 			}
@@ -589,7 +591,9 @@ func (r *result) asEnumDescriptor(en *ast.EnumNode, syntax syntaxType, handler *
 		switch decl := decl.(type) {
 		case *ast.OptionNode:
 			if decl.IsIncomplete() {
-				continue
+				if decl.Name == nil || !ast.ExtendedSyntaxEnabled {
+					continue
+				}
 			}
 			if ed.Options == nil {
 				ed.Options = &descriptorpb.EnumOptions{}
@@ -680,7 +684,9 @@ func (r *result) addMessageBody(msgd *descriptorpb.DescriptorProto, body *ast.Me
 	for _, decl := range body.Decls {
 		if opt, ok := decl.(*ast.OptionNode); ok {
 			if opt.IsIncomplete() {
-				continue
+				if opt.Name == nil || !ast.ExtendedSyntaxEnabled {
+					continue
+				}
 			}
 			if msgd.Options == nil {
 				msgd.Options = &descriptorpb.MessageOptions{}
@@ -739,7 +745,9 @@ func (r *result) addMessageBody(msgd *descriptorpb.DescriptorProto, body *ast.Me
 				switch oodecl := oodecl.(type) {
 				case *ast.OptionNode:
 					if oodecl.IsIncomplete() {
-						continue
+						if oodecl.Name == nil || !ast.ExtendedSyntaxEnabled {
+							continue
+						}
 					}
 					if ood.Options == nil {
 						ood.Options = &descriptorpb.OneofOptions{}
@@ -862,7 +870,9 @@ func (r *result) asServiceDescriptor(svc *ast.ServiceNode) *descriptorpb.Service
 		switch decl := decl.(type) {
 		case *ast.OptionNode:
 			if decl.IsIncomplete() {
-				continue
+				if decl.Name == nil || !ast.ExtendedSyntaxEnabled {
+					continue
+				}
 			}
 			if sd.Options == nil {
 				sd.Options = &descriptorpb.ServiceOptions{}

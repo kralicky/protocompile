@@ -68,6 +68,7 @@ type ExtendedSyntaxError interface {
 	error
 
 	Category() string
+	CanFormat() bool
 
 	isExtendedSyntaxError()
 }
@@ -89,4 +90,14 @@ func (e *extendedSyntaxError) Unwrap() error {
 
 func (e *extendedSyntaxError) Category() string {
 	return e.category
+}
+
+func (e *extendedSyntaxError) CanFormat() bool {
+	switch e.category {
+	case CategoryEmptyDecl, CategoryIncorrectToken, CategoryMissingToken, CategoryExtraTokens:
+		return true
+	case CategoryIncompleteDecl:
+		return false
+	}
+	panic("bug: CanFormat called with unknown category " + e.category)
 }

@@ -82,10 +82,16 @@ func (n *compositeNode) Children() []Node {
 }
 
 func (n *compositeNode) Start() Token {
+	if len(n.children) == 0 {
+		return TokenError
+	}
 	return n.children[0].Start()
 }
 
 func (n *compositeNode) End() Token {
+	if len(n.children) == 0 {
+		return TokenError
+	}
 	return n.children[len(n.children)-1].End()
 }
 
