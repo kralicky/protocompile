@@ -145,6 +145,7 @@ const (
 
 type CompileResult struct {
 	linker.Files
+	PartialLinkResults    map[ResolvedPath]linker.Result
 	UnlinkedParserResults map[ResolvedPath]parser.Result
 }
 
@@ -228,6 +229,7 @@ func (c *Compiler) Compile(ctx context.Context, paths ...ResolvedPath) (CompileR
 
 	descs := make(linker.Files, 0, len(results))
 	unlinked := make(map[ResolvedPath]parser.Result)
+	partiallyLinked := make(map[ResolvedPath]linker.Result)
 	var firstError error
 	for _, r := range results {
 		select {
@@ -242,6 +244,8 @@ func (c *Compiler) Compile(ctx context.Context, paths ...ResolvedPath) (CompileR
 		}
 		if r.res != nil {
 			descs = append(descs, r.res)
+		} else if r.partialLinkRes != nil {
+			partiallyLinked[r.resolvedPath] = r.partialLinkRes
 		} else if r.parseRes != nil {
 			unlinked[r.resolvedPath] = r.parseRes
 		}
@@ -254,6 +258,7 @@ func (c *Compiler) Compile(ctx context.Context, paths ...ResolvedPath) (CompileR
 	if err := h.Error(); err != nil {
 		return CompileResult{
 			Files:                 descs,
+			PartialLinkResults:    partiallyLinked,
 			UnlinkedParserResults: unlinked,
 		}, err
 	}
@@ -261,6 +266,7 @@ func (c *Compiler) Compile(ctx context.Context, paths ...ResolvedPath) (CompileR
 	// error, h.Error() should be non-nil
 	return CompileResult{
 		Files:                 descs,
+		PartialLinkResults:    partiallyLinked,
 		UnlinkedParserResults: unlinked,
 	}, firstError
 }
@@ -285,10 +291,13 @@ type result struct {
 	explicitFile bool
 
 	// produces a linker.File or error, only available when ready is closed
-	res linker.File
+	res linker.Result
 	// parser result, may be available if linking fails but the file is syntactically valid
 	parseRes parser.Result
-	err      error
+	// partial link result, may be available if linking fails
+	partialLinkRes linker.Result
+
+	err error
 
 	mu sync.Mutex
 	// the results that are dependencies of this result; this result is
@@ -314,22 +323,19 @@ func (r *result) fail(err error) {
 	close(r.ready)
 }
 
-func (r *result) failPartial(parseRes parser.Result, err error) {
+func (r *result) failPartial(parseRes parser.Result, partialLinkRes linker.Result, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	r.err = err
 	r.res = nil
 	r.parseRes = parseRes
-	r.resolvedPath = ResolvedPath(parseRes.FileDescriptorProto().GetName())
-	// for i := range r.blockedOn {
-	// 	r.blockedOn[i].EffectiveImport = parseRes.FileDescriptorProto()
-	// }
+	r.partialLinkRes = partialLinkRes
 
 	close(r.ready)
 }
 
-func (r *result) complete(f linker.File) {
+func (r *result) complete(f linker.Result) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -338,11 +344,6 @@ func (r *result) complete(f linker.File) {
 	if parseRes, ok := f.(parser.Result); ok {
 		r.parseRes = parseRes
 	}
-	r.resolvedPath = ResolvedPath(f.Path())
-
-	// for i := range r.blockedOn {
-	// 	r.blockedOn[i].EffectiveImport = f.Path()
-	// }
 
 	close(r.ready)
 }
@@ -587,8 +588,8 @@ func (e *executor) doCompile(ctx context.Context, r *result, sr *SearchResult) {
 
 	desc, err := t.asFile(ctx, sr)
 	if err != nil {
-		if sr.ParseResult != nil {
-			r.failPartial(sr.ParseResult, err)
+		if desc != nil || sr.ParseResult != nil {
+			r.failPartial(sr.ParseResult, desc, err)
 			return
 		}
 		r.fail(err)
@@ -622,7 +623,7 @@ func (t *task) release() {
 
 const descriptorProtoPath = "google/protobuf/descriptor.proto"
 
-func (t *task) asFile(ctx context.Context, pr *SearchResult) (linker.File, error) {
+func (t *task) asFile(ctx context.Context, pr *SearchResult) (linker.Result, error) {
 	// r := *pr
 	// if r.Desc != nil {
 	// 	if r.Desc.Path() != string(pr.ResolvedPath) {
@@ -681,16 +682,8 @@ func (t *task) asFile(ctx context.Context, pr *SearchResult) (linker.File, error
 		t.r.setBlockedOn(blocks)
 
 		results := make([]*result, len(protoImports))
-		checked := map[ResolvedPath]struct{}{}
 		for i, dep := range protoImports {
 			res := t.e.resolveAndCompile(ctx, UnresolvedPath(dep), false, parseRes)
-
-			// check for dependency cycle to prevent deadlock
-			span := findImportSpan(parseRes, UnresolvedPath(dep))
-
-			if err := t.e.checkForDependencyCycle(res, []ResolvedPath{pr.ResolvedPath, res.resolvedPath}, span, checked); err != nil {
-				return nil, err
-			}
 			blocks[i].ResolvedPath = res.resolvedPath
 			results[i] = res
 		}
@@ -704,8 +697,15 @@ func (t *task) asFile(ctx context.Context, pr *SearchResult) (linker.File, error
 		t.e.s.Release(1)
 		t.released = true
 
+		checked := map[ResolvedPath]struct{}{}
 		// now we wait for them all to be computed
 		for i, res := range results {
+			// check for dependency cycle to prevent deadlock
+			span := findImportSpan(parseRes, UnresolvedPath(protoImports[i]))
+
+			if err := t.e.checkForDependencyCycle(res, []ResolvedPath{pr.ResolvedPath, res.resolvedPath}, span, checked); err != nil {
+				return nil, err
+			}
 			select {
 			case <-res.ready:
 				if res.err != nil {
@@ -818,7 +818,7 @@ func (t *task) link(parseRes parser.Result, deps linker.Files, overrideDescripto
 		// If a link error occurs, do not commit the updated symbol table, as it may
 		// be in an inconsistent state.
 		t.e.symTxLock.Unlock()
-		return nil, err
+		return file, err
 	}
 	// commit the updated symbol table
 	t.e.sym = pendingSymtab
@@ -831,11 +831,11 @@ func (t *task) link(parseRes parser.Result, deps linker.Files, overrideDescripto
 
 	optsIndex, descIndex, err := options.InterpretOptions(file, t.h, interpretOpts...)
 	if err != nil {
-		return nil, err
+		return file, err
 	}
 	// now that options are interpreted, we can do some additional checks
 	if err := file.ValidateOptions(t.h); err != nil {
-		return nil, err
+		return file, err
 	}
 	if t.r.explicitFile {
 		file.CheckForUnusedImports(t.h)

@@ -614,8 +614,11 @@ func (r *result) createMessages(prefix string, parent protoreflect.Descriptor, m
 
 func (r *result) populateExtensionRefs() {
 	addExtsByName := func(exts *extDescriptors) {
-		for i, l := 0, exts.Len(); i < l; i++ {
-			x := exts.Get(i)
+		for _, x := range exts.exts {
+			if x.field.extendee == nil {
+				// extension type was not resolved
+				continue
+			}
 			extendee := x.ContainingMessage().FullName()
 			r.extensionsByMessage[extendee] = append(r.extensionsByMessage[extendee], x)
 		}
@@ -1661,6 +1664,9 @@ func (f *fldDescriptor) ContainingMessage() protoreflect.MessageDescriptor {
 	if f.extendee != nil {
 		return f.extendee
 	}
+	// Note: if you get a panic here with the message '*linker.result is not protoreflect.MessageDescriptor'
+	// that likely means this linker result is incomplete, and the extendee could not be resolved.
+	// This scenario should be checked for before calling this method.
 	return f.parent.(protoreflect.MessageDescriptor)
 }
 
@@ -2011,7 +2017,7 @@ func (r *result) FindDescriptorByName(fqn protoreflect.FullName) protoreflect.De
 
 func (r *result) FindExtendeeDescriptorByName(fqn protoreflect.FullName) protoreflect.MessageDescriptor {
 	for _, extDesc := range r.extensions.exts {
-		if extDesc.field == nil {
+		if extDesc.field == nil || extDesc.field.extendee == nil {
 			continue
 		}
 		if extDesc.field.extendee.FullName() == fqn {
