@@ -113,20 +113,13 @@ DECLS:
 		case *ast.PackageNode:
 			if lastSeenImport == nil {
 				// as a backup in case there are no imports
-				r.importInsertionPoint = ast.SourcePos{
-					Line: file.NodeInfo(decl).End().Line + 1,
-				}
+				r.importInsertionPoint = file.NodeInfo(decl).End()
 			}
 		case *ast.ImportNode:
 			lastSeenImport = decl
 		default:
 			if lastSeenImport != nil {
-				pos := file.NodeInfo(lastSeenImport).End()
-				r.importInsertionPoint = ast.SourcePos{
-					Filename: pos.Filename,
-					Line:     pos.Line + 1,
-					Col:      0,
-				}
+				r.importInsertionPoint = file.NodeInfo(lastSeenImport).End()
 				break DECLS
 			}
 		}
