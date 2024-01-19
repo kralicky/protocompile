@@ -319,7 +319,12 @@ func resolveFieldTypes(f *fldDescriptor, handler *reporter.Handler, s *Symbols, 
 		scope := fmt.Sprintf("extension %s", f.fqn)
 		dsc := r.resolve(ast.NewNodeReference(file, node.FieldExtendee()), fld.GetExtendee(), false, scopes)
 		if dsc == nil {
-			return handler.HandleErrorf(file.NodeInfo(node.FieldExtendee()), "unknown extendee type %s", fld.GetExtendee())
+			return handler.HandleErrorWithPos(file.NodeInfo(node.FieldExtendee()), &errUndeclaredName{
+				scope:      scope,
+				what:       "extendee type",
+				name:       fld.GetExtendee(),
+				parentFile: file,
+			})
 		}
 		if isSentinelDescriptor(dsc) {
 			return handler.HandleErrorf(file.NodeInfo(node.FieldExtendee()), "unknown extendee type %s; resolved to %s which is not defined; consider using a leading dot", fld.GetExtendee(), dsc.FullName())
@@ -532,7 +537,12 @@ opts:
 				node := r.OptionNamePartNode(nm)
 				desc, err := r.resolveExtensionName(ast.NewNodeReference(file, node), nm.GetNamePart(), scopes)
 				if err != nil {
-					if err := handler.HandleErrorf(file.NodeInfo(node), "%v%v", mc, err); err != nil {
+					if err := handler.HandleErrorWithPos(file.NodeInfo(node), &errUndeclaredName{
+						scope:      mc.String(),
+						what:       "extension",
+						name:       nm.GetNamePart(),
+						parentFile: file,
+					}); err != nil {
 						return err
 					}
 					continue opts
@@ -585,7 +595,12 @@ func (r *result) resolveOptionValue(handler *reporter.Handler, mc *internal.Mess
 				scopes := scopes[:1] // first scope is file, the rest are enclosing messages
 				desc, err := r.resolveExtensionName(ast.NewNodeReference(r.FileNode(), fld.Name.Name), string(fld.Name.Name.AsIdentifier()), scopes)
 				if err != nil {
-					if err := handler.HandleErrorf(r.FileNode().NodeInfo(fld.Name.Name), "%v%v", mc, err); err != nil {
+					if err := handler.HandleErrorWithPos(r.FileNode().NodeInfo(fld.Name.Name), &errUndeclaredName{
+						scope:      mc.String(),
+						what:       "extension",
+						name:       string(fld.Name.Name.AsIdentifier()),
+						parentFile: r.FileNode(),
+					}); err != nil {
 						return err
 					}
 					continue
