@@ -277,6 +277,7 @@ type block struct {
 	// The effective path resolved from the import path, uniquely identifying
 	// the file that will be imported.
 	ResolvedPath ResolvedPath
+	resolved     chan struct{}
 }
 
 type result struct {
@@ -677,6 +678,7 @@ func (t *task) asFile(ctx context.Context, pr *SearchResult) (linker.Result, err
 		for i, imp := range protoImports {
 			blocks[i] = &block{
 				ImportedAs: UnresolvedPath(imp),
+				resolved:   make(chan struct{}),
 			}
 		}
 		t.r.setBlockedOn(blocks)
@@ -685,6 +687,7 @@ func (t *task) asFile(ctx context.Context, pr *SearchResult) (linker.Result, err
 		for i, dep := range protoImports {
 			res := t.e.resolveAndCompile(ctx, UnresolvedPath(dep), false, parseRes)
 			blocks[i].ResolvedPath = res.resolvedPath
+			close(blocks[i].resolved)
 			results[i] = res
 		}
 		deps = make(linker.Files, len(results))
@@ -703,7 +706,7 @@ func (t *task) asFile(ctx context.Context, pr *SearchResult) (linker.Result, err
 			// check for dependency cycle to prevent deadlock
 			span := findImportSpan(parseRes, UnresolvedPath(protoImports[i]))
 
-			if err := t.e.checkForDependencyCycle(res, []ResolvedPath{pr.ResolvedPath, res.resolvedPath}, span, checked); err != nil {
+			if err := t.e.checkForDependencyCycle(ctx, res, []ResolvedPath{pr.ResolvedPath, res.resolvedPath}, span, checked); err != nil {
 				return nil, err
 			}
 			select {
@@ -754,14 +757,23 @@ func (t *task) asFile(ctx context.Context, pr *SearchResult) (linker.Result, err
 	return t.link(parseRes, deps, overrideDescriptorProto)
 }
 
-func (e *executor) checkForDependencyCycle(res *result, sequence []ResolvedPath, span ast.SourceSpan, checked map[ResolvedPath]struct{}) error {
+func (e *executor) checkForDependencyCycle(ctx context.Context, res *result, sequence []ResolvedPath, span ast.SourceSpan, checked map[ResolvedPath]struct{}) error {
+	res.mu.Lock()
+	defer res.mu.Unlock()
+
 	if _, ok := checked[res.resolvedPath]; ok {
 		// already checked this one
 		return nil
 	}
 	checked[res.resolvedPath] = struct{}{}
-	deps := res.getBlockedOn()
+	deps := res.blockedOn
 	for _, dep := range deps {
+		select {
+		case <-dep.resolved:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+
 		// is this a cycle?
 		for _, file := range sequence {
 			if file == dep.ResolvedPath {
@@ -769,14 +781,13 @@ func (e *executor) checkForDependencyCycle(res *result, sequence []ResolvedPath,
 				return e.h.Error()
 			}
 		}
-
 		e.mu.Lock()
 		depRes := e.results[dep.ResolvedPath]
 		e.mu.Unlock()
 		if depRes == nil {
 			continue
 		}
-		if err := e.checkForDependencyCycle(depRes, append(sequence, dep.ResolvedPath), span, checked); err != nil {
+		if err := e.checkForDependencyCycle(ctx, depRes, append(sequence, dep.ResolvedPath), span, checked); err != nil {
 			return err
 		}
 	}
