@@ -1469,6 +1469,11 @@ func (l *protoLex) maybeProcessPartialField(ident string) {
 	nextIdents, nextRune := l.peekNextIdentsFast(2)
 	switch len(nextIdents) {
 	case 2:
+		if ident == "option" {
+			// option can't be followed by two idents
+			l.insertSemi |= atNextNewline
+			break
+		}
 		if matchKeyword(nextIdents[0]) || matchKeyword(nextIdents[1]) {
 			l.insertSemi |= atNextNewline
 		}
