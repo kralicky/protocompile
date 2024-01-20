@@ -98,7 +98,7 @@ func NewIncompleteOptionNode(keyword *KeywordNode, name *OptionNameNode, equals 
 	if keyword == nil {
 		panic("keyword is nil")
 	}
-	var children []Node
+	children := []Node{keyword}
 	if name != nil {
 		children = append(children, name)
 	}
