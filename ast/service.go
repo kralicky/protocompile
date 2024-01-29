@@ -242,11 +242,21 @@ func (n *RPCNode) GetName() Node {
 }
 
 func (n *RPCNode) GetInputType() Node {
+	if n.Input.MessageType == nil {
+		return NoSourceNode{}
+	}
 	return n.Input.MessageType
 }
 
 func (n *RPCNode) GetOutputType() Node {
+	if n.Output.MessageType == nil {
+		return NoSourceNode{}
+	}
 	return n.Output.MessageType
+}
+
+func (n *RPCNode) IsIncomplete() bool {
+	return n.Input.IsIncomplete() || n.Output.IsIncomplete()
 }
 
 // RPCElement is an interface implemented by all AST nodes that can
@@ -305,4 +315,34 @@ func NewRPCTypeNode(openParen *RuneNode, stream *KeywordNode, msgType IdentValue
 		MessageType: msgType,
 		CloseParen:  closeParen,
 	}
+}
+
+func NewIncompleteRPCTypeNode(openParen *RuneNode, stream *KeywordNode, msgType IdentValueNode, closeParen *RuneNode) *RPCTypeNode {
+	if openParen == nil {
+		panic("openParen is nil")
+	}
+	if closeParen == nil {
+		panic("closeParen is nil")
+	}
+	children := []Node{openParen}
+	if stream != nil {
+		children = append(children, stream)
+	}
+	if msgType != nil {
+		children = append(children, msgType)
+	}
+	children = append(children, closeParen)
+	return &RPCTypeNode{
+		compositeNode: compositeNode{
+			children: children,
+		},
+		OpenParen:   openParen,
+		Stream:      stream,
+		MessageType: msgType,
+		CloseParen:  closeParen,
+	}
+}
+
+func (n *RPCTypeNode) IsIncomplete() bool {
+	return n.MessageType == nil
 }

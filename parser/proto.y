@@ -601,6 +601,10 @@ mtdElementTypeIdent
 	}
 	| _QUALIFIED_IDENT
 	| _FULLY_QUALIFIED_IDENT
+	| {
+		protolex.(*protoLex).ErrExtendedSyntax("expected message type", CategoryIncompleteDecl)
+		$$ = nil
+	}
 
 enumValueName
 	: enumValueKeywordName
@@ -1137,10 +1141,18 @@ methodWithBodyDecl
 
 methodMessageType
 	: '(' _STREAM mtdElementTypeIdent ')' {
-		$$ = ast.NewRPCTypeNode($1, $2.ToKeyword(), $3, $4)
+		if $3 == nil {
+			$$ = ast.NewIncompleteRPCTypeNode($1, $2.ToKeyword(), nil, $4)
+		} else {
+			$$ = ast.NewRPCTypeNode($1, $2.ToKeyword(), $3, $4)
+		}
 	}
 	| '(' mtdElementTypeIdent ')' {
-		$$ = ast.NewRPCTypeNode($1, nil, $2, $3)
+		if $2 == nil {
+			$$ = ast.NewIncompleteRPCTypeNode($1, nil, nil, $3)
+		} else {
+			$$ = ast.NewRPCTypeNode($1, nil, $2, $3)
+		}
 	}
 
 methodBody

@@ -600,11 +600,15 @@ func generateSourceCodeInfoForMethod(opts OptionIndex, sci *sourceCodeInfo, n *a
 	if n.Input.Stream != nil {
 		sci.newLoc(n.Input.Stream, append(path, internal.MethodInputStreamTag))
 	}
-	sci.newLoc(n.Input.MessageType, append(path, internal.MethodInputTag))
+	if n.Input.MessageType != nil {
+		sci.newLoc(n.Input.MessageType, append(path, internal.MethodInputTag))
+	}
 	if n.Output.Stream != nil {
 		sci.newLoc(n.Output.Stream, append(path, internal.MethodOutputStreamTag))
 	}
-	sci.newLoc(n.Output.MessageType, append(path, internal.MethodOutputTag))
+	if n.Output.MessageType != nil {
+		sci.newLoc(n.Output.MessageType, append(path, internal.MethodOutputTag))
+	}
 
 	optsPath := path
 	optsPath = append(optsPath, internal.MethodOptionsTag)

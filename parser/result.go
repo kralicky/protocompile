@@ -545,10 +545,17 @@ func (r *result) asEnumValue(ev *ast.EnumValueNode, handler *reporter.Handler) *
 }
 
 func (r *result) asMethodDescriptor(node *ast.RPCNode) *descriptorpb.MethodDescriptorProto {
+	var inputType, outputType string
+	if !node.Input.IsIncomplete() {
+		inputType = string(node.Input.MessageType.AsIdentifier())
+	}
+	if !node.Output.IsIncomplete() {
+		outputType = string(node.Output.MessageType.AsIdentifier())
+	}
 	md := &descriptorpb.MethodDescriptorProto{
 		Name:       proto.String(node.Name.Val),
-		InputType:  proto.String(string(node.Input.MessageType.AsIdentifier())),
-		OutputType: proto.String(string(node.Output.MessageType.AsIdentifier())),
+		InputType:  &inputType,
+		OutputType: &outputType,
 	}
 	r.putMethodNode(md, node)
 	if node.Input.Stream != nil {
@@ -872,6 +879,9 @@ func (r *result) asServiceDescriptor(svc *ast.ServiceNode) *descriptorpb.Service
 			}
 			sd.Options.UninterpretedOption = append(sd.Options.UninterpretedOption, r.asUninterpretedOption(decl))
 		case *ast.RPCNode:
+			if decl.IsIncomplete() {
+				continue
+			}
 			sd.Method = append(sd.Method, r.asMethodDescriptor(decl))
 		}
 	}
