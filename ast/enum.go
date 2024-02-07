@@ -131,10 +131,10 @@ func NewEnumValueNode(name *IdentNode, equals *RuneNode, number IntValueNode, op
 	if number == nil {
 		panic("number is nil")
 	}
-	numChildren := 3
-	if semicolon != nil {
-		numChildren++
+	if semicolon == nil {
+		panic("semicolon is nil")
 	}
+	numChildren := 4
 	if opts != nil {
 		numChildren++
 	}
@@ -143,9 +143,7 @@ func NewEnumValueNode(name *IdentNode, equals *RuneNode, number IntValueNode, op
 	if opts != nil {
 		children = append(children, opts)
 	}
-	if semicolon != nil {
-		children = append(children, semicolon)
-	}
+	children = append(children, semicolon)
 	return &EnumValueNode{
 		compositeNode: compositeNode{
 			children: children,

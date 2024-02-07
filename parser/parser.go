@@ -25,8 +25,7 @@ import (
 	"github.com/bufbuild/protocompile/reporter"
 )
 
-// The path ../.tmp/bin/goyacc is built when using `make generate` from repo root.
-//go:generate ../.tmp/bin/goyacc -o proto.y.go -l -p proto proto.y
+//go:generate goyacc -o proto.y.go -l -p proto proto.y
 
 func init() {
 	protoErrorVerbose = true
