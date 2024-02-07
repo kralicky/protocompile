@@ -5,6 +5,7 @@ package parser
 
 import (
 	"math"
+	"strings"
 
 	"github.com/kralicky/protocompile/ast"
 )
@@ -86,7 +87,7 @@ import (
 %type <ref>          messageLiteralFieldName
 %type <optName>      optionName
 %type <cmpctOpts>    compactOptions
-%type <v>            value optionValue compactOptionValue scalarValue messageLiteral numLit listLiteral listElement listOfMessagesLiteral messageValue
+%type <v>            fieldValue optionValue compactOptionValue scalarValue fieldScalarValue messageLiteral numLit specialFloatLit listLiteral listElement listOfMessagesLiteral messageValue
 %type <il>           enumValueNumber
 %type <id>           singularIdent identKeywordName mapKeyType fieldCardinality msgElementKeywordName extElementKeywordName oneofElementKeywordName notGroupElementKeywordName mtdElementKeywordName enumValueName enumValueKeywordName
 %type <idv>          anyIdentifier msgElementTypeIdent extElementTypeIdent oneofElementTypeIdent notGroupElementTypeIdent mtdElementTypeIdent
@@ -310,6 +311,7 @@ scalarValue
 		$$ = $1
 	}
 	| numLit
+	| specialFloatLit
 	| singularIdent {
 		$$ = $1
 	}
@@ -321,22 +323,8 @@ numLit
 	| '-' _FLOAT_LIT {
 		$$ = ast.NewSignedFloatLiteralNode($1, $2)
 	}
-	| '+' _FLOAT_LIT {
-		$$ = ast.NewSignedFloatLiteralNode($1, $2)
-	}
-	| '+' _INF {
-		f := ast.NewSpecialFloatLiteralNode($2.ToKeyword())
-		$$ = ast.NewSignedFloatLiteralNode($1, f)
-	}
-	| '-' _INF {
-		f := ast.NewSpecialFloatLiteralNode($2.ToKeyword())
-		$$ = ast.NewSignedFloatLiteralNode($1, f)
-	}
 	| _INT_LIT {
 		$$ = $1
-	}
-	| '+' _INT_LIT {
-		$$ = ast.NewPositiveUintLiteralNode($1, $2)
 	}
 	| '-' _INT_LIT {
 		if $2.Val > math.MaxInt64 + 1 {
@@ -345,6 +333,16 @@ numLit
 		} else {
 			$$ = ast.NewNegativeIntLiteralNode($1, $2)
 		}
+	}
+
+specialFloatLit
+	: '-' _INF {
+		f := ast.NewSpecialFloatLiteralNode($2.ToKeyword())
+		$$ = ast.NewSignedFloatLiteralNode($1, f)
+	}
+	| '-' _NAN {
+		f := ast.NewSpecialFloatLiteralNode($2.ToKeyword())
+		$$ = ast.NewSignedFloatLiteralNode($1, f)
 	}
 
 messageLiteral
@@ -407,7 +405,7 @@ messageLiteralFieldEntry
 	}
 
 messageLiteralField
-	: messageLiteralFieldName ':' value {
+	: messageLiteralFieldName ':' fieldValue {
 		if $1 != nil && $2 != nil {
 			$$ = ast.NewMessageFieldNode($1, $2, $3)
 		} else {
@@ -456,14 +454,36 @@ messageLiteralFieldName
 		$$ = nil
 	}
 
-value
-	: scalarValue
+fieldValue
+	: fieldScalarValue
 	| messageLiteral virtualSemicolon {
 		ast.AddVirtualSemicolon($1.(*ast.MessageLiteralNode), $2)
 		$$ = $1
 	}
 	| listLiteral virtualSemicolon {
 		ast.AddVirtualSemicolon($1.(*ast.ArrayLiteralNode), $2)
+		$$ = $1
+	}
+
+fieldScalarValue
+	: _STRING_LIT {
+		$$ = $1
+	}
+	| numLit
+	| '-' singularIdent {
+		kw := $2.ToKeyword()
+		switch strings.ToLower(kw.Val) {
+		case "inf", "infinity", "nan":
+			// these are acceptable
+		default:
+			// anything else is not
+			protolex.(*protoLex).Error(`only identifiers "inf", "infinity", or "nan" may appear after negative sign`)
+		}
+		// we'll validate the identifier later
+		f := ast.NewSpecialFloatLiteralNode(kw)
+		$$ = ast.NewSignedFloatLiteralNode($1, f)
+	}
+	| singularIdent {
 		$$ = $1
 	}
 
@@ -516,7 +536,7 @@ listElements
 	}
 
 listElement
-	: scalarValue
+	: fieldScalarValue
 	| messageLiteral virtualSemicolon {
 		ast.AddVirtualSemicolon($1.(*ast.MessageLiteralNode), $2)
 		$$ = $1

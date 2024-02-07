@@ -210,8 +210,6 @@ func Visit(n Node, v Visitor) error {
 		return v.VisitCompoundStringLiteralNode(n)
 	case *UintLiteralNode:
 		return v.VisitUintLiteralNode(n)
-	case *PositiveUintLiteralNode:
-		return v.VisitPositiveUintLiteralNode(n)
 	case *NegativeIntLiteralNode:
 		return v.VisitNegativeIntLiteralNode(n)
 	case *FloatLiteralNode:
@@ -379,8 +377,6 @@ type Visitor interface {
 	VisitCompoundStringLiteralNode(*CompoundStringLiteralNode) error
 	// VisitUintLiteralNode is invoked when visiting a *UintLiteralNode in the AST.
 	VisitUintLiteralNode(*UintLiteralNode) error
-	// VisitPositiveUintLiteralNode is invoked when visiting a *PositiveUintLiteralNode in the AST.
-	VisitPositiveUintLiteralNode(*PositiveUintLiteralNode) error
 	// VisitNegativeIntLiteralNode is invoked when visiting a *NegativeIntLiteralNode in the AST.
 	VisitNegativeIntLiteralNode(*NegativeIntLiteralNode) error
 	// VisitFloatLiteralNode is invoked when visiting a *FloatLiteralNode in the AST.
@@ -533,10 +529,6 @@ func (n NoOpVisitor) VisitUintLiteralNode(_ *UintLiteralNode) error {
 	return nil
 }
 
-func (n NoOpVisitor) VisitPositiveUintLiteralNode(_ *PositiveUintLiteralNode) error {
-	return nil
-}
-
 func (n NoOpVisitor) VisitNegativeIntLiteralNode(_ *NegativeIntLiteralNode) error {
 	return nil
 }
@@ -638,7 +630,6 @@ type SimpleVisitor struct {
 	DoVisitStringLiteralNode         func(*StringLiteralNode) error
 	DoVisitCompoundStringLiteralNode func(*CompoundStringLiteralNode) error
 	DoVisitUintLiteralNode           func(*UintLiteralNode) error
-	DoVisitPositiveUintLiteralNode   func(*PositiveUintLiteralNode) error
 	DoVisitNegativeIntLiteralNode    func(*NegativeIntLiteralNode) error
 	DoVisitFloatLiteralNode          func(*FloatLiteralNode) error
 	DoVisitSpecialFloatLiteralNode   func(*SpecialFloatLiteralNode) error
@@ -933,13 +924,6 @@ func (v *SimpleVisitor) VisitCompoundStringLiteralNode(node *CompoundStringLiter
 func (v *SimpleVisitor) VisitUintLiteralNode(node *UintLiteralNode) error {
 	if v.DoVisitUintLiteralNode != nil {
 		return v.DoVisitUintLiteralNode(node)
-	}
-	return v.visitInterface(node)
-}
-
-func (v *SimpleVisitor) VisitPositiveUintLiteralNode(node *PositiveUintLiteralNode) error {
-	if v.DoVisitPositiveUintLiteralNode != nil {
-		return v.DoVisitPositiveUintLiteralNode(node)
 	}
 	return v.visitInterface(node)
 }
