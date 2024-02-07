@@ -352,12 +352,12 @@ func resolveFieldTypes(f *fldDescriptor, handler *reporter.Handler, s *Symbols, 
 			if err := handler.HandleErrorf(file.NodeInfo(node.FieldTag()), "%s: tag %d is not in valid range for extended type %s", scope, tag, dsc.FullName()); err != nil {
 				return err
 			}
-		} /* else {
+		} else {
 			// make sure tag is not a duplicate
 			if err := s.AddExtension(packageFor(dsc), dsc.FullName(), tag, file.NodeInfo(node.FieldTag()), handler); err != nil {
 				return err
 			}
-		}*/
+		}
 	} else if f.proto.OneofIndex != nil {
 		parent := f.parent.(protoreflect.MessageDescriptor) //nolint:errcheck
 		index := int(f.proto.GetOneofIndex())

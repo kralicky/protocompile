@@ -72,16 +72,16 @@ func (s *Symbols) MarshalText() string {
 	return s.pkgTrie.MarshalText()
 }
 
-func (s *packageSymbols) MarshalText() string {
+func (ps *packageSymbols) MarshalText() string {
 	var buf strings.Builder
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for file := range s.files {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+	for file := range ps.files {
 		fmt.Fprintf(&buf, "file: %q\n", file)
 	}
 
 	symbolCount := 0
-	for symName, sym := range s.symbols {
+	for symName, sym := range ps.symbols {
 		if sym.isPackage {
 			fmt.Fprintf(&buf, "symbol (package): %s [@%s]\n", symName, sym.span)
 			continue
@@ -89,10 +89,10 @@ func (s *packageSymbols) MarshalText() string {
 		symbolCount++
 	}
 	fmt.Fprintf(&buf, "symbols (regular): %d\n", symbolCount)
-	for ext, span := range s.exts {
+	for ext, span := range ps.exts {
 		fmt.Fprintf(&buf, "extension: %s [@%s]\n", ext.extendee.Name(), span.Start())
 	}
-	for pkgName, pkg := range s.children {
+	for pkgName, pkg := range ps.children {
 		pkg.mu.RLock()
 		fmt.Fprintf(&buf, " > package: %s\n", pkgName)
 		pkg.mu.RUnlock()
@@ -127,26 +127,26 @@ func (s *Symbols) Clone() *Symbols {
 	}
 }
 
-func (s *packageSymbols) clone() *packageSymbols {
-	if s == nil {
+func (ps *packageSymbols) clone() *packageSymbols {
+	if ps == nil {
 		return nil
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
 	clone := newPackageSymbols()
 	clone.mu.Lock()
 	defer clone.mu.Unlock()
 
-	for k, v := range s.children {
+	for k, v := range ps.children {
 		clone.children[k] = v.clone()
 	}
-	for k, v := range s.files {
+	for k, v := range ps.files {
 		clone.files[k] = v // this may or may not work, but i have no idea how to clone a protoreflect.FileDescriptor
 	}
-	for k, v := range s.symbols {
+	for k, v := range ps.symbols {
 		clone.symbols[k] = v
 	}
-	for k, v := range s.exts {
+	for k, v := range ps.exts {
 		clone.exts[k] = v
 	}
 	return clone
@@ -201,7 +201,8 @@ func (s *Symbols) Import(fd protoreflect.FileDescriptor, handler *reporter.Handl
 
 var (
 	ErrPackageStillInUse = errors.New("package still in use")
-	ErrNoPackageName     = errors.New("no package name")
+	ErrPackageNotFound   = errors.New("package not found")
+	ErrFileNotFound      = errors.New("file not found")
 )
 
 // Deletes all symbols associated with the given file descriptor.
@@ -223,20 +224,38 @@ func (s *Symbols) Delete(fd protoreflect.FileDescriptor, handler *reporter.Handl
 
 	err := s.prepareDeletePackages(fd.Package(), handler)
 	if err != nil {
-		if errors.Is(err, ErrPackageStillInUse) {
+		switch {
+		case errors.Is(err, ErrPackageStillInUse):
+			// package still in use - can't delete
+		case errors.Is(err, ErrPackageNotFound):
+			// package doesn't exist - nothing to delete
 			return nil
+		default:
+			// some other error
+			return err
 		}
-		if errors.Is(err, ErrNoPackageName) {
-			// no package name, so there's nothing to delete
-			return nil
-		}
-		return err
 	}
 
 	if res, ok := fd.(*result); ok {
-		return s.deleteResultLocked(res, handler)
+		err = s.deleteResultLocked(res, handler)
+	} else {
+		err = s.deleteFileLocked(fd, handler)
 	}
-	return s.deleteFileLocked(fd, handler)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrPackageNotFound):
+			// package doesn't exist - nothing to delete
+			return nil
+		case errors.Is(err, ErrFileNotFound):
+			// file doesn't exist - nothing to delete
+			return nil
+		default:
+			// some other error
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Symbols) importFileWithExtensions(pkg *packageSymbols, fd protoreflect.FileDescriptor, handler *reporter.Handler) error {
@@ -260,43 +279,43 @@ func (s *Symbols) importFileWithExtensions(pkg *packageSymbols, fd protoreflect.
 	})
 }
 
-func (s *packageSymbols) importFile(fd protoreflect.FileDescriptor, handler *reporter.Handler) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (ps *packageSymbols) importFile(fd protoreflect.FileDescriptor, handler *reporter.Handler) (bool, error) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
 
-	if _, ok := s.files[fd.Path()]; ok {
+	if _, ok := ps.files[fd.Path()]; ok {
 		// have to double-check if it's already imported, in case
 		// it was added after above read-locked check
 		return false, nil
 	}
 
 	// first pass: check for conflicts
-	if err := s.checkFileLocked(fd, handler); err != nil {
+	if err := ps.checkFileLocked(fd, handler); err != nil {
 		return false, err
 	}
 	if err := handler.Error(); err != nil {
-		return false, err
+		if !errors.Is(err, reporter.ErrInvalidSource) {
+			return false, err
+		}
 	}
 
 	// second pass: commit all symbols
-	s.commitFileLocked(fd)
+	ps.commitFileLocked(fd)
 
 	return true, nil
 }
 
-func (s *packageSymbols) deleteFile(fd protoreflect.FileDescriptor, handler *reporter.Handler) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (ps *packageSymbols) deleteFile(fd protoreflect.FileDescriptor, handler *reporter.Handler) (deletedExtensions []extNumber, _ error) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
 
-	if _, ok := s.files[fd.Path()]; !ok {
-		// nothing to do
-		return nil
+	if _, ok := ps.files[fd.Path()]; !ok {
+		// already deleted
+		return nil, fmt.Errorf("%w: %s", ErrFileNotFound, fd.Path())
 	}
 
 	// delete all symbols
-	s.deleteFileLocked(fd)
-
-	return nil
+	return ps.deleteFileLocked(fd), nil
 }
 
 func (s *Symbols) importPackages(pkgSpan ast.SourceSpan, pkg protoreflect.FullName, handler *reporter.Handler) (*packageSymbols, error) {
@@ -325,21 +344,22 @@ func (s *Symbols) importPackages(pkgSpan ast.SourceSpan, pkg protoreflect.FullNa
 }
 
 func (s *Symbols) prepareDeletePackages(pkg protoreflect.FullName, handler *reporter.Handler) error {
-	if pkg == "" {
-		return ErrNoPackageName
-	}
-
 	parts := strings.Split(string(pkg), ".")
-	for i := 1; i < len(parts); i++ {
-		parts[i] = parts[i-1] + "." + parts[i]
-	}
-
 	curPkg := &s.pkgTrie
 	pkgParts := []*packageSymbols{}
-	for i := 0; i < len(parts); i++ {
-		next := curPkg.children[protoreflect.FullName(parts[i])]
-		pkgParts = append(pkgParts, curPkg)
-		curPkg = next
+	if len(parts) > 1 {
+		for i := 1; i < len(parts); i++ {
+			parts[i] = parts[i-1] + "." + parts[i]
+		}
+
+		for i := 0; i < len(parts); i++ {
+			next := curPkg.children[protoreflect.FullName(parts[i])]
+			if next == nil {
+				return ErrPackageNotFound
+			}
+			pkgParts = append(pkgParts, curPkg)
+			curPkg = next
+		}
 	}
 
 	var err error
@@ -356,35 +376,35 @@ func (s *Symbols) prepareDeletePackages(pkg protoreflect.FullName, handler *repo
 	return err
 }
 
-func (s *packageSymbols) importPackage(pkgSpan ast.SourceSpan, pkg protoreflect.FullName, handler *reporter.Handler) (*packageSymbols, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	existing, ok := s.symbols[pkg]
+func (ps *packageSymbols) importPackage(pkgSpan ast.SourceSpan, pkg protoreflect.FullName, handler *reporter.Handler) (*packageSymbols, error) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	existing, ok := ps.symbols[pkg]
 	var child *packageSymbols
 	if ok && existing.isPackage {
 		// package already exists
-		child = s.children[pkg]
+		child = ps.children[pkg]
 
 		// increase the reference count
 		// fmt.Printf("[refcount] increasing %q from %d to %d\n", pkg, existing.refcount, existing.refcount+1)
 		existing.refcount++
-		s.symbols[pkg] = existing
+		ps.symbols[pkg] = existing
 
 		return child, nil
 	} else if ok {
 		return nil, reportSymbolCollision(pkgSpan, pkg, false, existing, handler)
 	}
 
-	s.symbols[pkg] = symbolEntry{span: pkgSpan, isPackage: true, refcount: 1}
+	ps.symbols[pkg] = symbolEntry{span: pkgSpan, isPackage: true, refcount: 1}
 	child = newPackageSymbols()
-	s.children[pkg] = child
+	ps.children[pkg] = child
 	return child, nil
 }
 
-func (s *packageSymbols) prepareDeletePackage(pkg protoreflect.FullName, handler *reporter.Handler) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	existing, ok := s.symbols[pkg]
+func (ps *packageSymbols) prepareDeletePackage(pkg protoreflect.FullName, handler *reporter.Handler) error {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	existing, ok := ps.symbols[pkg]
 	if !ok || !existing.isPackage {
 		// package doesn't exist
 		return fmt.Errorf("bug(deletePackage): package %q does not exist", pkg)
@@ -392,7 +412,7 @@ func (s *packageSymbols) prepareDeletePackage(pkg protoreflect.FullName, handler
 
 	// fmt.Printf("[refcount] decreasing %q from %d to %d\n", pkg, existing.refcount, existing.refcount-1)
 	existing.refcount--
-	s.symbols[pkg] = existing
+	ps.symbols[pkg] = existing
 	if existing.refcount > 0 {
 		// still in use
 		return ErrPackageStillInUse
@@ -463,10 +483,10 @@ func posLess(a, b ast.SourcePos) bool {
 	return false
 }
 
-func (s *packageSymbols) checkFileLocked(f protoreflect.FileDescriptor, handler *reporter.Handler) error {
+func (ps *packageSymbols) checkFileLocked(f protoreflect.FileDescriptor, handler *reporter.Handler) error {
 	return walk.Descriptors(f, func(d protoreflect.Descriptor) error {
 		span := sourceSpanFor(d)
-		if existing, ok := s.symbols[d.FullName()]; ok {
+		if existing, ok := ps.symbols[d.FullName()]; ok {
 			_, isEnumVal := d.(protoreflect.EnumValueDescriptor)
 			if err := reportSymbolCollision(span, d.FullName(), isEnumVal, existing, handler); err != nil {
 				return err
@@ -584,43 +604,47 @@ func isZeroLoc(loc protoreflect.SourceLocation) bool {
 		loc.EndColumn == 0
 }
 
-func (s *packageSymbols) commitFileLocked(f protoreflect.FileDescriptor) {
+func (ps *packageSymbols) commitFileLocked(f protoreflect.FileDescriptor) {
 	_ = walk.Descriptors(f, func(d protoreflect.Descriptor) error {
 		span := sourceSpanFor(d)
 		name := d.FullName()
 		_, isEnumValue := d.(protoreflect.EnumValueDescriptor)
-		s.symbols[name] = symbolEntry{span: span, isEnumValue: isEnumValue}
+		ps.symbols[name] = symbolEntry{span: span, isEnumValue: isEnumValue}
 		return nil
 	})
-	s.files[f.Path()] = struct{}{}
+	ps.files[f.Path()] = struct{}{}
 }
 
-func (s *packageSymbols) deleteFileLocked(f protoreflect.FileDescriptor) {
+func (ps *packageSymbols) deleteFileLocked(f protoreflect.FileDescriptor) (deletedExtensions []extNumber) {
 	_ = walk.Descriptors(f, func(d protoreflect.Descriptor) error {
 		fqn := d.FullName()
 		if fld, ok := d.(protoreflect.FieldDescriptor); ok && fld.IsExtension() {
-			delete(s.exts, extNumber{extendee: packageFor(fld.ContainingMessage()), tag: fld.Number()})
+			extNum := extNumber{extendee: packageFor(fld.ContainingMessage()), tag: fld.Number()}
+			delete(ps.exts, extNum)
+			deletedExtensions = append(deletedExtensions, extNum)
 		} else if msg, ok := d.(protoreflect.MessageDescriptor); ok {
 			ranges := msg.ExtensionRanges()
 			for i := 0; i < ranges.Len(); i++ {
 				rng := ranges.Get(i)
-				for k := range s.exts {
+				for k := range ps.exts {
 					if k.extendee == fqn && k.tag >= rng[0] && k.tag < rng[1] {
-						delete(s.exts, k)
+						delete(ps.exts, k)
+						deletedExtensions = append(deletedExtensions, k)
 					}
 				}
 			}
 		}
-		if sym, ok := s.symbols[fqn]; ok {
+		if sym, ok := ps.symbols[fqn]; ok {
 			if sym.isPackage {
-				delete(s.children, fqn)
+				delete(ps.children, fqn)
 			}
-			delete(s.symbols, fqn)
+			delete(ps.symbols, fqn)
 		}
 		return nil
 	})
 
-	delete(s.files, f.Path())
+	delete(ps.files, f.Path())
+	return
 }
 
 func (s *Symbols) importResultWithExtensions(pkg *packageSymbols, r *result, handler *reporter.Handler) error {
@@ -657,34 +681,45 @@ func (s *Symbols) importResult(r *result, handler *reporter.Handler) error {
 
 func (s *Symbols) deleteResultLocked(r *result, handler *reporter.Handler) error {
 	pkgName := r.Package()
-	if pkgName == "" {
-		return fmt.Errorf("no package name found")
-	}
 
-	parts := strings.Split(string(pkgName), ".")
-	for i := 1; i < len(parts); i++ {
-		parts[i] = parts[i-1] + "." + parts[i]
-	}
-
-	// walk the package tree to find the package
 	pkg := &s.pkgTrie
-	pkgParts := []*packageSymbols{pkg}
-	for i := 0; i < len(parts); i++ {
-		pkg = pkg.children[protoreflect.FullName(parts[i])]
+	pkgParts := []*packageSymbols{}
+	var parts []string
+	if pkgName != "" {
 		pkgParts = append(pkgParts, pkg)
-		if pkg == nil {
-			return fmt.Errorf("package %q not found", pkgName)
+		parts = strings.Split(string(pkgName), ".")
+		for i := 1; i < len(parts); i++ {
+			parts[i] = parts[i-1] + "." + parts[i]
+		}
+
+		// walk the package tree to find the package
+		for i := 0; i < len(parts); i++ {
+			pkg = pkg.children[protoreflect.FullName(parts[i])]
+			pkgParts = append(pkgParts, pkg)
+			if pkg == nil {
+				return fmt.Errorf("%w: %q", ErrPackageNotFound, pkgName)
+			}
 		}
 	}
 
 	deletedExtensions, err := pkg.deleteResult(r, handler)
 	if err != nil {
-		return err
+		if !errors.Is(err, ErrFileNotFound) {
+			return err
+		}
 	}
 
 	// if any extensions were deleted, we need to delete them from the
-	// extendee's symbols
+	// extendee's symbols and from the global extension number map
 	for _, ext := range deletedExtensions {
+		// NB: only delete if the extension was defined in the file being deleted.
+		// Otherwise, we can end up with duplicate extension numbers in files that
+		// aren't related by imports, since they won't invalidate each other, but
+		// they will invalidate the other's extension numbers in the global map.
+		if extVal := s.pkgTrie.exts[ext]; extVal != nil && extVal.Start().Filename == r.Path() {
+			delete(s.pkgTrie.exts, ext) // delete from global map
+		}
+
 		extendeePkg := s.getPackage(ext.extendee.Parent())
 		if extendeePkg == nil {
 			continue
@@ -716,25 +751,47 @@ func (s *Symbols) deleteFileLocked(fd protoreflect.FileDescriptor, handler *repo
 		return fmt.Errorf("no package name found")
 	}
 
-	parts := strings.Split(string(pkgName), ".")
-	for i := 1; i < len(parts); i++ {
-		parts[i] = parts[i-1] + "." + parts[i]
-	}
-
-	// walk the package tree to find the package
 	pkg := &s.pkgTrie
-	pkgParts := []*packageSymbols{pkg}
-	for i := 0; i < len(parts); i++ {
-		pkg = pkg.children[protoreflect.FullName(parts[i])]
+	pkgParts := []*packageSymbols{}
+	var parts []string
+	if pkgName != "" {
 		pkgParts = append(pkgParts, pkg)
-		if pkg == nil {
-			return fmt.Errorf("package %q not found", pkgName)
+		parts = strings.Split(string(pkgName), ".")
+		for i := 1; i < len(parts); i++ {
+			parts[i] = parts[i-1] + "." + parts[i]
+		}
+
+		// walk the package tree to find the package
+		for i := 0; i < len(parts); i++ {
+			pkg = pkg.children[protoreflect.FullName(parts[i])]
+			pkgParts = append(pkgParts, pkg)
+			if pkg == nil {
+				return fmt.Errorf("%w: %q", ErrPackageNotFound, pkgName)
+			}
 		}
 	}
 
-	err := pkg.deleteFile(fd, handler)
+	deletedExtensions, err := pkg.deleteFile(fd, handler)
 	if err != nil {
-		return err
+		if !errors.Is(err, ErrFileNotFound) {
+			return err
+		}
+	}
+
+	// if any extensions were deleted, we need to delete them from the
+	// extendee's symbols and from the global extension number map
+	for _, ext := range deletedExtensions {
+		if extVal := s.pkgTrie.exts[ext]; extVal != nil && extVal.Start().Filename == fd.Path() {
+			delete(s.pkgTrie.exts, ext) // delete from global map
+		}
+
+		extendeePkg := s.getPackage(ext.extendee.Parent())
+		if extendeePkg == nil {
+			continue
+		}
+		extendeePkg.mu.Lock()
+		delete(extendeePkg.exts, ext)
+		extendeePkg.mu.Unlock()
 	}
 
 	// this might be the last result for this package, so recursively delete
@@ -753,42 +810,44 @@ func (s *Symbols) deleteFileLocked(fd protoreflect.FileDescriptor, handler *repo
 	return nil
 }
 
-func (s *packageSymbols) importResult(r *result, handler *reporter.Handler) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (ps *packageSymbols) importResult(r *result, handler *reporter.Handler) (bool, error) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
 
-	if _, ok := s.files[r.Path()]; ok {
+	if _, ok := ps.files[r.Path()]; ok {
 		// already imported
 		return false, nil
 	}
 
 	// first pass: check for conflicts
-	if err := s.checkResultLocked(r, handler); err != nil {
+	if err := ps.checkResultLocked(r, handler); err != nil {
 		return false, err
 	}
 	if err := handler.Error(); err != nil {
-		return false, err
+		if !errors.Is(err, reporter.ErrInvalidSource) {
+			return false, err
+		}
 	}
 
 	// second pass: commit all symbols
-	s.commitResultLocked(r)
+	ps.commitResultLocked(r)
 
 	return true, nil
 }
 
-func (s *packageSymbols) deleteResult(r *result, handler *reporter.Handler) ([]extNumber, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (ps *packageSymbols) deleteResult(r *result, handler *reporter.Handler) ([]extNumber, error) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
 
-	if _, ok := s.files[r.Path()]; !ok {
+	if _, ok := ps.files[r.Path()]; !ok {
 		// already deleted
-		return nil, fmt.Errorf("file %q not found", r.Path())
+		return nil, fmt.Errorf("%w: %s", ErrFileNotFound, r.Path())
 	}
 
-	return s.deleteResultLocked(r), nil
+	return ps.deleteResultLocked(r), nil
 }
 
-func (s *packageSymbols) checkResultLocked(r *result, handler *reporter.Handler) error {
+func (ps *packageSymbols) checkResultLocked(r *result, handler *reporter.Handler) error {
 	resultSyms := map[protoreflect.FullName]symbolEntry{}
 	return walk.DescriptorProtos(r.FileDescriptorProto(), func(fqn protoreflect.FullName, d proto.Message) error {
 		_, isEnumVal := d.(*descriptorpb.EnumValueDescriptorProto)
@@ -796,7 +855,7 @@ func (s *packageSymbols) checkResultLocked(r *result, handler *reporter.Handler)
 		node := r.Node(d)
 		span := nameSpan(file, node)
 		// check symbols already in this symbol table
-		if existing, ok := s.symbols[fqn]; ok {
+		if existing, ok := ps.symbols[fqn]; ok {
 			if err := reportSymbolCollision(span, fqn, isEnumVal, existing, handler); err != nil {
 				return err
 			}
@@ -850,17 +909,17 @@ func nameSpan(file ast.FileDeclNode, n ast.Node) ast.SourceSpan {
 	}
 }
 
-func (s *packageSymbols) commitResultLocked(r *result) {
+func (ps *packageSymbols) commitResultLocked(r *result) {
 	_ = walk.DescriptorProtos(r.FileDescriptorProto(), func(fqn protoreflect.FullName, d proto.Message) error {
 		span := nameSpan(r.FileNode(), r.Node(d))
 		_, isEnumValue := d.(protoreflect.EnumValueDescriptor)
-		s.symbols[fqn] = symbolEntry{span: span, isEnumValue: isEnumValue}
+		ps.symbols[fqn] = symbolEntry{span: span, isEnumValue: isEnumValue}
 		return nil
 	})
-	s.files[r.Path()] = struct{}{}
+	ps.files[r.Path()] = struct{}{}
 }
 
-func (s *packageSymbols) deleteResultLocked(r *result) (deletedExtensions []extNumber) {
+func (ps *packageSymbols) deleteResultLocked(r *result) (deletedExtensions []extNumber) {
 	_ = walk.DescriptorProtos(r.FileDescriptorProto(), func(fqn protoreflect.FullName, d proto.Message) error {
 		if ext, ok := d.(*descriptorpb.FieldDescriptorProto); ok && ext.GetExtendee() != "" {
 			extendee := protoreflect.FullName(ext.GetExtendee())
@@ -872,23 +931,23 @@ func (s *packageSymbols) deleteResultLocked(r *result) (deletedExtensions []extN
 			ranges := msg.ExtensionRanges()
 			for i := 0; i < ranges.Len(); i++ {
 				rng := ranges.Get(i)
-				for k := range s.exts {
+				for k := range ps.exts {
 					if k.extendee == fqn && k.tag >= rng[0] && k.tag < rng[1] {
-						delete(s.exts, k)
+						delete(ps.exts, k)
 					}
 				}
 			}
 		}
-		if sym, ok := s.symbols[fqn]; ok {
+		if sym, ok := ps.symbols[fqn]; ok {
 			if sym.isPackage {
-				delete(s.children, fqn)
+				delete(ps.children, fqn)
 			}
-			delete(s.symbols, fqn)
+			delete(ps.symbols, fqn)
 		}
 		return nil
 	})
 
-	delete(s.files, r.Path())
+	delete(ps.files, r.Path())
 	return
 }
 
@@ -899,19 +958,27 @@ func (s *Symbols) AddExtension(pkg, extendee protoreflect.FullName, tag protoref
 		}
 	}
 	pkgSyms := s.getPackage(pkg)
-	return pkgSyms.addExtension(extendee, tag, span, handler)
-}
+	if pkgSyms == nil {
+		return handler.HandleErrorf(span, "could not register extension: missing package symbols: %q", pkg)
+	}
 
-func (s *packageSymbols) addExtension(extendee protoreflect.FullName, tag protoreflect.FieldNumber, span ast.SourceSpan, handler *reporter.Handler) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	pkgSyms.mu.Lock()
+	defer pkgSyms.mu.Unlock()
 	extNum := extNumber{extendee: extendee, tag: tag}
-	if existing, ok := s.exts[extNum]; ok {
+	if existing, ok := pkgSyms.exts[extNum]; ok {
 		if err := handler.HandleErrorf(span, "extension with tag %d for message %s already defined at %v", tag, extendee, existing); err != nil {
 			return err
 		}
+	} else if existing, ok := s.pkgTrie.exts[extNum]; ok {
+		if err := handler.HandleErrorf(span, "extension with tag %d for message %s already defined at %v", tag, extendee, existing); err != nil {
+			return err
+		}
+		// NB: even though this is an error, still keep track of the extension
+		// within the package's symbol table
+		pkgSyms.exts[extNum] = span
 	} else {
-		s.exts[extNum] = span
+		pkgSyms.exts[extNum] = span
+		s.pkgTrie.exts[extNum] = span // also add to global map
 	}
 	return nil
 }

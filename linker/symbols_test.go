@@ -32,7 +32,7 @@ import (
 func TestSymbolsPackages(t *testing.T) {
 	t.Parallel()
 
-	var s Symbols
+	s := NewSymbolTable()
 	// default/nameless package is the root
 	assert.Equal(t, &s.pkgTrie, s.getPackage(""))
 
@@ -108,7 +108,7 @@ func TestSymbolsImport(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			var s Symbols
+			s := NewSymbolTable()
 			err := s.Import(fd, h)
 			require.NoError(t, err)
 
@@ -139,7 +139,7 @@ func TestSymbolsImport(t *testing.T) {
 func TestSymbolExtensions(t *testing.T) {
 	t.Parallel()
 
-	var s Symbols
+	s := NewSymbolTable()
 
 	_, err := s.importPackages(ast.UnknownSpan("foo.proto"), "foo.bar", reporter.NewHandler(nil))
 	require.NoError(t, err)
@@ -195,7 +195,7 @@ func TestSymbolExtensions(t *testing.T) {
 func parseAndLink(t *testing.T, contents string) Result {
 	t.Helper()
 	h := reporter.NewHandler(nil)
-	fileAst, err := parser.Parse("test.proto", strings.NewReader(contents), h)
+	fileAst, err := parser.Parse("test.proto", strings.NewReader(contents), h, 0)
 	require.NoError(t, err)
 	parseResult, err := parser.ResultFromAST(fileAst, true, h)
 	require.NoError(t, err)
@@ -272,7 +272,7 @@ func TestDelete(t *testing.T) {
 
 	package foo.bar;
 
-	option go_package = "github.com/bufbuild/protocompile/internal/testprotos";
+	option go_package = "github.com/kralicky/protocompile/internal/testprotos";
 
 	import "google/protobuf/descriptor.proto";
 
@@ -578,7 +578,7 @@ func TestDelete(t *testing.T) {
 
 	parseAndLinkNamed := func(name, contents string, prevDeps ...File) Result {
 		t.Helper()
-		fileAst, err := parser.Parse(name, strings.NewReader(contents), h)
+		fileAst, err := parser.Parse(name, strings.NewReader(contents), h, 0)
 		require.NoError(t, err)
 		parseResult, err := parser.ResultFromAST(fileAst, true, h)
 		require.NoError(t, err)
