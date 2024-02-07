@@ -71,7 +71,7 @@ func resolveInFile[T any](f File, publicImportsOnly bool, checked []string, fn f
 	imports := f.Imports()
 	for i, l := 0, imports.Len(); i < l; i++ {
 		imp := imports.Get(i)
-		if imp.FileDescriptor == nil {
+		if imp.IsPlaceholder() {
 			// this can happen when an import cannot be resolved, but we are trying to
 			// continue anyway to report additional errors (e.g types that can't be
 			// resolved because they are in an import that can't be resolved)
@@ -130,11 +130,19 @@ func (r *result) CheckForUnusedImports(handler *reporter.Handler) {
 		}
 	}
 
-	for i, imp := range imports {
-		path := dependencyPaths[i]
-		info := resAst.NodeInfo(imp)
-		if _, ok := r.usedImports[path]; !ok {
-			handler.HandleWarningWithPos(info, errUnusedImport(imp.Name.AsString()))
+	for i, impNode := range importNodes {
+		dep := deps[i]
+		if dep.IsPlaceholder() {
+			// don't warn on unresolved imports
+			continue
+		}
+		info := resAst.NodeInfo(impNode)
+		if _, ok := r.usedImports[dep.Path()]; !ok {
+			if impNode.Public != nil {
+				// don't warn on public imports, they have side effects
+				continue
+			}
+			handler.HandleWarningWithPos(info, errUnusedImport(impNode.Name.AsString()))
 		}
 	}
 }

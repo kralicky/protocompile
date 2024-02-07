@@ -86,7 +86,10 @@ func TestUnescape(t *testing.T) {
 	}
 	compiler := protocompile.Compiler{
 		Resolver: protocompile.WithStandardImports(protocompile.ResolverFunc(func(path protocompile.UnresolvedPath, _ protocompile.ImportContext) (protocompile.SearchResult, error) {
-			return protocompile.SearchResult{Proto: fileProto}, nil
+			return protocompile.SearchResult{
+				Proto:        fileProto,
+				ResolvedPath: protocompile.ResolvedPath(path),
+			}, nil
 		})),
 	}
 	result, err := compiler.Compile(context.Background(), "foo.proto")

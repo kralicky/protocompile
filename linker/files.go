@@ -269,7 +269,7 @@ type Files []File
 // contains no such file, nil is returned.
 func (f Files) FindFileByPath(path string) File {
 	for _, file := range f {
-		if file == nil {
+		if file.IsPlaceholder() {
 			continue
 		}
 		if file.Path() == path {
@@ -283,7 +283,7 @@ func (f Files) FindFileByPath(path string) File {
 // the given prefix.
 func (f Files) RangeFilesByPrefix(prefix string, fn func(File) bool) {
 	for _, file := range f {
-		if file == nil {
+		if file.IsPlaceholder() {
 			continue
 		}
 		if strings.HasPrefix(file.Path(), prefix) {

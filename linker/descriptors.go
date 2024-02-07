@@ -546,7 +546,11 @@ func (r *result) createImports() fileImports {
 	imps := make([]protoreflect.FileImport, len(fd.Dependency))
 	for i, dep := range fd.Dependency {
 		desc := r.deps.FindFileByPath(dep)
-		imps[i] = protoreflect.FileImport{FileDescriptor: desc}
+		if desc == nil {
+			imps[i] = protoreflect.FileImport{FileDescriptor: NewPlaceholderFile(dep)}
+		} else {
+			imps[i] = protoreflect.FileImport{FileDescriptor: desc}
+		}
 	}
 	for _, publicIndex := range fd.PublicDependency {
 		imps[int(publicIndex)].IsPublic = true
@@ -1664,10 +1668,14 @@ func (f *fldDescriptor) ContainingMessage() protoreflect.MessageDescriptor {
 	if f.extendee != nil {
 		return f.extendee
 	}
-	// Note: if you get a panic here with the message '*linker.result is not protoreflect.MessageDescriptor'
-	// that likely means this linker result is incomplete, and the extendee could not be resolved.
-	// This scenario should be checked for before calling this method.
-	return f.parent.(protoreflect.MessageDescriptor)
+	if m, ok := f.parent.(protoreflect.MessageDescriptor); ok {
+		return m
+	}
+	// Note: if you get here, that means this linker result is incomplete, and
+	// the extendee could not be resolved. This scenario should be checked for
+	// before calling this method, if possible. Otherwise, be sure to handle
+	// the placeholder return value, since this is nonstandard behavior.
+	return NewPlaceholderMessage(protoreflect.FullName(f.proto.GetExtendee()))
 }
 
 func (f *fldDescriptor) Enum() protoreflect.EnumDescriptor {

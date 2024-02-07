@@ -59,7 +59,7 @@ func Link(parsed parser.Result, dependencies Files, symbols *Symbols, handler *r
 		if len(fd.Dependency) == len(filteredDependencies)-1 {
 			// there may be an implicit dependency on google/protobuf/descriptor.proto
 			for i, dep := range filteredDependencies {
-				if dep == nil {
+				if dep.IsPlaceholder() {
 					// the dependency didn't link
 					continue
 				}
@@ -77,13 +77,18 @@ dependencies_ok:
 		dep := filteredDependencies[i]
 		fd.Dependency[i] = dep.Path()
 
-		if dep == nil {
+		if dep.IsPlaceholder() {
 			// handle unresolvable import paths
 			// first, find the import node for this path
 			var importNode *ast.ImportNode
 			if parsedAst := parsed.AST(); parsedAst != nil {
 				for _, node := range parsedAst.Decls {
-					if importNode, _ = node.(*ast.ImportNode); importNode != nil && importNode.Name.AsString() == imp {
+					var ok bool
+					importNode, ok = node.(*ast.ImportNode)
+					if !ok || importNode.IsIncomplete() {
+						continue
+					}
+					if importNode.Name.AsString() == imp {
 						break
 					}
 				}
@@ -269,6 +274,9 @@ func ComputeReflexiveTransitiveClosure(roots Files) Files {
 	seen := map[File]struct{}{}
 	var results Files
 	for _, root := range roots {
+		if root.IsPlaceholder() {
+			continue
+		}
 		results = append(results, computeReflexiveTransitiveClosure(root, seen)...)
 	}
 	return results
@@ -281,6 +289,9 @@ func computeReflexiveTransitiveClosure(root File, seen map[File]struct{}) Files 
 	seen[root] = struct{}{}
 	results := Files{}
 	for _, dep := range root.Dependencies() {
+		if dep.IsPlaceholder() {
+			continue
+		}
 		results = append(results, computeReflexiveTransitiveClosure(dep, seen)...)
 	}
 	return append(results, root)

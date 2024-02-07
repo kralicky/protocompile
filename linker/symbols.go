@@ -183,7 +183,11 @@ func (s *Symbols) Import(fd protoreflect.FileDescriptor, handler *reporter.Handl
 	pkg.mu.RUnlock()
 
 	for i := 0; i < fd.Imports().Len(); i++ {
-		if err := s.Import(fd.Imports().Get(i).FileDescriptor, handler); err != nil {
+		imp := fd.Imports().Get(i)
+		if imp.IsPlaceholder() {
+			continue
+		}
+		if err := s.Import(imp.FileDescriptor, handler); err != nil {
 			return err
 		}
 	}
@@ -217,7 +221,11 @@ func (s *Symbols) Delete(fd protoreflect.FileDescriptor, handler *reporter.Handl
 	}
 
 	for i := 0; i < fd.Imports().Len(); i++ {
-		if err := s.Delete(fd.Imports().Get(i).FileDescriptor, handler); err != nil {
+		imp := fd.Imports().Get(i)
+		if imp.IsPlaceholder() {
+			continue
+		}
+		if err := s.Delete(imp.FileDescriptor, handler); err != nil {
 			return err
 		}
 	}
