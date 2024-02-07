@@ -56,7 +56,7 @@ func TestASTRoundTrips(t *testing.T) {
 
 func testASTRoundTrip(t *testing.T, path string, data []byte) {
 	filename := filepath.Base(path)
-	root, err := parser.Parse(filename, bytes.NewReader(data), reporter.NewHandler(nil))
+	root, err := parser.Parse(filename, bytes.NewReader(data), reporter.NewHandler(nil), 0)
 	require.NoError(t, err)
 	var buf bytes.Buffer
 	err = printAST(&buf, root)

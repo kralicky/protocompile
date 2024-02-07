@@ -55,7 +55,7 @@ func TestTokens(t *testing.T) {
 
 func testTokensSequence(t *testing.T, path string, data []byte) {
 	filename := filepath.Base(path)
-	root, err := parser.Parse(filename, bytes.NewReader(data), reporter.NewHandler(nil))
+	root, err := parser.Parse(filename, bytes.NewReader(data), reporter.NewHandler(nil), 0)
 	require.NoError(t, err)
 	tokens := leavesAsSlice(root)
 	require.NoError(t, err)

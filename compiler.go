@@ -931,11 +931,5 @@ func (t *task) asAST(r *SearchResult) (_ *ast.FileNode, _err error) {
 		return r.AST, nil
 	}
 
-	// defer func() {
-	// 	if r := recover(); r != nil {
-	// 		_err = fmt.Errorf("unknown parse error: %v", r)
-	// 	}
-	// }()
-
-	return parser.Parse(string(r.ResolvedPath), r.Source, t.h)
+	return parser.Parse(string(r.ResolvedPath), r.Source, t.h, r.Version)
 }

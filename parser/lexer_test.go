@@ -872,7 +872,7 @@ func TestStringLiteralMultipleErrors(t *testing.T) {
 }
 
 func newTestLexer(t *testing.T, in io.Reader, h *reporter.Handler) *protoLex {
-	lexer, err := newLexer(in, "test.proto", h)
+	lexer, err := newLexer(in, "test.proto", h, 0)
 	require.NoError(t, err)
 	return lexer
 }
@@ -938,7 +938,7 @@ message Foo {
   optional string three = 3;
 }`
 
-	fileNode, err := Parse("test.proto", strings.NewReader(contents), reporter.NewHandler(nil))
+	fileNode, err := Parse("test.proto", strings.NewReader(contents), reporter.NewHandler(nil), 0)
 	require.NoError(t, err)
 	require.NoError(
 		t,

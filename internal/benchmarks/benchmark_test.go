@@ -157,7 +157,7 @@ func downloadAndExpand(url, targetDir string) (e error) {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("downloading %s resulted in status code %s", url, resp.Status)
 	}
-	if err := os.MkdirAll(targetDir, 0777); err != nil {
+	if err := os.MkdirAll(targetDir, 0o777); err != nil {
 		return err
 	}
 	f, err := os.CreateTemp(targetDir, "testdownload.*.tar.gz")
@@ -213,7 +213,7 @@ func downloadAndExpand(url, targetDir string) (e error) {
 		target := filepath.Join(targetDir, hdr.Name)
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0777); err != nil {
+			if err := os.MkdirAll(target, 0o777); err != nil {
 				return err
 			}
 		case tar.TypeReg:

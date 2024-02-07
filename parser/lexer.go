@@ -129,7 +129,7 @@ type protoLex struct {
 
 var utf8Bom = []byte{0xEF, 0xBB, 0xBF}
 
-func newLexer(in io.Reader, filename string, handler *reporter.Handler) (*protoLex, error) {
+func newLexer(in io.Reader, filename string, handler *reporter.Handler, version int32) (*protoLex, error) {
 	br := bufio.NewReader(in)
 
 	// if file has UTF8 byte order marker preface, consume it
@@ -144,7 +144,7 @@ func newLexer(in io.Reader, filename string, handler *reporter.Handler) (*protoL
 	}
 	return &protoLex{
 		input:   &runeReader{data: contents},
-		info:    ast.NewFileInfo(filename, contents),
+		info:    ast.NewFileInfo(filename, contents, version),
 		handler: handler,
 	}, nil
 }

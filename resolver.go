@@ -73,12 +73,10 @@ type SearchResult struct {
 	// search result, since the AST has greater fidelity with regard to source
 	// positions (even if the descriptor proto includes source code info).
 	ParseResult parser.Result
-	// // A fully linked descriptor that represents the file. If this field is set,
-	// // then the compiler has little or no additional work to do for this file as
-	// // it is already compiled. If this value implements linker.File, there is no
-	// // additional work. Otherwise, the additional work is to compute an index of
-	// // symbols in the file, for efficient lookup.
-	// Desc protoreflect.FileDescriptor
+
+	// Optional document version number. This will be attached to error and
+	// warning reports, but is otherwise not used by the compiler.
+	Version int32
 }
 
 // ResolverFunc is a simple function type that implements Resolver.

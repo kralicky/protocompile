@@ -116,13 +116,17 @@ func newFileNode(info *FileInfo, syntax *SyntaxNode, edition *EditionNode, decls
 }
 
 // NewEmptyFileNode returns an empty AST for a file with the given name.
-func NewEmptyFileNode(filename string) *FileNode {
-	fileInfo := NewFileInfo(filename, []byte{})
+func NewEmptyFileNode(filename string, version int32) *FileNode {
+	fileInfo := NewFileInfo(filename, []byte{}, version)
 	return NewFileNode(fileInfo, nil, nil, fileInfo.AddToken(0, 0))
 }
 
 func (f *FileNode) Name() string {
 	return f.fileInfo.Name()
+}
+
+func (f *FileNode) Version() int32 {
+	return f.fileInfo.Version()
 }
 
 func (f *FileNode) NodeInfo(n Node) NodeInfo {

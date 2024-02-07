@@ -36,7 +36,7 @@ import (
 func TestEmptyParse(t *testing.T) {
 	t.Parallel()
 	errHandler := reporter.NewHandler(nil)
-	ast, err := Parse("foo.proto", bytes.NewReader(nil), errHandler)
+	ast, err := Parse("foo.proto", bytes.NewReader(nil), errHandler, 0)
 	require.NoError(t, err)
 	result, err := ResultFromAST(ast, true, errHandler)
 	require.NoError(t, err)
@@ -74,7 +74,7 @@ func TestJunkParse(t *testing.T) {
 				nil, // ignore warnings
 			))
 			protoName := fmt.Sprintf("%s.proto", name)
-			_, err := Parse(protoName, strings.NewReader(input), errHandler)
+			_, err := Parse(protoName, strings.NewReader(input), errHandler, 0)
 			// we expect this to error... but we don't want it to panic
 			require.Error(t, err, "junk input should have returned error")
 			t.Logf("error from parse: %v", err)
@@ -187,7 +187,7 @@ func parseFileForTest(filename string) (Result, error) {
 		_ = f.Close()
 	}()
 	errHandler := reporter.NewHandler(nil)
-	res, err := Parse(filename, f, errHandler)
+	res, err := Parse(filename, f, errHandler, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +259,7 @@ func TestBasicSuccess(t *testing.T) {
 	r := readerForTestdata(t, "largeproto.proto")
 	handler := reporter.NewHandler(nil)
 
-	fileNode, err := Parse("largeproto.proto", r, handler)
+	fileNode, err := Parse("largeproto.proto", r, handler, 0)
 	require.NoError(t, err)
 
 	result, err := ResultFromAST(fileNode, true, handler)
@@ -280,7 +280,7 @@ func BenchmarkBasicSuccess(b *testing.B) {
 		byteReader := bytes.NewReader(bs)
 		handler := reporter.NewHandler(nil)
 
-		fileNode, err := Parse("largeproto.proto", byteReader, handler)
+		fileNode, err := Parse("largeproto.proto", byteReader, handler, 0)
 		require.NoError(b, err)
 
 		result, err := ResultFromAST(fileNode, true, handler)
@@ -339,7 +339,7 @@ func TestPathological(t *testing.T) {
 				}
 				r := readerForTestdata(t, fileName)
 				handler := reporter.NewHandler(nil)
-				fileNode, err := Parse(fileName, r, handler)
+				fileNode, err := Parse(fileName, r, handler, 0)
 				if canParse {
 					require.NoError(t, err)
 					_, err = ResultFromAST(fileNode, true, handler)
@@ -404,7 +404,7 @@ func TestExtendedSyntax(t *testing.T) {
 				nil, // ignore warnings
 			))
 			protoName := fmt.Sprintf("%s.proto", name)
-			_, err := Parse(protoName, strings.NewReader(input), errHandler)
+			_, err := Parse(protoName, strings.NewReader(input), errHandler, 0)
 			// we expect this to error... but we don't want it to panic
 			require.Error(t, err, "junk input should have returned error")
 			t.Logf("error from parse: %v", err)

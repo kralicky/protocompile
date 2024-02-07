@@ -41,8 +41,10 @@ import (
 	"github.com/kralicky/protocompile/reporter"
 )
 
-type ident string
-type aggregate string
+type (
+	ident     string
+	aggregate string
+)
 
 func TestCustomOptionsAreKnown(t *testing.T) {
 	t.Parallel()
@@ -227,7 +229,7 @@ func TestOptionsInUnlinkedFiles(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			h := reporter.NewHandler(nil)
-			ast, err := parser.Parse("test.proto", strings.NewReader(tc.contents), h)
+			ast, err := parser.Parse("test.proto", strings.NewReader(tc.contents), h, 0)
 			require.NoError(t, err, "failed to parse")
 			res, err := parser.ResultFromAST(ast, true, h)
 			require.NoError(t, err, "failed to produce descriptor proto")
@@ -398,7 +400,7 @@ func TestOptionsEncoding(t *testing.T) {
 			require.NoError(t, err)
 			if !bytes.Equal(actualData, expectedData) {
 				outputDescriptorSetFile := strings.ReplaceAll(descriptorSetFile, ".proto", ".actual.proto")
-				err = os.WriteFile(outputDescriptorSetFile, actualData, 0644)
+				err = os.WriteFile(outputDescriptorSetFile, actualData, 0o644)
 				if err != nil {
 					t.Log("failed to write actual to file")
 				}
@@ -432,7 +434,7 @@ func TestInterpretOptionsWithoutAST(t *testing.T) {
 				if err != nil {
 					return res, err
 				}
-				fileNode, err := parser.Parse(string(name), bytes.NewReader(data), reporter.NewHandler(nil))
+				fileNode, err := parser.Parse(string(name), bytes.NewReader(data), reporter.NewHandler(nil), 0)
 				if err != nil {
 					return res, err
 				}

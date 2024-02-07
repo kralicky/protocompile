@@ -890,7 +890,7 @@ func TestBasicValidation(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			errs := reporter.NewHandler(nil)
-			if ast, err := Parse("test.proto", strings.NewReader(tc.contents), errs); err == nil {
+			if ast, err := Parse("test.proto", strings.NewReader(tc.contents), errs, 0); err == nil {
 				_, _ = ResultFromAST(ast, true, errs)
 			}
 

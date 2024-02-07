@@ -44,6 +44,13 @@ type FileInfo struct {
 	// least one entry. This includes all terminal symbols (tokens) in the AST
 	// as well as all comments.
 	items []itemSpan
+	// Document version, if provided by the resolver. The value is not used for
+	// any purpose other than to allow the caller to attach version information
+	// to the file for use in external tooling.
+	version int32
+	// zero-length-token counts, used for validation.
+	zltTotalCount       int
+	zltConsecutiveCount int
 }
 
 type commentInfo struct {
@@ -67,16 +74,21 @@ type itemSpan struct {
 }
 
 // NewFileInfo creates a new instance for the given file.
-func NewFileInfo(filename string, contents []byte) *FileInfo {
+func NewFileInfo(filename string, contents []byte, version int32) *FileInfo {
 	return &FileInfo{
-		name:  filename,
-		data:  contents,
-		lines: []int{0},
+		name:    filename,
+		data:    contents,
+		lines:   []int{0},
+		version: version,
 	}
 }
 
 func (f *FileInfo) Name() string {
 	return f.name
+}
+
+func (f *FileInfo) Version() int32 {
+	return f.version
 }
 
 // AddLine adds the offset representing the beginning of the "next" line in the file.
@@ -121,29 +133,55 @@ func (f *FileInfo) AddToken(offset, length int) Token {
 		}
 	}
 
-	if len(f.items) > len(f.data)+1 {
-		// sanity check: if we have more tokens than bytes in the file, something
+	// run some sanity checks, bugs in the lexer can cause memory to grow
+	// forever until oom-killed, which is not an ideal user experience
+	if len(f.items)-f.zltTotalCount > len(f.data)+1 {
+		// if we have more non-zero-length tokens than bytes in the file, something
 		// has gone horribly wrong
-		var tokenList strings.Builder
-		for i := range f.items {
-			if i > 0 {
-				tokenList.WriteString("\n")
-			}
-			info := f.TokenInfo(Token(i))
-			start, end := info.Start(), info.End()
-			pos := fmt.Sprintf("%4d:%02d-%02d", start.Line, start.Col, end.Col)
-			tokenText := info.RawText()
-			if len(tokenText) == 0 {
-				tokenText = "(empty)"
-			} else {
-				tokenText = fmt.Sprintf("%q", tokenText)
-			}
-			tokenList.WriteString(fmt.Sprintf("%s | %s", pos, tokenText))
+		f.abort(`
+FATAL: More tokens have been created than could possibly exist in the file.
+Stopping execution to prevent unbounded memory growth.`[1:])
+	} else if f.zltConsecutiveCount > 10 {
+		// too many consecutive zero-length tokens is definitely a bug; at most,
+		// there could be two or three in sequence under certain circumstances.
+		f.abort(`
+FATAL: More than 10 consecutive zero-length tokens have been created.
+Stopping execution to prevent unbounded memory growth.`[1:])
+	}
+
+	f.items = append(f.items, itemSpan{offset: offset, length: length})
+	if length == 0 {
+		f.zltConsecutiveCount++
+		f.zltTotalCount++
+	} else {
+		f.zltConsecutiveCount = 0
+	}
+	return Token(tokenID)
+}
+
+func (f *FileInfo) abort(message string) {
+	var tokenList strings.Builder
+	for i := range f.items {
+		if i > 0 {
+			tokenList.WriteString("\n")
 		}
-		panic(fmt.Sprintf(`
+		info := f.TokenInfo(Token(i))
+		start, end := info.Start(), info.End()
+		pos := fmt.Sprintf("%4d:%02d-%02d", start.Line, start.Col, end.Col)
+		tokenText := info.RawText()
+		if len(tokenText) == 0 {
+			tokenText = "(empty)"
+		} else {
+			tokenText = fmt.Sprintf("%q", tokenText)
+		}
+		tokenList.WriteString(fmt.Sprintf("%s | %s", pos, tokenText))
+	}
+	panic(fmt.Sprintf(`
 ================================================================================
-WARNING: More tokens have been created than could possibly exist in the file.
-Stopping execution to prevent unbounded memory growth.
+%s
+
+This is a bug! If you see this message, please consider reporting it at
+https://github.com/kralicky/protols/issues/new
 
 Accumulated tokens (%d):
 %s
@@ -152,11 +190,7 @@ line:col   | text
 -----------+-----------
 %s
 ================================================================================
-`, len(f.items), f.name, tokenList.String()))
-	}
-
-	f.items = append(f.items, itemSpan{offset: offset, length: length})
-	return Token(tokenID)
+`, message, len(f.items), f.name, tokenList.String()))
 }
 
 // AddComment adds info about a comment to this file. Comments must first be
@@ -745,6 +779,7 @@ func (n NodeInfo) RawText() string {
 
 type FileInfoInterface interface {
 	Name() string
+	Version() int32
 	SourcePos(int) SourcePos
 	NodeInfo(Node) NodeInfo
 	TokenInfo(Token) NodeInfo

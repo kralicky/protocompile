@@ -275,7 +275,7 @@ func TestDataRace(t *testing.T) {
 
 	data, err := os.ReadFile("./internal/testdata/desc_test_complex.proto")
 	require.NoError(t, err)
-	ast, err := parser.Parse("desc_test_complex.proto", bytes.NewReader(data), reporter.NewHandler(nil))
+	ast, err := parser.Parse("desc_test_complex.proto", bytes.NewReader(data), reporter.NewHandler(nil), 0)
 	require.NoError(t, err)
 	parseResult, err := parser.ResultFromAST(ast, true, reporter.NewHandler(nil))
 	require.NoError(t, err)
@@ -451,6 +451,7 @@ func mkResolver(contents map[UnresolvedPath]string) Resolver {
 		return SearchResult{}, os.ErrNotExist
 	})
 }
+
 func TestIncrementalCompiler(t *testing.T) {
 	baseResults := buildBaseDescriptors()
 

@@ -93,8 +93,8 @@ func setTokenName(token int, text string) {
 // depends on the nature of the syntax error and if there are any tokens after the
 // syntax error that can help the parser recover. This error recovery and partial
 // AST production is best effort.
-func Parse(filename string, r io.Reader, handler *reporter.Handler) (*ast.FileNode, error) {
-	lx, err := newLexer(r, filename, handler)
+func Parse(filename string, r io.Reader, handler *reporter.Handler, version int32) (*ast.FileNode, error) {
+	lx, err := newLexer(r, filename, handler, version)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func Parse(filename string, r io.Reader, handler *reporter.Handler) (*ast.FileNo
 	if lx.res == nil {
 		// nil AST means there was an error that prevented any parsing
 		// or the file was empty; synthesize empty non-nil AST
-		lx.res = ast.NewEmptyFileNode(filename)
+		lx.res = ast.NewEmptyFileNode(filename, version)
 	}
 	return lx.res, handler.Error()
 }
