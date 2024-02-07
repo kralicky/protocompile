@@ -399,6 +399,8 @@ func (interp *interpreter) interpretFieldPseudoOptions(fqn string, fld *descript
 	} else if index >= 0 {
 		fldDesc := resolveDescriptor[protoreflect.FieldDescriptor](interp.resolver, fqn)
 		interp.descriptorIndex.OptionsToFieldDescriptors[uo[index]] = fldDesc
+		nm := interp.file.OptionNamePartNode(uo[index].Name[0])
+		interp.descriptorIndex.FieldReferenceNodesToFieldDescriptors[nm] = fldDesc
 		// attribute source code info
 		optNode := interp.file.OptionNode(uo[index])
 		if on, ok := optNode.(*ast.OptionNode); ok {

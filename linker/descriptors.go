@@ -349,6 +349,10 @@ func (o *result) FindFieldDescriptorByFieldReferenceNode(node *ast.FieldReferenc
 	return o.optsDescIndex.FieldReferenceNodesToFieldDescriptors[node]
 }
 
+func (o *result) FindFieldDescriptorByMessageFieldNode(node *ast.MessageFieldNode) protoreflect.FieldDescriptor {
+	return o.optsDescIndex.FieldReferenceNodesToFieldDescriptors[node]
+}
+
 func (o *result) RangeFieldReferenceNodesWithDescriptors(f func(node ast.Node, desc protoreflect.FieldDescriptor) bool) {
 	for node, desc := range o.optsDescIndex.FieldReferenceNodesToFieldDescriptors {
 		if !f(node, desc) {
