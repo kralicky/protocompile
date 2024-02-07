@@ -450,7 +450,9 @@ func generateSourceCodeInfoForReservedRange(sci *sourceCodeInfo, n *ast.RangeNod
 }
 
 func generateSourceCodeInfoForExtensions(opts OptionIndex, sci *sourceCodeInfo, n *ast.ExtendNode, extendIndex, msgIndex *int32, extendPath, msgPath []int32) {
-	sci.newBlockLocWithComments(n, n.OpenBrace, extendPath)
+	if n.OpenBrace != nil {
+		sci.newBlockLocWithComments(n, n.OpenBrace, extendPath)
+	}
 	for _, decl := range n.Decls {
 		switch decl := decl.(type) {
 		case *ast.FieldNode:

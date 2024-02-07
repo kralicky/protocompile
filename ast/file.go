@@ -336,6 +336,30 @@ func (m *ImportNode) AddSemicolon(semi *RuneNode) {
 	m.children = append(m.children, semi)
 }
 
+func NewIncompleteImportNode(keyword *KeywordNode, public *KeywordNode, weak *KeywordNode) *ImportNode {
+	if keyword == nil {
+		panic("keyword is nil")
+	}
+	children := []Node{keyword}
+	if public != nil {
+		children = append(children, public)
+	} else if weak != nil {
+		children = append(children, weak)
+	}
+	return &ImportNode{
+		compositeNode: compositeNode{
+			children: children,
+		},
+		Keyword: keyword,
+		Public:  public,
+		Weak:    weak,
+	}
+}
+
+func (m *ImportNode) IsIncomplete() bool {
+	return m.Name == nil
+}
+
 // PackageNode represents a package declaration. Example:
 //
 //	package foobar.com;

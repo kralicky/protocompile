@@ -30,12 +30,16 @@ import (
 
 // ValidateOptions runs some validation checks on the result that can only
 // be done after options are interpreted.
-func (r *result) ValidateOptions(handler *reporter.Handler) error {
+func (r *result) ValidateOptions(handler *reporter.Handler, lenient bool) error {
 	return walk.Descriptors(r, func(d protoreflect.Descriptor) error {
 		switch d := d.(type) {
 		case protoreflect.FieldDescriptor:
 			if d.IsExtension() {
-				if err := r.validateExtension(d, handler); err != nil {
+				if err := r.validateExtension(d, handler, lenient); err != nil {
+					return err
+				}
+			} else {
+				if err := r.validateWeak(d, handler); err != nil {
 					return err
 				}
 			}
@@ -57,7 +61,7 @@ func (r *result) ValidateOptions(handler *reporter.Handler) error {
 	})
 }
 
-func (r *result) validateExtension(fld protoreflect.FieldDescriptor, handler *reporter.Handler) error {
+func (r *result) validateExtension(fld protoreflect.FieldDescriptor, handler *reporter.Handler, lenient bool) error {
 	// NB: It's a little gross that we don't enforce these in validateBasic().
 	// But it requires linking to resolve the extendee, so we can interrogate
 	// its descriptor.
@@ -65,6 +69,12 @@ func (r *result) validateExtension(fld protoreflect.FieldDescriptor, handler *re
 		fld = xtd.Descriptor()
 	}
 	fd := fld.(*fldDescriptor) //nolint:errcheck
+	if fd.extendee == nil {
+		if lenient {
+			return nil
+		}
+		panic("bug: incomplete extension field descriptor passed to validateExtension() without lenient mode enabled")
+	}
 	if fld.ContainingMessage().Options().(*descriptorpb.MessageOptions).GetMessageSetWireFormat() {
 		// Message set wire format requires that all extensions be messages
 		// themselves (no scalar extensions)
@@ -114,6 +124,14 @@ func (r *result) validatePacked(fld protoreflect.FieldDescriptor, handler *repor
 		file := r.FileNode()
 		info := file.NodeInfo(r.FieldNode(fd.proto).FieldType())
 		return handler.HandleErrorf(info, "packed option is only allowed on numeric, boolean, and enum fields")
+	}
+	return nil
+}
+
+func (r *result) validateWeak(fld protoreflect.FieldDescriptor, handler *reporter.Handler) error {
+	fd := fld.(*fldDescriptor) //nolint:errcheck
+	if fd.proto.GetOptions().GetWeak() {
+		return handler.HandleErrorf(r.FileNode().NodeInfo(r.FieldNode(fd.proto)), "weak fields are a legacy proto1 feature and are no longer supported")
 	}
 	return nil
 }

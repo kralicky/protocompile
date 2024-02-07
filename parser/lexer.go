@@ -234,10 +234,20 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 				return l.endCompoundIdent(lval)
 			}
 
-			// insert a semicolon if the last token was the '}' rune (i.e. end of message)
 			if l.insertSemi != 0 {
 				l.insertSemi = 0
 				return l.writeVirtualSemi(lval)
+			}
+			// insert virtual semicolons following ident tokens we might expect
+			// to be followed by EOF during editing ('extend', 'import')
+			if l.prevSym != nil {
+				switch prev := l.prevSym.(type) {
+				case *ast.IdentNode:
+					switch prev.Val {
+					case "extend", "import", "public", "weak":
+						return l.writeVirtualSemi(lval)
+					}
+				}
 			}
 
 			// we're not actually returning a rune, but this will associate
@@ -497,6 +507,35 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 				case _OPTION:
 					if l.canStartFileElement() {
 						l.insertSemi |= atEOF
+					}
+				case _IMPORT:
+					if l.canStartFileElement() {
+						next, _ := l.peekNextIdentsFast(2)
+						if len(next) > 0 && next[0] == "import" {
+							// import
+							// import [public] "...";
+							l.insertSemi |= atNextNewline
+						} else if len(next) == 2 && (next[0] == "public" || next[0] == "weak") && next[1] == "import" {
+							// import public
+							// import "..."
+							l.insertSemi |= atNextNewline
+						}
+					}
+				case _EXTEND:
+					if l.canStartField() || l.canStartFileElement() {
+						next, nextRune := l.peekNextIdentsFast(2)
+						switch len(next) {
+						case 0:
+							if l.peekNewline() {
+								l.insertSemi |= atNextNewline
+							}
+						case 1:
+							if nextRune != '{' {
+								l.insertSemi |= atNextNewline
+							}
+						case 2:
+							l.insertSemi |= atNextNewline
+						}
 					}
 				case _RETURNS:
 					l.inMethodDecl = false

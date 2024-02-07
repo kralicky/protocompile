@@ -213,6 +213,28 @@ func NewExtendNode(keyword *KeywordNode, extendee IdentValueNode, openBrace *Run
 	return ret
 }
 
+func NewIncompleteExtendNode(keyword *KeywordNode, extendee IdentValueNode) *ExtendNode {
+	if keyword == nil {
+		panic("keyword is nil")
+	}
+	children := []Node{keyword}
+	if extendee != nil {
+		children = append(children, extendee)
+	}
+	ret := &ExtendNode{
+		compositeNode: compositeNode{
+			children: children,
+		},
+		Keyword:  keyword,
+		Extendee: extendee,
+	}
+	return ret
+}
+
+func (e *ExtendNode) IsIncomplete() bool {
+	return e.Extendee == nil || e.OpenBrace == nil || e.CloseBrace == nil
+}
+
 // ExtendElement is an interface implemented by all AST nodes that can
 // appear in the body of an extends declaration.
 type ExtendElement interface {

@@ -116,6 +116,9 @@ DECLS:
 				r.importInsertionPoint = file.NodeInfo(decl).End()
 			}
 		case *ast.ImportNode:
+			if decl.IsIncomplete() {
+				continue
+			}
 			lastSeenImport = decl
 		default:
 			if lastSeenImport != nil {
@@ -209,8 +212,14 @@ func (r *result) createFileDescriptor(filename string, file *ast.FileNode, handl
 		case *ast.EnumNode:
 			fd.EnumType = append(fd.EnumType, r.asEnumDescriptor(decl, syntax, handler))
 		case *ast.ExtendNode:
+			if decl.IsIncomplete() {
+				continue
+			}
 			r.addExtensions(decl, &fd.Extension, &fd.MessageType, syntax, handler, 0)
 		case *ast.ImportNode:
+			if decl.IsIncomplete() {
+				continue
+			}
 			index := len(fd.Dependency)
 			fd.Dependency = append(fd.Dependency, decl.Name.AsString())
 			if decl.Public != nil {
@@ -718,6 +727,9 @@ func (r *result) addMessageBody(msgd *descriptorpb.DescriptorProto, body *ast.Me
 		case *ast.EnumNode:
 			msgd.EnumType = append(msgd.EnumType, r.asEnumDescriptor(decl, syntax, handler))
 		case *ast.ExtendNode:
+			if decl.IsIncomplete() {
+				continue
+			}
 			r.addExtensions(decl, &msgd.Extension, &msgd.NestedType, syntax, handler, depth)
 		case *ast.ExtensionRangeNode:
 			msgd.ExtensionRange = append(msgd.ExtensionRange, r.asExtensionRanges(decl, maxTag, handler)...)

@@ -251,6 +251,18 @@ importDecl
 	| _IMPORT _PUBLIC _STRING_LIT {
 		$$ = ast.NewImportNode($1.ToKeyword(), $2.ToKeyword(), nil, $3)
 	}
+	| _IMPORT {
+		protolex.(*protoLex).ErrExtendedSyntax("expecting string literal or \"weak\" or \"public\"", CategoryIncompleteDecl)
+		$$ = ast.NewIncompleteImportNode($1.ToKeyword(), nil, nil)
+	}
+	| _IMPORT _WEAK {
+		protolex.(*protoLex).ErrExtendedSyntax("expecting string literal", CategoryIncompleteDecl)
+		$$ = ast.NewIncompleteImportNode($1.ToKeyword(), nil, $2.ToKeyword())
+	}
+	| _IMPORT _PUBLIC {
+		protolex.(*protoLex).ErrExtendedSyntax("expecting string literal", CategoryIncompleteDecl)
+		$$ = ast.NewIncompleteImportNode($1.ToKeyword(), $2.ToKeyword(), nil)
+	}
 
 packageDecl
 	: _PACKAGE anyIdentifier {
@@ -259,7 +271,6 @@ packageDecl
 	| _PACKAGE {
 		protolex.(*protoLex).ErrExtendedSyntax("expected package name", CategoryIncompleteDecl)
 		$$ = ast.NewIncompletePackageNode($1.ToKeyword())
-
 	}
 
 optionDecl
@@ -1031,6 +1042,14 @@ messageFieldDecl
 extensionDecl
 	: _EXTEND anyIdentifier '{' extensionBody '}' {
 		$$ = ast.NewExtendNode($1.ToKeyword(), $2, $3, $4, $5)
+	}
+	| _EXTEND anyIdentifier {
+		protolex.(*protoLex).ErrExtendedSyntax("expected '{'", CategoryIncompleteDecl)
+		$$ = ast.NewIncompleteExtendNode($1.ToKeyword(), $2)
+	}
+	| _EXTEND {
+		protolex.(*protoLex).ErrExtendedSyntax("expected message name", CategoryIncompleteDecl)
+		$$ = ast.NewIncompleteExtendNode($1.ToKeyword(), nil)
 	}
 
 extensionBody

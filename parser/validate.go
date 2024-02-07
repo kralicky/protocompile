@@ -95,7 +95,7 @@ func validateImports(res *result, handler *reporter.Handler) error {
 	imports := make(map[string]ast.SourcePos)
 	for _, decl := range fileNode.Decls {
 		imp, ok := decl.(*ast.ImportNode)
-		if !ok {
+		if !ok || imp.IsIncomplete() {
 			continue
 		}
 		info := fileNode.NodeInfo(decl)

@@ -103,25 +103,28 @@ func (r *result) markUsed(importPath string) {
 
 func (r *result) CheckForUnusedImports(handler *reporter.Handler) {
 	resAst := r.AST()
-	var imports []*ast.ImportNode
+	var importNodes []*ast.ImportNode
 	for _, decl := range resAst.Decls {
 		if imp, ok := decl.(*ast.ImportNode); ok {
-			imports = append(imports, imp)
+			if imp.IsIncomplete() {
+				continue
+			}
+			importNodes = append(importNodes, imp)
 		}
 	}
 
-	dependencyPaths := r.FileDescriptorProto().Dependency
+	deps := r.Dependencies()
 	foundDescriptorProto := false
-	for _, imp := range imports {
+	for _, imp := range importNodes {
 		if imp.Name.AsString() == "google/protobuf/descriptor.proto" {
 			foundDescriptorProto = true
 			break
 		}
 	}
 	if !foundDescriptorProto {
-		for i, dep := range dependencyPaths {
-			if dep == "google/protobuf/descriptor.proto" {
-				dependencyPaths = append(dependencyPaths[:i], dependencyPaths[i+1:]...)
+		for i, dep := range deps {
+			if dep.Path() == "google/protobuf/descriptor.proto" {
+				deps = append(deps[:i], deps[i+1:]...)
 				break
 			}
 		}
