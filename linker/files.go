@@ -294,6 +294,21 @@ func (f Files) RangeFilesByPrefix(prefix string, fn func(File) bool) {
 	}
 }
 
+// RangeFilesByPackage calls the given function for all files in f that have
+// the given package.
+func (f Files) RangeFilesByPackage(pkg protoreflect.FullName, fn func(File) bool) {
+	for _, file := range f {
+		if file.IsPlaceholder() {
+			continue
+		}
+		if file.Package() == pkg {
+			if !fn(file) {
+				return
+			}
+		}
+	}
+}
+
 // AsResolver returns a Resolver that uses f as the source of descriptors. If
 // a given query cannot be answered with the files in f, the query will fail
 // with a protoregistry.NotFound error. The implementation just delegates calls
