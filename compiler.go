@@ -453,10 +453,11 @@ func (e *executor) invalidateLocked(r *result, blocks map[ResolvedPath][]*result
 				e.hooks.PostInvalidate(r.resolvedPath, r.res, err == nil)
 			}()
 		}
-		// if an error occurred, r.res will be nil. we can skip deleting
-		// the file in that case, since the link error should cause the
-		// partially updated symbol table to be discarded.
 		if err := e.sym.Delete(r.res, e.h); err != nil {
+			panic(err)
+		}
+	} else if r.partialLinkRes != nil {
+		if err := e.sym.Delete(r.partialLinkRes, e.h); err != nil {
 			panic(err)
 		}
 	}
@@ -720,11 +721,13 @@ func (t *task) asFile(ctx context.Context, pr *SearchResult) (linker.Result, err
 						if err := t.h.HandleErrorWithPos(findImportSpan(parseRes, rerr.path), rerr); err != nil {
 							return nil, err
 						}
+						deps[i] = linker.NewPlaceholderFile(string(rerr.path))
 						continue
 					}
 					if errors.Is(res.err, reporter.ErrInvalidSource) {
 						// continue if the handler has suppressed all errors, to allow
 						// link errors to be reported later
+						deps[i] = res.partialLinkRes
 						continue
 					}
 					return nil, res.err
@@ -812,6 +815,9 @@ func findImportSpan(res parser.Result, dep UnresolvedPath) ast.SourceSpan {
 	}
 	for _, decl := range root.Decls {
 		if imp, ok := decl.(*ast.ImportNode); ok {
+			if imp.IsIncomplete() {
+				continue
+			}
 			if imp.Name.AsString() == string(dep) {
 				return root.NodeInfo(imp.Name)
 			}
@@ -825,11 +831,16 @@ func (t *task) link(parseRes parser.Result, deps linker.Files, overrideDescripto
 	t.e.symTxLock.Lock()
 	pendingSymtab := t.e.sym.Clone()
 	file, err := linker.Link(parseRes, deps, pendingSymtab, t.h)
+	var linkIncomplete bool
 	if err != nil {
-		// If a link error occurs, do not commit the updated symbol table, as it may
-		// be in an inconsistent state.
-		t.e.symTxLock.Unlock()
-		return file, err
+		if !errors.Is(err, reporter.ErrInvalidSource) || file == nil {
+			// If a link error occurs, do not commit the updated symbol table, as it may
+			// be in an inconsistent state.
+			t.e.symTxLock.Unlock()
+			return file, err
+		}
+		// If the file is partially linked, we can commit the updated symbol table.
+		linkIncomplete = true
 	}
 	// commit the updated symbol table
 	t.e.sym = pendingSymtab
@@ -845,7 +856,7 @@ func (t *task) link(parseRes parser.Result, deps linker.Files, overrideDescripto
 		return file, err
 	}
 	// now that options are interpreted, we can do some additional checks
-	if err := file.ValidateOptions(t.h); err != nil {
+	if err := file.ValidateOptions(t.h, linkIncomplete); err != nil {
 		return file, err
 	}
 	if t.r.explicitFile {
@@ -866,6 +877,9 @@ func (t *task) link(parseRes parser.Result, deps linker.Files, overrideDescripto
 
 	if !t.e.c.RetainASTs {
 		file.RemoveAST()
+	}
+	if linkIncomplete {
+		return file, reporter.ErrInvalidSource
 	}
 	return file, nil
 }
