@@ -2,7 +2,9 @@ syntax = "proto2";
 
 package bufbuild.protocompile.test;
 
-option go_package = "github.com/bufbuild/protocompile/internal/testprotos/pkg;pkg";
+import "google/protobuf/descriptor.proto";
+
+option go_package = "github.com/kralicky/protocompile/internal/testprotos/pkg;pkg1";
 
 enum Foo {
   ABC = 0;

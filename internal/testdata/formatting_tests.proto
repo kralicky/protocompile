@@ -6,7 +6,7 @@ import "github.com/kralicky/protocompile/internal/testdata/desc_test_complex.pro
 import "github.com/kralicky/protocompile/internal/testdata/desc_test_options.proto";
 import "google/protobuf/descriptor.proto";
 
-option go_package = "github.com/bufbuild/protocompile/internal/testprotos";
+option go_package = "github.com/kralicky/protocompile/internal/testprotos";
 
 message Foo {
   option (.foo.bar.rept) = {
@@ -24,45 +24,44 @@ message Foo {
     ]
   };
   optional string bar = 1 [ // a
-    (syntax)  = true, // b
-    (import)  = true, // c
-    (foo).bar = "bar",
-    (a)       = 1
+    (foo.bar.syntax) = true, // b
+    (foo.bar.import) = true, // c
+    (foo).bar        = "bar",
+    (a)              = 1
   ];
   optional string baz = 2 [
-    (syntax) = true,
-    (foo)    = {
+    (foo.bar.syntax) = true,
+    (foo)            = {
       bar: "bar"
     },
-    (weak) = true,
-    (a)    = 1
+    (foo.bar.weak) = true,
+    (a)            = 1
   ];
 }
 
 extend google.protobuf.FieldOptions {
-  optional bool   syntax  = 20001;
-  optional bool   import  = 20002;
-  optional bool   public  = 20003;
-  optional bool   weak    = 20004;
-  optional bool   package = 20005;
-  optional string string  = 20006;
-  optional Foo    foo     = 20007;
-  optional int32  a       = 20008;
+  optional bool   syntax  = 21001;
+  optional bool   import  = 21002;
+  optional bool   public  = 21003;
+  optional bool   weak    = 21004;
+  optional bool   package = 21005;
+  optional string string  = 21006;
+  optional Foo    foo     = 21007;
+  optional int32  a       = 21008;
 }
 
 message KeywordCollisionOptions {
   optional uint64 id = 1 [
-    (syntax)  = true,
-    (import)  = true,
-    (public)  = true,
-    weak      = true,
-    (weak)    = true,
-    (package) = true,
-    (foo)     = {
+    (foo.bar.syntax)  = true,
+    (foo.bar.import)  = true,
+    (foo.bar.public)  = true,
+    (foo.bar.weak)    = true,
+    (foo.bar.package) = true,
+    (foo)             = {
       bar: "bar"
     },
-    (a)      = 1,
-    (string) = "string"
+    (a)              = 1,
+    (foo.bar.string) = "string"
   ];
 }
 

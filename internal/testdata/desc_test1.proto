@@ -2,7 +2,7 @@ syntax = "proto2";
 
 package testprotos;
 
-option go_package = "github.com/bufbuild/protocompile/internal/testprotos";
+option go_package = "github.com/kralicky/protocompile/internal/testprotos";
 
 // Comment for TestMessage
 message TestMessage {

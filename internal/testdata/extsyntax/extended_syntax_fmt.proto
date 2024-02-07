@@ -1,15 +1,16 @@
 //protols:debug Wnoerror=empty_decl
+//protols:nogen
 syntax = "proto2"; // virtual semicolon ->
 
-package extsyntaxfmt; // virtual semicolon ->
+package extsyntax.fmt; // virtual semicolon ->
 
 import "google/protobuf/descriptor.proto"; // virtual semicolon ->
 
 extend google.protobuf.ExtensionRangeOptions {
-  optional string  label = 1000; // virtual semicolon ->
-  optional int32   test  = 1001; // virtual semicolon ->
-  optional Message msg   = 1002; // virtual semicolon ->
-  optional List    list  = 1003; // virtual semicolon ->
+  optional string  label = 5000; // virtual semicolon ->
+  optional int32   test  = 5001; // virtual semicolon ->
+  optional Message msg   = 5002; // virtual semicolon ->
+  optional List    list  = 5003; // virtual semicolon ->
 }
 
 message /* a */ /* b */ Message /* c */ { // d

@@ -1,0 +1,15 @@
+//protols:nofmt
+//protols:nogen
+//protols:debug Wnoerror=all
+syntax = "proto3";
+
+message Foo4 {
+  option
+  int32 foo = 1;
+}
+
+enum Enum1 {
+  A = 0;
+  B = 1;
+  option
+}

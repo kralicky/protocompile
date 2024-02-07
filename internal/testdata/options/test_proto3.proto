@@ -10,18 +10,17 @@
 // end, it does not include extension ranges or non-custom-option extensions.
 // It also has a mix of "default" cardinality fields (no explicit label or
 // "optional" keyword) and proto3 optional fields.
+//protols:debug Wnoerror=all
 syntax = "proto3";
 
 package bufbuild.protocompile.test3;
 
-// pull in extra/forked enum options to make sure they are encoded as expected
+import "github.com/kralicky/protocompile/internal/testdata/options/options.proto";
 import "google/protobuf/descriptor.proto";
-import "options.proto";
 
 option go_package   = "foo";
 option java_package = "bar";
 option (file)       = {
-  i32:  0
   i64:  1
   u32:  2
   u64:  3
@@ -242,16 +241,15 @@ message TestMessage {
     (fld_i) = 1,
     (fld_i) = 2,
     (fld_i) = 3,
-
-    (fld) = {
-      i32:  0
-      i64:  1
+    (fld)   = {
+      i64:  0
+      i32:  1
       u32:  2
       u64:  3
       f32:  4
       f64:  5
-      sf32: 6
-      sf64: 7
+      sf64: 6
+      sf32: 7
       fl32: 8.9
       fl64: 9.101
       s32:  -10

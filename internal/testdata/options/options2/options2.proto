@@ -138,52 +138,52 @@ message AllTypes {
 }
 
 extend Extendable {
-  repeated string ext_s = 101;
-  optional uint64 ext_u = 102;
-  optional AllTypes t = 103;
+  repeated string   ext_s = 101;
+  optional uint64   ext_u = 102;
+  optional AllTypes t     = 103;
 }
 
 extend google.protobuf.FileOptions {
-  optional AllTypes file = 1001;
-  repeated int32 file_i = 1002 [packed = true];
+  optional AllTypes file   = 1001;
+  repeated int32    file_i = 1002 [packed = true];
 }
 
 extend google.protobuf.MessageOptions {
-  optional AllTypes msg = 1001;
-  repeated int32 msg_i = 1002 [packed = true];
+  optional AllTypes msg   = 1001;
+  repeated int32    msg_i = 1002 [packed = true];
 }
 
 extend google.protobuf.FieldOptions {
-  optional AllTypes fld = 1001;
-  repeated int32 fld_i = 1002 [packed = true];
+  optional AllTypes fld   = 1001;
+  repeated int32    fld_i = 1002 [packed = true];
 }
 
 extend google.protobuf.OneofOptions {
-  optional AllTypes oo = 1001;
-  repeated int32 oo_i = 1002 [packed = true];
+  optional AllTypes oo   = 1001;
+  repeated int32    oo_i = 1002 [packed = true];
 }
 
 extend google.protobuf.ExtensionRangeOptions {
-  optional AllTypes ext = 1001;
-  repeated int32 ext_i = 1002 [packed = true];
+  optional AllTypes ext   = 1001;
+  repeated int32    ext_i = 1002 [packed = true];
 }
 
 extend google.protobuf.EnumOptions {
-  optional AllTypes en = 1001;
-  repeated int32 en_i = 1002 [packed = true];
+  optional AllTypes en   = 1001;
+  repeated int32    en_i = 1002 [packed = true];
 }
 
 extend google.protobuf.EnumValueOptions {
-  optional AllTypes env = 1001;
-  repeated int32 env_i = 1002 [packed = true];
+  optional AllTypes env   = 1001;
+  repeated int32    env_i = 1002 [packed = true];
 }
 
 extend google.protobuf.ServiceOptions {
-  optional AllTypes svc = 1001;
-  repeated int32 svc_i = 1002 [packed = true];
+  optional AllTypes svc   = 1001;
+  repeated int32    svc_i = 1002 [packed = true];
 }
 
 extend google.protobuf.MethodOptions {
-  optional AllTypes rpc = 1001;
-  repeated int32 rpc_i = 1002 [packed = true];
+  optional AllTypes rpc   = 1001;
+  repeated int32    rpc_i = 1002 [packed = true];
 }

@@ -4,7 +4,7 @@ package testprotos;
 
 import "google/protobuf/descriptor.proto";
 
-option go_package = "github.com/bufbuild/protocompile/internal/testprotos";
+option go_package = "github.com/kralicky/protocompile/internal/testprotos";
 // a file option!
 // TODO: After https://github.com/protocolbuffers/protobuf/pull/12082 makes it into
 //       a protoc release, remove the newline at the end of the file to make the
@@ -71,6 +71,6 @@ extend google.protobuf.OneofOptions {
 }
 
 extend google.protobuf.FileOptions {
-  repeated string flfubar  = 10101;
+  repeated string flfubar  = 20101;
   optional bytes  flfubarb = 10102;
 }

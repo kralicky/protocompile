@@ -5,7 +5,7 @@ package testprotos;
 import "desc_test1.proto";
 import "pkg/desc_test_pkg.proto";
 
-option go_package = "github.com/bufbuild/protocompile/internal/testprotos";
+option go_package = "github.com/kralicky/protocompile/internal/testprotos";
 
 enum Proto3Enum {
   UNKNOWN = 0;

@@ -1,4 +1,5 @@
 //protols:nofmt
+//protols:nogen
 //protols:debug Wnoerror=all
 syntax = "proto2" // foo
 
