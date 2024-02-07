@@ -1994,7 +1994,7 @@ func (interp *interpreter) scalarFieldValue(mc *internal.MessageContext, fldType
 	case descriptorpb.FieldDescriptorProto_TYPE_DOUBLE:
 		if id, ok := v.(ast.Identifier); ok {
 			switch id {
-			case "inf":
+			case "inf", "infinity":
 				return math.Inf(1), nil
 			case "nan":
 				return math.NaN(), nil
@@ -2013,7 +2013,7 @@ func (interp *interpreter) scalarFieldValue(mc *internal.MessageContext, fldType
 	case descriptorpb.FieldDescriptorProto_TYPE_FLOAT:
 		if id, ok := v.(ast.Identifier); ok {
 			switch id {
-			case "inf":
+			case "inf", "infinity":
 				return float32(math.Inf(1)), nil
 			case "nan":
 				return float32(math.NaN()), nil
@@ -2118,7 +2118,7 @@ func (interp *interpreter) scalarFieldValueFromProto(mc *internal.MessageContext
 	case descriptorpb.FieldDescriptorProto_TYPE_DOUBLE:
 		if opt.IdentifierValue != nil {
 			switch opt.GetIdentifierValue() {
-			case "inf":
+			case "inf", "infinity":
 				return math.Inf(1), nil
 			case "nan":
 				return math.NaN(), nil
@@ -2137,7 +2137,7 @@ func (interp *interpreter) scalarFieldValueFromProto(mc *internal.MessageContext
 	case descriptorpb.FieldDescriptorProto_TYPE_FLOAT:
 		if opt.IdentifierValue != nil {
 			switch opt.GetIdentifierValue() {
-			case "inf":
+			case "inf", "infinity":
 				return float32(math.Inf(1)), nil
 			case "nan":
 				return float32(math.NaN()), nil

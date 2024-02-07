@@ -5,7 +5,6 @@ package parser
 
 import (
 	"math"
-	"strings"
 
 	"github.com/kralicky/protocompile/ast"
 )
@@ -470,16 +469,13 @@ fieldScalarValue
 		$$ = $1
 	}
 	| numLit
-	| '-' singularIdent {
+	| '-' _INF {
 		kw := $2.ToKeyword()
-		switch strings.ToLower(kw.Val) {
-		case "inf", "infinity", "nan":
-			// these are acceptable
-		default:
-			// anything else is not
-			protolex.(*protoLex).Error(`only identifiers "inf", "infinity", or "nan" may appear after negative sign`)
-		}
-		// we'll validate the identifier later
+		f := ast.NewSpecialFloatLiteralNode(kw)
+		$$ = ast.NewSignedFloatLiteralNode($1, f)
+	}
+	| '-' _NAN {
+		kw := $2.ToKeyword()
 		f := ast.NewSpecialFloatLiteralNode(kw)
 		$$ = ast.NewSignedFloatLiteralNode($1, f)
 	}

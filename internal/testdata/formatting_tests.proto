@@ -52,6 +52,7 @@ extend google.protobuf.FieldOptions {
 
 message KeywordCollisionOptions {
   optional uint64 id = 1 [
+    (foo.bar.float)   = inf,
     (foo.bar.syntax)  = true,
     (foo.bar.import)  = true,
     (foo.bar.public)  = true,

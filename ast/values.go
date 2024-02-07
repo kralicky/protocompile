@@ -296,8 +296,10 @@ func NewSpecialFloatLiteralNode(name *KeywordNode) *SpecialFloatLiteralNode {
 	switch strings.ToLower(name.Val) {
 	case "inf", "infinity":
 		f = math.Inf(1)
-	default:
+	case "nan":
 		f = math.NaN()
+	default:
+		panic(fmt.Sprintf("invalid special float literal: %q", name.Val))
 	}
 	return &SpecialFloatLiteralNode{
 		KeywordNode: name,

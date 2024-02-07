@@ -29,6 +29,9 @@ message Test {
 	map<string, int32> m = 5;
 
 	optional bytes b = 6 [default = "\0\1\2\3\4\5\6\7fubar!"];
+	repeated float floats = 7;
+	repeated bool bools = 8;
+	repeated Test.Nested._NestedNested.EEE enums = 9;
 
 	extensions 100 to 200;
 
@@ -109,8 +112,22 @@ message Another {
 	option (map_vals).vals = {key: "foo"}; // no value
 	option (map_vals).vals = {key: "bar", value: {name: "baz"}};
 
+	option (a).test.floats = 1.0;
+	option (a).test.floats = inf;
+	option (a).test.floats = infinity;
+	option (a).test.floats = -inf;
+	option (a).test.floats = -infinity;
+	option (a).test.floats = nan;
+	option (a).test.floats = -nan;
+
+	option (a).test.bools = true;
+	option (a).test.bools = false;
+
+	option (a).test.enums = V1;
+
+
     optional Test test = 1;
-    optional Test.Nested._NestedNested.EEE fff = 2 [default = V1];
+    optional Test.Nested._NestedNested.EEE fff = 2 [default = V1, json_name = "fff"];
 }
 
 message Validator {
@@ -232,6 +249,9 @@ message KeywordCollisions {
 	optional int32 true = 33;
 	optional int32 false = 34;
 	optional int32 default = 35;
+	optional float inf = 36;
+	optional float infinity = 37;
+	optional float nan = 38;
 }
 
 extend google.protobuf.FieldOptions {
@@ -270,7 +290,10 @@ extend google.protobuf.FieldOptions {
 	optional int32 true = 20033;
 	optional int32 false = 20034;
 	optional int32 default = 20035;
-	optional KeywordCollisions boom = 20036;
+	optional float inf = 20036;
+	optional float infinity = 20037;
+	optional float nan = 20038;
+	optional KeywordCollisions boom = 20039;
 }
 
 message KeywordCollisionOptions {
@@ -283,7 +306,8 @@ message KeywordCollisionOptions {
 		(optional) = true, (repeated) = true, (required) = true,
 		(message) = true, (enum) = true, (service) = true, (rpc) = true,
 		(option) = true, (extend) = true, (extensions) = true, (reserved) = true,
-		(to) = true, (true) = 111, (false) = -111, (default) = 222
+		(to) = true, (true) = 111, (false) = -111, (default) = 222,
+		(inf) = inf, (infinity) = infinity, (nan) = nan
 	];
 	optional string name = 2 [
 		(boom) = {
@@ -295,7 +319,8 @@ message KeywordCollisionOptions {
 			optional: true, repeated: true, required: true,
 			message: true, enum: true, service: true, rpc: true,
 			option: true, extend: true, extensions: true, reserved: true,
-			to: true, true: 111, false: -111, default: 222
+			to: true, true: 111, false: -111, default: 222,
+			inf: -inf, infinity: -infinity, nan: -nan
 		}
 	];
 }

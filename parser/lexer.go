@@ -164,6 +164,7 @@ var keywords = map[string]int{
 	"group":      _GROUP,
 	"import":     _IMPORT,
 	"inf":        _INF,
+	"infinity":   _INF,
 	"int32":      _INT32,
 	"int64":      _INT64,
 	"map":        _MAP,
