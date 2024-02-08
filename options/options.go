@@ -1373,7 +1373,9 @@ func (interp *interpreter) interpretField(mc *internal.MessageContext, msg proto
 		if fieldDesc == nil {
 			continue
 		}
-		interp.descriptorIndex.FieldReferenceNodesToFieldDescriptors[interpretedField.node] = fieldDesc
+		// recursively index field references; this only happens once per top level
+		// message literal (if the field is a message literal)
+		interp.indexInterpretedFieldsRecursive(interpretedField, fieldDesc)
 
 		// index enum value references used as field values:
 		// option (foo) = {
@@ -1409,6 +1411,16 @@ func (interp *interpreter) indexEnumValueRef(fld protoreflect.FieldDescriptor, o
 	switch v := optValNode.(type) {
 	case ast.IdentValueNode:
 		interp.descriptorIndex.EnumValueIdentNodesToEnumValueDescriptors[v] = enumDesc.Values().ByName(protoreflect.Name(v.AsIdentifier()))
+	}
+}
+
+func (interp *interpreter) indexInterpretedFieldsRecursive(interpretedField *interpretedField, fieldDesc protoreflect.FieldDescriptor) {
+	if interpretedField.node == nil {
+		return
+	}
+	interp.descriptorIndex.FieldReferenceNodesToFieldDescriptors[interpretedField.node] = fieldDesc
+	for _, f := range interpretedField.value.msgVal {
+		interp.indexInterpretedFieldsRecursive(f, fieldDesc.Message().Fields().ByNumber(protowire.Number(f.number)))
 	}
 }
 
@@ -2199,15 +2211,12 @@ func (interp *interpreter) messageLiteralValue(mc *internal.MessageContext, fiel
 	flds := make([]*interpretedField, 0, len(fieldNodes))
 	var foundAnyNode bool
 	for _, fieldNode := range fieldNodes {
-		if fieldNode.IsIncomplete() {
-			continue
-		}
 		if origPath == "" {
 			mc.OptAggPath = fieldNode.Name.Value()
 		} else {
 			mc.OptAggPath = origPath + "." + fieldNode.Name.Value()
 		}
-		if fieldNode.Name.IsAnyTypeReference() {
+		if fieldNode.Name.IsAnyTypeReference() && !fieldNode.IsIncomplete() {
 			if fmd.FullName() != "google.protobuf.Any" {
 				return interpretedFieldValue{}, reporter.Errorf(interp.nodeInfo(fieldNode.Name.URLPrefix), "%vtype references are only allowed for google.protobuf.Any, but this type is %s", mc, fmd.FullName())
 			}
@@ -2306,6 +2315,12 @@ func (interp *interpreter) messageLiteralValue(mc *internal.MessageContext, fiel
 					"%vfield %s not found", mc, string(fieldNode.Name.Name.AsIdentifier()))
 			} else if err != nil {
 				return interpretedFieldValue{}, reporter.Error(interp.nodeInfo(fieldNode.Name), err)
+			}
+			if fieldNode.IsIncomplete() {
+				// we can't save the incomplete field, but if we get this far, index the
+				// field descriptor so it can be queried from the incomplete field node.
+				interp.descriptorIndex.FieldReferenceNodesToFieldDescriptors[fieldNode] = ffld
+				continue
 			}
 			if fieldNode.Sep == nil && ffld.Message() == nil {
 				// If there is no separator, the field type should be a message.

@@ -277,6 +277,10 @@ optionDecl
 	: _OPTION optionName '=' optionValue {
 		$$ = ast.NewOptionNode($1.ToKeyword(), $2, $3, $4)
 	}
+	| _OPTION optionName '=' {
+		protolex.(*protoLex).ErrExtendedSyntax("expected value", CategoryIncompleteDecl)
+		$$ = ast.NewIncompleteOptionNode($1.ToKeyword(), $2, $3, nil)
+	}
 	| _OPTION optionName {
 		protolex.(*protoLex).ErrExtendedSyntax("expected '='", CategoryIncompleteDecl)
 		$$ = ast.NewIncompleteOptionNode($1.ToKeyword(), $2, nil, nil)
@@ -411,16 +415,18 @@ messageLiteralField
 			$$ = nil
 		}
 	}
+	| messageLiteralFieldName ':' virtualSemicolon {
+		protolex.(*protoLex).ErrExtendedSyntax("expected value", CategoryIncompleteDecl)
+		n := ast.NewIncompleteMessageFieldNode($1, $2, nil)
+		n.AddSemicolon($3)
+		$$ = n
+	}
 	| messageLiteralFieldName messageValue {
 		if $1 != nil && $2 != nil {
 			$$ = ast.NewMessageFieldNode($1, nil, $2)
 		} else {
 			$$ = nil
 		}
-	}
-	| messageLiteralFieldName ';' {
-		protolex.(*protoLex).ErrExtendedSyntax("expected ':'", CategoryIncompleteDecl)
-		$$ = ast.NewIncompleteMessageFieldNode($1, nil, nil)
 	}
 
 singularIdent

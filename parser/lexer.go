@@ -283,6 +283,8 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 			l.insertSemi = immediate
 		case ']':
 			l.insertSemi = immediate
+		case ':':
+			l.insertSemi = atNextNewline | onlyIfLastTokenOnLine
 		case '\n':
 			if l.insertSemi&atNextNewline != 0 {
 				prev := l.prevSym

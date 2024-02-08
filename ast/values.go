@@ -545,5 +545,20 @@ func NewIncompleteMessageFieldNode(name *FieldReferenceNode, sep *RuneNode, val 
 }
 
 func (n *MessageFieldNode) IsIncomplete() bool {
-	return n.Sep == nil || n.Val == NoSourceNode{}
+	if n.Val == (NoSourceNode{}) {
+		return true
+	}
+	if n.Sep == nil {
+		switch n.Val.(type) {
+		case *MessageLiteralNode, *ArrayLiteralNode:
+			return false
+		default:
+			return true
+		}
+	}
+	return false
+}
+
+func (n *MessageFieldNode) AddSemicolon(semi *RuneNode) {
+	n.children = append(n.children, semi)
 }

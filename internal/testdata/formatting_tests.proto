@@ -9,6 +9,15 @@ import "google/protobuf/descriptor.proto";
 option go_package = "github.com/kralicky/protocompile/internal/testprotos";
 
 message Foo {
+  option (foo.bar.eee) = OK;
+  option (foo.bar.a)   = {
+    fff: V2
+    test: {
+      enums: [V1]
+      bools: [true]
+    }
+  };
+  option (mfubar)        = true;
   option (.foo.bar.rept) = {
     foo: "abc"
     s    <name: "foo", id: 123>
