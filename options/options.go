@@ -98,6 +98,12 @@ func WithOverrideDescriptorProto(f linker.File) InterpreterOption {
 	}
 }
 
+func WithInterpretLenient() InterpreterOption {
+	return func(interp *interpreter) {
+		interp.lenient = true
+	}
+}
+
 // InterpretOptions interprets options in the given linked result, returning
 // an index that can be used to generate source code info. This step mutates
 // the linked result's underlying proto to move option elements out of the
@@ -106,7 +112,7 @@ func WithOverrideDescriptorProto(f linker.File) InterpreterOption {
 // The given handler is used to report errors and warnings. If any errors are
 // reported, this function returns a non-nil error.
 func InterpretOptions(linked linker.Result, handler *reporter.Handler, opts ...InterpreterOption) (sourceinfo.OptionIndex, sourceinfo.OptionDescriptorIndex, error) {
-	return interpretOptions(false, linked, linker.ResolverFromFile(linked), handler, opts)
+	return interpretOptions(linked, linker.ResolverFromFile(linked), handler, opts)
 }
 
 // InterpretOptionsLenient interprets options in a lenient/best-effort way in
@@ -119,7 +125,7 @@ func InterpretOptions(linked linker.Result, handler *reporter.Handler, opts ...I
 // Any options that are uninterpretable (due to such errors) will remain in the
 // "uninterpreted_option" fields.
 func InterpretOptionsLenient(linked linker.Result, opts ...InterpreterOption) (sourceinfo.OptionIndex, sourceinfo.OptionDescriptorIndex, error) {
-	return interpretOptions(true, linked, linker.ResolverFromFile(linked), reporter.NewHandler(nil), opts)
+	return interpretOptions(linked, linker.ResolverFromFile(linked), reporter.NewHandler(nil), append(opts, WithInterpretLenient()))
 }
 
 // InterpretUnlinkedOptions does a best-effort attempt to interpret options in
@@ -134,14 +140,13 @@ func InterpretOptionsLenient(linked linker.Result, opts ...InterpreterOption) (s
 // effectively ignored. Any options that are uninterpretable (due to such
 // errors) will remain in the "uninterpreted_option" fields.
 func InterpretUnlinkedOptions(parsed parser.Result, opts ...InterpreterOption) (sourceinfo.OptionIndex, sourceinfo.OptionDescriptorIndex, error) {
-	return interpretOptions(true, noResolveFile{parsed}, nil, reporter.NewHandler(nil), opts)
+	return interpretOptions(noResolveFile{parsed}, nil, reporter.NewHandler(nil), append(opts, WithInterpretLenient()))
 }
 
-func interpretOptions(lenient bool, file file, res linker.Resolver, handler *reporter.Handler, interpOpts []InterpreterOption) (sourceinfo.OptionIndex, sourceinfo.OptionDescriptorIndex, error) {
+func interpretOptions(file file, res linker.Resolver, handler *reporter.Handler, interpOpts []InterpreterOption) (sourceinfo.OptionIndex, sourceinfo.OptionDescriptorIndex, error) {
 	interp := interpreter{
 		file:            file,
 		resolver:        res,
-		lenient:         lenient,
 		reporter:        handler,
 		index:           sourceinfo.OptionIndex{},
 		descriptorIndex: sourceinfo.NewOptionDescriptorIndex(),

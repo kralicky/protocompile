@@ -100,6 +100,8 @@ type Compiler struct {
 
 	Hooks CompilerHooks
 
+	InterpretOptionsLenient bool
+
 	exec *executor
 }
 
@@ -203,6 +205,7 @@ func (c *Compiler) Compile(ctx context.Context, paths ...ResolvedPath) (CompileR
 			sym:     &linker.Symbols{},
 			results: map[ResolvedPath]*result{},
 			hooks:   c.Hooks,
+			lenient: c.InterpretOptionsLenient,
 		}
 		if c.RetainResults {
 			c.exec = e
@@ -376,7 +379,8 @@ type executor struct {
 	mu      sync.Mutex
 	results map[ResolvedPath]*result
 
-	hooks CompilerHooks
+	hooks   CompilerHooks
+	lenient bool
 }
 
 type ImportContext parser.Result
@@ -757,7 +761,15 @@ func (t *task) asFile(ctx context.Context, pr *SearchResult) (linker.Result, err
 		t.released = false
 	}
 
-	return t.link(parseRes, deps, overrideDescriptorProto)
+	var interpretOpts []options.InterpreterOption
+	if overrideDescriptorProto != nil {
+		interpretOpts = []options.InterpreterOption{options.WithOverrideDescriptorProto(overrideDescriptorProto)}
+	}
+	if t.e.lenient {
+		interpretOpts = append(interpretOpts, options.WithInterpretLenient())
+	}
+
+	return t.link(parseRes, deps, interpretOpts...)
 }
 
 func (e *executor) checkForDependencyCycle(ctx context.Context, res *result, sequence []ResolvedPath, span ast.SourceSpan, checked map[ResolvedPath]struct{}) error {
@@ -827,7 +839,7 @@ func findImportSpan(res parser.Result, dep UnresolvedPath) ast.SourceSpan {
 	return ast.UnknownSpan(res.FileNode().Name())
 }
 
-func (t *task) link(parseRes parser.Result, deps linker.Files, overrideDescriptorProtoRes linker.File) (linker.Result, error) {
+func (t *task) link(parseRes parser.Result, deps linker.Files, interpretOpts ...options.InterpreterOption) (linker.Result, error) {
 	t.e.symTxLock.Lock()
 	pendingSymtab := t.e.sym.Clone()
 	file, err := linker.Link(parseRes, deps, pendingSymtab, t.h)
@@ -845,11 +857,6 @@ func (t *task) link(parseRes parser.Result, deps linker.Files, overrideDescripto
 	// commit the updated symbol table
 	t.e.sym = pendingSymtab
 	t.e.symTxLock.Unlock()
-
-	var interpretOpts []options.InterpreterOption
-	if overrideDescriptorProtoRes != nil {
-		interpretOpts = []options.InterpreterOption{options.WithOverrideDescriptorProto(overrideDescriptorProtoRes)}
-	}
 
 	optsIndex, descIndex, err := options.InterpretOptions(file, t.h, interpretOpts...)
 	if err != nil {
