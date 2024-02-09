@@ -157,12 +157,16 @@ func (f *FileNode) SourcePos(offset int) SourcePos {
 	return f.fileInfo.SourcePos(offset)
 }
 
-func (f *FileNode) ItemAtOffset(offset int) Token {
-	return f.fileInfo.TokenAtOffset(offset, true)
+// ItemAtOffset returns the token or comment at the given offset. Only one of
+// the return values will be valid. If the item is a token then the returned
+// comment will be a zero value and thus invalid (i.e. comment.IsValid() returns
+// false). If the item is a comment then the returned token will be TokenError.
+func (f *FileNode) ItemAtOffset(offset int) (Token, Comment) {
+	return f.fileInfo.GetItem(f.fileInfo.TokenAtOffset(offset).AsItem())
 }
 
 func (f *FileNode) TokenAtOffset(offset int) Token {
-	return f.fileInfo.TokenAtOffset(offset, false)
+	return f.fileInfo.TokenAtOffset(offset)
 }
 
 func (f *FileNode) Pragma(key string) (string, bool) {

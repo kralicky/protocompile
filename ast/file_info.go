@@ -461,7 +461,7 @@ func (f *FileInfo) SourcePos(offset int) SourcePos {
 	}
 }
 
-func (f *FileInfo) TokenAtOffset(offset int, includeComments bool) Token {
+func (f *FileInfo) TokenAtOffset(offset int) Token {
 	if offset < 0 || offset > len(f.data) || len(f.items) == 0 {
 		return TokenError
 	}
@@ -522,9 +522,6 @@ func (f *FileInfo) TokenAtOffset(offset int, includeComments bool) Token {
 	target := Token(targetIdx)
 	if f.items[target].offset > offsetMax {
 		// no tokens on the target line
-		return TokenError
-	}
-	if f.isComment(Item(targetIdx)) && !includeComments {
 		return TokenError
 	}
 
