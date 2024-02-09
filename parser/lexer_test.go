@@ -97,6 +97,9 @@ func TestLexer(t *testing.T) {
 		optional .
 		optional .g
 		optional string name = 1;
+		optional uint64 id = 2 [
+			(syntax) =
+		]
 	}
 
 	// some strange cases
@@ -403,6 +406,9 @@ func TestLexer(t *testing.T) {
 		//   optional .
 		//   optional .g
 		//   optional string name = 1;
+		//   optional uint64 id = 2 [
+		//     (syntax) =
+		//   ]
 		// }
 		219: {t: _MESSAGE, v: "message"},
 		220: {t: _SINGULAR_IDENT, v: "Simple"},
@@ -421,6 +427,15 @@ func TestLexer(t *testing.T) {
 		{t: '=', v: '='},
 		{t: _INT_LIT, v: uint64(1)},
 		{t: ';', v: ';', virtual: false},
+		{t: _OPTIONAL, v: "optional"},
+		{t: _UINT64, v: "uint64"},
+		{t: _SINGULAR_IDENT, v: "id"},
+		{t: '=', v: '='},
+		{t: _INT_LIT, v: uint64(2)},
+		{t: '[', v: '['},
+		{t: _EXTENSION_IDENT, v: "(syntax)"},
+		{t: '=', v: '='},
+		{t: ',', v: ',', virtual: true},
 		{t: '}', v: '}'},
 		{t: ';', v: ';', virtual: true},
 

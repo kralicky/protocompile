@@ -276,7 +276,9 @@ func (r *result) asUninterpretedOptions(nodes []*ast.OptionNode) []*descriptorpb
 	opts := make([]*descriptorpb.UninterpretedOption, 0, len(nodes))
 	for _, n := range nodes {
 		if n.IsIncomplete() {
-			continue
+			if n.Name == nil || !ast.ExtendedSyntaxEnabled {
+				continue
+			}
 		}
 		opts = append(opts, r.asUninterpretedOption(n))
 	}

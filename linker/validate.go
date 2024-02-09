@@ -243,6 +243,9 @@ func (r *result) hasCustomJSONName(fdProto *descriptorpb.FieldDescriptorProto) b
 		return false
 	}
 	for _, opt := range opts.Options {
+		if opt.IsIncomplete() {
+			continue
+		}
 		if len(opt.Name.Parts) == 1 &&
 			opt.Name.Parts[0].Name.AsIdentifier() == "json_name" &&
 			!opt.Name.Parts[0].IsExtension() {

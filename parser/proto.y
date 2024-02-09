@@ -122,7 +122,7 @@ import (
 %type <mtdElement>   methodElement
 %type <mtdElements>  methodElements methodBody
 %type <mtdMsgType>   methodMessageType
-%type <b>            nonVirtualSemicolonOrInvalidComma optionalTrailingComma nonVirtualSemicolon virtualSemicolon messageLiteralOpen messageLiteralClose
+%type <b>            nonVirtualSemicolonOrInvalidComma optionalTrailingComma virtualComma nonVirtualSemicolon virtualSemicolon messageLiteralOpen messageLiteralClose
 
 // same for terminals
 %token <sv>      _STRING_LIT
@@ -449,11 +449,11 @@ messageLiteralFieldName
 	: singularIdent {
 		$$ = ast.NewFieldReferenceNode($1)
 	}
-	| '[' _QUALIFIED_IDENT ']' ';'  {
-		$$ = ast.NewExtensionFieldReferenceNode($1, $2, $3)
+	| '[' _QUALIFIED_IDENT virtualComma ']' ';'  {
+		$$ = ast.NewExtensionFieldReferenceNode($1, $2, $4)
 	}
-	| '[' _QUALIFIED_IDENT '/' anyIdentifier ']' ';' {
-		$$ = ast.NewAnyTypeReferenceNode($1, $2, $3, $4, $5)
+	| '[' _QUALIFIED_IDENT '/' anyIdentifier virtualComma ']' ';' {
+		$$ = ast.NewAnyTypeReferenceNode($1, $2, $3, $4, $6)
 	}
 	| '[' error ']' ';' {
 		$$ = nil
@@ -500,7 +500,7 @@ messageValue
 	}
 
 listLiteral
-	: '[' listElements optionalTrailingComma ']' {
+	: '[' listElements virtualComma ']' {
 		if $2 == nil {
 			$$ = ast.NewArrayLiteralNode($1, nil, nil, $4)
 		} else {
@@ -510,17 +510,7 @@ listLiteral
 			$$ = ast.NewArrayLiteralNode($1, $2.vals, $2.commas, $4)
 		}
 	}
-	| '[' listElements optionalTrailingComma ';' ']' {
-		if $2 == nil {
-			$$ = ast.NewArrayLiteralNode($1, nil, nil, $5)
-		} else {
-			if $3 != nil {
-				$2.commas = append($2.commas, $3)
-			}
-			$$ = ast.NewArrayLiteralNode($1, $2.vals, $2.commas, $5)
-		}
-	}
-	| '[' ']' {
+	| '[' virtualComma ']' {
 		$$ = ast.NewArrayLiteralNode($1, nil, nil, $2)
 	}
 	| '[' error ']' {
@@ -545,7 +535,7 @@ listElement
 	}
 
 listOfMessagesLiteral
-	: '[' messageLiterals optionalTrailingComma ']' {
+	: '[' messageLiterals virtualComma ']' {
 		if $2 == nil {
 			$$ = ast.NewArrayLiteralNode($1, nil, nil, $4)
 		} else {
@@ -553,16 +543,6 @@ listOfMessagesLiteral
 				$2.commas = append($2.commas, $3)
 			}
 			$$ = ast.NewArrayLiteralNode($1, $2.vals, $2.commas, $4)
-		}
-	}
-	| '[' messageLiterals optionalTrailingComma ';' ']' {
-		if $2 == nil {
-			$$ = ast.NewArrayLiteralNode($1, nil, nil, $5)
-		} else {
-			if $3 != nil {
-				$2.commas = append($2.commas, $3)
-			}
-			$$ = ast.NewArrayLiteralNode($1, $2.vals, $2.commas, $5)
 		}
 	}
 	| '[' ']' {
@@ -651,39 +631,44 @@ fieldCardinality
 	| _REPEATED
 
 compactOptions
-	: '[' compactOptionDecls optionalTrailingComma ']' {
-		if $3 != nil {
-			$2.commas = append($2.commas, $3)
+	: '[' compactOptionDecls ']' {
+		if r := $2.options[len($2.options)-1].Semicolon; r != nil && !r.Virtual {
+			protolex.(*protoLex).ErrExtendedSyntax("unexpected trailing '"+string(r.Rune)+"'", CategoryExtraTokens)
 		}
-		if len($2.options) == 0 {
-			protolex.(*protoLex).ErrExtendedSyntax("compact options list cannot be empty", CategoryEmptyDecl)
-		}
-		$$ = ast.NewCompactOptionsNode($1, $2.options, $2.commas, $4)
+		$$ = ast.NewCompactOptionsNode($1, $2.options, $3)
+	}
+	| '[' ']' {
+		protolex.(*protoLex).ErrExtendedSyntax("compact options list cannot be empty", CategoryEmptyDecl)
+		$$ = ast.NewCompactOptionsNode($1, nil, $2)
 	}
 
-compactOptionDecls :
-	compactOption {
+compactOptionDecls
+	:	compactOption ',' {
+		$1.AddSemicolon($2)
 		$$ = &compactOptionSlices{options: []*ast.OptionNode{$1}}
 	}
-	| compactOptionDecls ',' compactOption {
-		if len($1.options) == 0 {
-			protolex.(*protoLex).ErrExtendedSyntaxAt("expected option before ','", $2, CategoryExtraTokens)
-		}
-		$1.options = append($1.options, $3)
-		$1.commas = append($1.commas, $2)
+	| compactOptionDecls compactOption ',' {
+		$2.AddSemicolon($3)
+		$1.options = append($1.options, $2)
 		$$ = $1
 	}
-	| {
-		$$ = &compactOptionSlices{options: []*ast.OptionNode{}}
-	}
+
 
 compactOption
 	: optionName '=' compactOptionValue {
 		$$ = ast.NewCompactOptionNode($1, $2, $3)
 	}
+	| optionName '=' {
+		protolex.(*protoLex).ErrExtendedSyntax("expected value", CategoryIncompleteDecl)
+		$$ = ast.NewIncompleteCompactOptionNode($1, $2)
+	}
 	| optionName {
 		protolex.(*protoLex).ErrExtendedSyntax("expected '='", CategoryIncompleteDecl)
-		$$ = ast.NewIncompleteCompactOptionNode($1, nil, nil)
+		$$ = ast.NewIncompleteCompactOptionNode($1, nil)
+	}
+	| {
+		protolex.(*protoLex).ErrExtendedSyntax("expected option name", CategoryIncompleteDecl)
+		$$ = ast.NewIncompleteCompactOptionNode(nil, nil)
 	}
 
 groupDecl
@@ -1556,6 +1541,14 @@ virtualSemicolon
 	: ';' {
 		if !$1.Virtual {
 			protolex.(*protoLex).ErrExtendedSyntaxAt("unexpected ';'", $1, CategoryExtraTokens)
+		}
+		$$ = $1
+	}
+
+virtualComma
+	: ',' {
+		if !$1.Virtual {
+			protolex.(*protoLex).ErrExtendedSyntaxAt("unexpected ','", $1, CategoryExtraTokens)
 		}
 		$$ = $1
 	}

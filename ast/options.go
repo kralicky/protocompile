@@ -45,7 +45,7 @@ type OptionNode struct {
 	Name      *OptionNameNode
 	Equals    *RuneNode
 	Val       ValueNode
-	Semicolon *RuneNode // absent for compact options
+	Semicolon *RuneNode // for compact options, this is actually a comma
 
 	incomplete bool
 }
@@ -167,7 +167,7 @@ func (n *OptionNode) IsIncomplete() bool {
 	return n.incomplete || n.Name.IsIncomplete()
 }
 
-func NewIncompleteCompactOptionNode(name *OptionNameNode, equals *RuneNode, val ValueNode) *OptionNode {
+func NewIncompleteCompactOptionNode(name *OptionNameNode, equals *RuneNode) *OptionNode {
 	var children []Node
 	if name != nil {
 		children = append(children, name)
@@ -175,19 +175,13 @@ func NewIncompleteCompactOptionNode(name *OptionNameNode, equals *RuneNode, val 
 	if equals != nil {
 		children = append(children, equals)
 	}
-	if val != nil {
-		children = append(children, val)
-	} else {
-		val = NoSourceNode{}
-	}
-
 	return &OptionNode{
 		compositeNode: compositeNode{
 			children: children,
 		},
 		Name:       name,
 		Equals:     equals,
-		Val:        val,
+		Val:        NoSourceNode{},
 		incomplete: true,
 	}
 }
@@ -253,6 +247,9 @@ func OptionNameNodeFromIdentValue(ident IdentValueNode) *OptionNameNode {
 }
 
 func (n *OptionNameNode) IsIncomplete() bool {
+	if n == nil {
+		return true
+	}
 	for _, part := range n.Parts {
 		if part.IsIncomplete() {
 			return true
@@ -446,26 +443,19 @@ func (a *FieldReferenceNode) Value() string {
 //	[deprecated = true, json_name = "foo_bar"]
 type CompactOptionsNode struct {
 	compositeNode
-	OpenBracket *RuneNode
-	Options     []*OptionNode
-	// Commas represent the separating ',' characters between options. The
-	// length of this slice must be exactly len(Options)-1, with each item
-	// in Options having a corresponding item in this slice *except the last*
-	// (since a trailing comma is not allowed).
-	Commas       []*RuneNode
+	OpenBracket  *RuneNode
+	Options      []*OptionNode
 	CloseBracket *RuneNode
 }
 
 // NewCompactOptionsNode creates a *CompactOptionsNode. All args must be
-// non-nil. The commas arg must have a length that is one less than the
-// length of opts. The opts arg must not be empty.
-func NewCompactOptionsNode(openBracket *RuneNode, opts []*OptionNode, commas []*RuneNode, closeBracket *RuneNode) *CompactOptionsNode {
-	children := createCommaSeparatedNodes(
-		[]Node{openBracket},
-		opts,
-		commas,
-		[]Node{closeBracket},
-	)
+// non-nil.
+func NewCompactOptionsNode(openBracket *RuneNode, opts []*OptionNode, closeBracket *RuneNode) *CompactOptionsNode {
+	children := []Node{openBracket}
+	for _, opt := range opts {
+		children = append(children, opt)
+	}
+	children = append(children, closeBracket)
 
 	return &CompactOptionsNode{
 		compositeNode: compositeNode{
@@ -473,7 +463,6 @@ func NewCompactOptionsNode(openBracket *RuneNode, opts []*OptionNode, commas []*
 		},
 		OpenBracket:  openBracket,
 		Options:      opts,
-		Commas:       commas,
 		CloseBracket: closeBracket,
 	}
 }

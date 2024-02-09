@@ -104,6 +104,7 @@ const (
 
 	atEOF                 = 8
 	onlyIfLastTokenOnLine = 16
+	insertComma           = 32
 )
 
 type protoLex struct {
@@ -206,10 +207,10 @@ func (l *protoLex) prev() ast.SourcePos {
 	return l.info.SourcePos(l.prevOffset)
 }
 
-func (l *protoLex) writeVirtualSemi(lval *protoSymType) int {
+func (l *protoLex) writeVirtualRune(lval *protoSymType, rn rune) int {
 	l.input.unreadRune(1)
-	l.setVirtualRune(lval, ';')
-	return ';'
+	l.setVirtualRune(lval, rn)
+	return int(rn)
 }
 
 func (l *protoLex) Lex(lval *protoSymType) int {
@@ -236,8 +237,12 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 			}
 
 			if l.insertSemi != 0 {
+				rn := ';'
+				if l.insertSemi&insertComma == insertComma {
+					rn = ','
+				}
 				l.insertSemi = 0
-				return l.writeVirtualSemi(lval)
+				return l.writeVirtualRune(lval, rn)
 			}
 			// insert virtual semicolons following ident tokens we might expect
 			// to be followed by EOF during editing ('extend', 'import')
@@ -246,7 +251,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 				case *ast.IdentNode:
 					switch prev.Val {
 					case "extend", "import", "public", "weak":
-						return l.writeVirtualSemi(lval)
+						return l.writeVirtualRune(lval, ';')
 					}
 				}
 			}
@@ -269,9 +274,13 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 		}
 
 		if l.insertSemi&immediate == immediate {
-			if c != ';' {
+			rn := ';'
+			if l.insertSemi&insertComma == insertComma {
+				rn = ','
+			}
+			if c != rn {
 				l.insertSemi = 0
-				return l.writeVirtualSemi(lval)
+				return l.writeVirtualRune(lval, rn)
 			}
 			l.insertSemi = 0
 		}
@@ -282,16 +291,33 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 		case '>':
 			l.insertSemi = immediate
 		case ']':
+			if l.prevSym != nil {
+				if rn, ok := l.prevSym.(*ast.RuneNode); !ok || (rn.Rune != ',' && rn.Rune != '[') {
+					return l.writeVirtualRune(lval, ',')
+				}
+			}
 			l.insertSemi = immediate
+		case '=':
+			if _, ok := l.matchNextRune(']'); ok {
+				l.insertSemi = immediate | insertComma
+			}
 		case ':':
 			l.insertSemi = atNextNewline | onlyIfLastTokenOnLine
 		case '\n':
 			if l.insertSemi&atNextNewline != 0 {
+				rn := ';'
+				if l.insertSemi&insertComma == insertComma {
+					rn = ','
+				}
 				prev := l.prevSym
 				canInsert := true
 				switch prev := prev.(type) {
 				case *ast.RuneNode:
-					canInsert = canDirectlyPrecedeVirtualSemi(prev.Rune)
+					if rn == ';' {
+						canInsert = canDirectlyPrecedeVirtualSemi(prev.Rune)
+					} else {
+						canInsert = canDirectlyPrecedeVirtualComma(prev.Rune)
+					}
 				}
 				if canInsert {
 					if l.inCompoundIdent {
@@ -313,7 +339,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 						}
 					}
 					l.insertSemi = 0
-					return l.writeVirtualSemi(lval)
+					return l.writeVirtualRune(lval, rn)
 				}
 				l.insertSemi = 0
 			}
@@ -1447,6 +1473,14 @@ func (l *protoLex) canStartFileElement() bool {
 func canDirectlyPrecedeVirtualSemi(c rune) bool {
 	switch c {
 	case ';', '{', '<':
+		return false
+	}
+	return true
+}
+
+func canDirectlyPrecedeVirtualComma(c rune) bool {
+	switch c {
+	case ',', '{', '<':
 		return false
 	}
 	return true
