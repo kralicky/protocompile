@@ -330,6 +330,20 @@ func (r *result) FindDescriptorsByPrefix(ctx context.Context, prefix string, fil
 	return
 }
 
+func (r *result) RangeDescriptors(ctx context.Context, fn func(protoreflect.Descriptor) bool) (err error) {
+	r.descriptors.ForEach(func(node art.Node) (cont bool) {
+		if ctx.Err() != nil {
+			err = ctx.Err()
+			return false
+		}
+		if desc, ok := node.Value().(protoreflect.Descriptor); ok {
+			return fn(desc)
+		}
+		return true
+	}, art.TraverseLeaf)
+	return
+}
+
 func (r *result) FindReferences(to protoreflect.Descriptor) (results []ast.NodeReference) {
 	if r.resolvedReferences == nil {
 		return nil

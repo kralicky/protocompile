@@ -185,6 +185,7 @@ type Result interface {
 	PopulateSourceCodeInfo(sourceinfo.OptionIndex, sourceinfo.OptionDescriptorIndex)
 
 	FindDescriptorsByPrefix(ctx context.Context, prefix string, filter ...func(protoreflect.Descriptor) bool) ([]protoreflect.Descriptor, error)
+	RangeDescriptors(ctx context.Context, fn func(protoreflect.Descriptor) bool) error
 
 	FindReferences(to protoreflect.Descriptor) []ast.NodeReference
 
