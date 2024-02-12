@@ -242,7 +242,15 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 					rn = ','
 				}
 				l.insertSemi = 0
-				return l.writeVirtualRune(lval, rn)
+				shouldInsertSemi := true
+				if l.prevSym != nil {
+					if prev, ok := l.prevSym.(*ast.RuneNode); ok && prev.Rune == rn {
+						shouldInsertSemi = false
+					}
+				}
+				if shouldInsertSemi {
+					return l.writeVirtualRune(lval, rn)
+				}
 			}
 			// insert virtual semicolons following ident tokens we might expect
 			// to be followed by EOF during editing ('extend', 'import')

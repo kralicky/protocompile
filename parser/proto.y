@@ -1082,13 +1082,37 @@ extensionElements
 	}
 
 extensionElement
-	: extensionFieldDecl nonVirtualSemicolon {
+	: messageFieldDecl nonVirtualSemicolon {
 		$1.AddSemicolon($2)
 		$$ = $1
 	}
 	| groupDecl virtualSemicolon {
 		ast.AddVirtualSemicolon($1, $2)
 		$$ = $1
+	}
+	| mapFieldDecl ';' {
+		protolex.(*protoLex).ErrExtendedSyntaxAt("map fields not allowed in extend declarations", $1, CategoryDeclNotAllowed)
+		$$ = nil
+	}
+	| oneofDecl ';' {
+		protolex.(*protoLex).ErrExtendedSyntaxAt("\"oneof\" not allowed in extend declarations", $1, CategoryDeclNotAllowed)
+		$$ = nil
+	}
+	| msgReserved ';' {
+		protolex.(*protoLex).ErrExtendedSyntaxAt("\"reserved\" not allowed in extend declarations", $1, CategoryDeclNotAllowed)
+		$$ = nil
+	}
+	| extensionRangeDecl ';' {
+		protolex.(*protoLex).ErrExtendedSyntaxAt("extension ranges not allowed in extend declarations", $1, CategoryDeclNotAllowed)
+		$$ = nil
+	}
+	| messageDecl ';' {
+		protolex.(*protoLex).ErrExtendedSyntaxAt("nested messages not allowed in extend declarations", $1, CategoryDeclNotAllowed)
+		$$ = nil
+	}
+	| enumDecl ';' {
+		protolex.(*protoLex).ErrExtendedSyntaxAt("nested enums not allowed in extend declarations", $1, CategoryDeclNotAllowed)
+		$$ = nil
 	}
 	| error {
 		$$ = nil
@@ -1106,6 +1130,34 @@ extensionFieldDecl
 	}
 	| extElementTypeIdent singularIdent '=' _INT_LIT compactOptions {
 		$$ = ast.NewFieldNode(nil, $1, $2, $3, $4, $5)
+	}
+	| fieldCardinality notGroupElementTypeIdent singularIdent '=' {
+		protolex.(*protoLex).ErrExtendedSyntax("missing field number after '='", CategoryIncompleteDecl)
+		$$ = ast.NewIncompleteFieldNode($1.ToKeyword(), $2, $3, $4, nil, nil)
+	}
+	| fieldCardinality notGroupElementTypeIdent singularIdent {
+		protolex.(*protoLex).ErrExtendedSyntax("missing '=' after field name", CategoryIncompleteDecl)
+		$$ = ast.NewIncompleteFieldNode($1.ToKeyword(), $2, $3, nil, nil, nil)
+	}
+	| fieldCardinality notGroupElementTypeIdent {
+		protolex.(*protoLex).ErrExtendedSyntax("missing field name", CategoryIncompleteDecl)
+		$$ = ast.NewIncompleteFieldNode($1.ToKeyword(), $2, nil, nil, nil, nil)
+	}
+	| extElementTypeIdent singularIdent '=' {
+		protolex.(*protoLex).ErrExtendedSyntax("missing field number after '='", CategoryIncompleteDecl)
+		$$ = ast.NewIncompleteFieldNode(nil, $1, $2, $3, nil, nil)
+	}
+	| extElementTypeIdent singularIdent {
+		protolex.(*protoLex).ErrExtendedSyntax("missing '=' after field name", CategoryIncompleteDecl)
+		$$ = ast.NewIncompleteFieldNode(nil, $1, $2, nil, nil, nil)
+	}
+	| extElementTypeIdent {
+		protolex.(*protoLex).ErrExtendedSyntax("missing field name", CategoryIncompleteDecl)
+		$$ = ast.NewIncompleteFieldNode(nil, $1, nil, nil, nil, nil)
+	}
+	| fieldCardinality {
+		protolex.(*protoLex).ErrExtendedSyntax("missing field type", CategoryIncompleteDecl)
+		$$ = ast.NewIncompleteFieldNode($1.ToKeyword(), nil, nil, nil, nil, nil)
 	}
 
 serviceDecl

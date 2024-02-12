@@ -55,6 +55,7 @@ const (
 	CategoryExtraTokens    = "extra_tokens"
 	CategoryIncorrectToken = "wrong_token"
 	CategoryMissingToken   = "missing_token"
+	CategoryDeclNotAllowed = "decl_not_allowed"
 )
 
 func NewExtendedSyntaxError(base error, category string) ExtendedSyntaxError {
