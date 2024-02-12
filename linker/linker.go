@@ -125,11 +125,12 @@ dependencies_ok:
 	// First, we put all symbols into a single pool, which lets us ensure there
 	// are no duplicate symbols and will also let us resolve and revise all type
 	// references in next step.
-	if err := symbols.importResult(r, handler); err != nil {
-		if !errors.Is(err, reporter.ErrInvalidSource) {
-			// let reference resolution continue so we can report more errors
+	var err error
+	if err = symbols.importResult(r, handler); err != nil {
+		if !IsRecoverable(err) {
 			return nil, err
 		}
+		// let reference resolution continue so we can report more errors
 	}
 
 	// After we've populated the pool, we can now try to resolve all type
@@ -142,7 +143,21 @@ dependencies_ok:
 		return nil, err
 	}
 
-	return r, handler.Error()
+	if err == nil {
+		err = handler.Error()
+	}
+	return r, err
+}
+
+func IsRecoverable(err error) bool {
+	if err == nil {
+		return true
+	}
+	var sce *SymbolCollisionError
+	if errors.As(err, &sce) {
+		return sce.recoverable
+	}
+	return errors.Is(err, reporter.ErrInvalidSource)
 }
 
 // Result is the result of linking. This is a protoreflect.FileDescriptor, but

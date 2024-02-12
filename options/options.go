@@ -1472,6 +1472,9 @@ func (interp *interpreter) setOptionField(mc *internal.MessageContext, msg proto
 	if err != nil {
 		return interpretedFieldValue{}, 0, err
 	}
+	if !value.val.IsValid() {
+		return interpretedFieldValue{}, 0, interp.HandleOptionValueErrorf(mc, val, "invalid value")
+	}
 
 	if ood := fld.ContainingOneof(); ood != nil {
 		existingFld := msg.WhichOneof(ood)
@@ -2339,8 +2342,12 @@ func (interp *interpreter) messageLiteralValue(mc *internal.MessageContext, fiel
 			})
 		}
 	}
+	val := protoreflect.ValueOfMessage(msg)
+	if !val.IsValid() {
+		return interpretedFieldValue{}, interp.HandleOptionValueErrorf(mc, fieldNodes[0], "could not resolve message literal")
+	}
 	return interpretedFieldValue{
-		val:    protoreflect.ValueOfMessage(msg),
+		val:    val,
 		msgVal: flds,
 	}, nil
 }

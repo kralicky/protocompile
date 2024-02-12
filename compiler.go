@@ -202,7 +202,7 @@ func (c *Compiler) Compile(ctx context.Context, paths ...ResolvedPath) (CompileR
 			h:       h,
 			s:       semaphore.NewWeighted(int64(par)),
 			cancel:  cancel,
-			sym:     &linker.Symbols{},
+			sym:     linker.NewSymbolTable(),
 			results: map[ResolvedPath]*result{},
 			hooks:   c.Hooks,
 			lenient: c.InterpretOptionsLenient,
@@ -392,6 +392,8 @@ func (e *executor) invalidate(rpaths ...ResolvedPath) []ResolvedPath {
 
 	invalidated := map[ResolvedPath]struct{}{}
 	blocks := map[ResolvedPath][]*result{}
+	indirect := map[ResolvedPath][]*result{}
+
 	for _, res := range e.results {
 		for _, dep := range res.blockedOn {
 			if dep.ResolvedPath == "" {
@@ -406,6 +408,28 @@ func (e *executor) invalidate(rpaths ...ResolvedPath) []ResolvedPath {
 			}
 			blocks[blockedDep.resolvedPath] = append(blocks[blockedDep.resolvedPath], res)
 		}
+		if res.err != nil {
+			var ue *linker.SymbolCollisionError
+			if errors.As(res.err, &ue) {
+				for _, ef := range ue.EntangledFiles() {
+					er := e.results[ResolvedPath(ef)]
+					if er != nil {
+						indirect[er.resolvedPath] = append(indirect[er.resolvedPath], res)
+						indirect[res.resolvedPath] = append(indirect[res.resolvedPath], er)
+					}
+				}
+				for _, epkg := range ue.EntangledPackages() {
+					for _, er := range e.results {
+						if er.parseRes != nil {
+							if er.parseRes.FileDescriptorProto().GetPackage() == epkg {
+								indirect[er.resolvedPath] = append(indirect[er.resolvedPath], res)
+								indirect[res.resolvedPath] = append(indirect[res.resolvedPath], er)
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 	for _, rpath := range rpaths {
 		r := e.results[rpath]
@@ -414,7 +438,7 @@ func (e *executor) invalidate(rpaths ...ResolvedPath) []ResolvedPath {
 			continue
 		}
 
-		e.invalidateLocked(r, blocks, invalidated, "file was modified")
+		e.invalidateLocked(r, blocks, indirect, invalidated, "file was modified")
 	}
 
 	filenames := make([]ResolvedPath, 0, len(invalidated))
@@ -422,9 +446,15 @@ func (e *executor) invalidate(rpaths ...ResolvedPath) []ResolvedPath {
 		if _, err := e.c.Resolver.FindFileByPath(UnresolvedPath(name), nil); err != nil {
 			// if the file doesn't exist anymore, we don't need to
 			// recompile it
-			// if e.hooks.PostInvalidate != nil {
-			// 	e.hooks.PostInvalidate(name, invalidated[name])
-			// }
+			if e.hooks.PostInvalidate != nil {
+				if er := e.results[name]; er != nil {
+					if er.res != nil {
+						e.hooks.PostInvalidate(name, er.res, false)
+					} else if er.partialLinkRes != nil {
+						e.hooks.PostInvalidate(name, er.partialLinkRes, false)
+					}
+				}
+			}
 			continue
 		}
 		filenames = append(filenames, name)
@@ -432,7 +462,7 @@ func (e *executor) invalidate(rpaths ...ResolvedPath) []ResolvedPath {
 	return filenames
 }
 
-func (e *executor) invalidateLocked(r *result, blocks map[ResolvedPath][]*result, seen map[ResolvedPath]struct{}, reason string) {
+func (e *executor) invalidateLocked(r *result, blocks map[ResolvedPath][]*result, indirect map[ResolvedPath][]*result, seen map[ResolvedPath]struct{}, reason string) {
 	if _, ok := seen[r.resolvedPath]; ok {
 		return
 	}
@@ -443,16 +473,12 @@ func (e *executor) invalidateLocked(r *result, blocks map[ResolvedPath][]*result
 	}
 
 	for _, dep := range blocks[r.resolvedPath] {
-		// fmt.Printf(" => invalidating %s (depends on %s)\n", dep.name, r.name)
-		e.invalidateLocked(dep, blocks, seen, fmt.Sprintf("file depends on %s", r.resolvedPath))
+		e.invalidateLocked(dep, blocks, indirect, seen, fmt.Sprintf("file depends on %s", r.resolvedPath))
 	}
 
 	if r.res != nil {
 		if e.hooks.PostInvalidate != nil {
 			defer func() {
-				if err := recover(); err != nil {
-					panic(err)
-				}
 				_, err := e.c.Resolver.FindFileByPath(UnresolvedPath(r.resolvedPath), nil)
 				e.hooks.PostInvalidate(r.resolvedPath, r.res, err == nil)
 			}()
@@ -465,6 +491,14 @@ func (e *executor) invalidateLocked(r *result, blocks map[ResolvedPath][]*result
 			panic(err)
 		}
 	}
+
+	// order is important here: these might not be dependencies, but the
+	// files will indirectly affect each other, forming a cycle if invalidated
+	// in the wrong order
+	for _, dep := range indirect[r.resolvedPath] {
+		e.invalidateLocked(dep, blocks, indirect, seen, fmt.Sprintf("file indirectly affected by %s", r.resolvedPath))
+	}
+
 	delete(e.results, r.resolvedPath)
 }
 
@@ -557,10 +591,6 @@ func (e errFailedToResolve) Unwrap() error {
 
 func (e *executor) hasOverrideDescriptorProto() bool {
 	e.descriptorProtoCheck.Do(func() {
-		defer func() {
-			// ignore a panic here; just assume no custom descriptor.proto
-			_ = recover()
-		}()
 		res, err := e.c.Resolver.FindFileByPath(descriptorProtoPath, nil)
 		e.descriptorProtoIsCustom = err == nil && res.ResolvedPath != "google/protobuf/descriptor.proto"
 	})
@@ -731,7 +761,11 @@ func (t *task) asFile(ctx context.Context, pr *SearchResult) (linker.Result, err
 					if errors.Is(res.err, reporter.ErrInvalidSource) {
 						// continue if the handler has suppressed all errors, to allow
 						// link errors to be reported later
-						deps[i] = res.partialLinkRes
+						if res.partialLinkRes != nil {
+							deps[i] = res.partialLinkRes
+						} else {
+							deps[i] = linker.NewPlaceholderFile(string(res.resolvedPath))
+						}
 						continue
 					}
 					return nil, res.err
@@ -842,16 +876,16 @@ func findImportSpan(res parser.Result, dep UnresolvedPath) ast.SourceSpan {
 func (t *task) link(parseRes parser.Result, deps linker.Files, interpretOpts ...options.InterpreterOption) (linker.Result, error) {
 	t.e.symTxLock.Lock()
 	pendingSymtab := t.e.sym.Clone()
-	file, err := linker.Link(parseRes, deps, pendingSymtab, t.h)
+	file, linkError := linker.Link(parseRes, deps, pendingSymtab, t.h)
 	var linkIncomplete bool
-	if err != nil {
-		if !errors.Is(err, reporter.ErrInvalidSource) || file == nil {
-			// If a link error occurs, do not commit the updated symbol table, as it may
-			// be in an inconsistent state.
+	if linkError != nil {
+		if !linker.IsRecoverable(linkError) {
+			// If an unrecoverable link error occurs, do not commit the updated symbol
+			// table, as it may be in an inconsistent state.
 			t.e.symTxLock.Unlock()
-			return file, err
+			return file, linkError
 		}
-		// If the file is partially linked, we can commit the updated symbol table.
+		// If the error is recoverable, we can commit the updated symbol table.
 		linkIncomplete = true
 	}
 	// commit the updated symbol table
@@ -886,7 +920,7 @@ func (t *task) link(parseRes parser.Result, deps linker.Files, interpretOpts ...
 		file.RemoveAST()
 	}
 	if linkIncomplete {
-		return file, reporter.ErrInvalidSource
+		return file, linkError
 	}
 	return file, nil
 }

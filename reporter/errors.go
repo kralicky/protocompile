@@ -69,28 +69,18 @@ var _ ErrorWithPos = errorWithSpan{}
 
 // Custom error types that contain additional information for each error.
 
-type AlreadyDefinedError struct {
-	isPkg              bool
-	PreviousDefinition ast.SourceSpan
+type SymbolRedeclaredError struct {
+	name             string
+	OtherDeclaration ast.SourceSpan
 }
 
-func AlreadyDefined(previousDefinition ast.SourceSpan) AlreadyDefinedError {
-	return AlreadyDefinedError{
-		PreviousDefinition: previousDefinition,
+func SymbolRedeclared(name string, otherDeclaration ast.SourceSpan) SymbolRedeclaredError {
+	return SymbolRedeclaredError{
+		name:             name,
+		OtherDeclaration: otherDeclaration,
 	}
 }
 
-func AlreadyDefinedAsPkg(previousDefinition ast.SourceSpan) AlreadyDefinedError {
-	return AlreadyDefinedError{
-		isPkg:              true,
-		PreviousDefinition: previousDefinition,
-	}
-}
-
-func (e AlreadyDefinedError) Error() string {
-	var asPkg string
-	if e.isPkg {
-		asPkg = " as a package"
-	}
-	return fmt.Sprintf("already defined%s at %s", asPkg, e.PreviousDefinition)
+func (e SymbolRedeclaredError) Error() string {
+	return fmt.Sprintf("%s redeclared in this block (see details)", e.name)
 }

@@ -2,6 +2,8 @@
 //protols:nogen
 //protols:debug Wnoerror=all
 syntax = "proto2"
+import "github.com/kralicky/protocompile/internal/testdata/more/c/c.proto";
+import "google/protobuf/descriptor.proto";
 
 message Foo {
   optional
@@ -25,5 +27,21 @@ message Foo3 {
 }
 
 extend google.protobuf.FieldOptions {
+  // rename to 'foo' to trigger a package-symbol conflict
+  // none of the other fields in this extension exist in the descriptor; they
+  // are part of extended syntax rules
+  optional c.See foo1 = 50000;
 
+  map<string, string> foo = 1;
+  message Foo {
+    optional int32 foo = 1;
+  }
+  enum Foo {
+    FOO = 1;
+  }
+  reserved 2;
+  reserved "foo";
+  oneof foo {
+    int32 foo = 1;
+  }
 }

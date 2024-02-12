@@ -92,41 +92,53 @@ var (
 func (e *optionValueError) isOptionValueError() {}
 
 func (i *interpreter) HandleTypeMismatchErrorf(mc *internal.MessageContext, node ast.Node, formatStr string, args ...any) error {
-	return i.handler.HandleError(reporter.Error(i.nodeInfo(node), &optionTypeMismatchError{
+	if err := i.handler.HandleError(reporter.Error(i.nodeInfo(node), &optionTypeMismatchError{
 		interpreterError: interpreterError{
 			base: fmt.Errorf(formatStr, args...),
 			mc:   mc,
 			node: node,
 		},
-	}))
+	})); err != nil {
+		return err
+	}
+	return i.handler.Error()
 }
 
 func (i *interpreter) HandleOptionForbiddenErrorf(mc *internal.MessageContext, node ast.Node, formatStr string, args ...any) error {
-	return i.handler.HandleError(reporter.Error(i.nodeInfo(node), &optionForbiddenError{
+	if err := i.handler.HandleError(reporter.Error(i.nodeInfo(node), &optionForbiddenError{
 		interpreterError: interpreterError{
 			base: fmt.Errorf(formatStr, args...),
 			mc:   mc,
 			node: node,
 		},
-	}))
+	})); err != nil {
+		return err
+	}
+	return i.handler.Error()
 }
 
 func (i *interpreter) HandleOptionNotFoundErrorf(mc *internal.MessageContext, node ast.Node, formatStr string, args ...any) error {
-	return i.handler.HandleError(reporter.Error(i.nodeInfo(node), &optionNotFoundError{
+	if err := i.handler.HandleError(reporter.Error(i.nodeInfo(node), &optionNotFoundError{
 		interpreterError: interpreterError{
 			base: fmt.Errorf(formatStr, args...),
 			mc:   mc,
 			node: node,
 		},
-	}))
+	})); err != nil {
+		return err
+	}
+	return i.handler.Error()
 }
 
 func (i *interpreter) HandleOptionValueErrorf(mc *internal.MessageContext, node ast.Node, formatStr string, args ...any) error {
-	return i.handler.HandleError(reporter.Error(i.nodeInfo(node), &optionValueError{
+	if err := i.handler.HandleError(reporter.Error(i.nodeInfo(node), &optionValueError{
 		interpreterError: interpreterError{
 			base: fmt.Errorf(formatStr, args...),
 			mc:   mc,
 			node: node,
 		},
-	}))
+	})); err != nil {
+		return err
+	}
+	return i.handler.Error()
 }

@@ -42,7 +42,6 @@ func TestSymbolsPackages(t *testing.T) {
 	require.NoError(t, err)
 	// new package has nothing in it
 	assert.Empty(t, pkg.children)
-	assert.Empty(t, pkg.files)
 	assert.Empty(t, pkg.symbols)
 	assert.Empty(t, pkg.exts)
 
@@ -54,7 +53,6 @@ func TestSymbolsPackages(t *testing.T) {
 	pkgNames := []protoreflect.FullName{"build", "build.buf", "build.buf.foo", "build.buf.foo.bar", "build.buf.foo.bar.baz"}
 	for _, pkgName := range pkgNames {
 		assert.Len(t, cur.children, 1)
-		assert.Empty(t, cur.files)
 		assert.Len(t, cur.symbols, 1)
 		assert.Empty(t, cur.exts)
 
@@ -209,7 +207,7 @@ func parseAndLink(t *testing.T, contents string) Result {
 	return linkResult
 }
 
-func TestDelete(t *testing.T) {
+func TestImportAndDelete(t *testing.T) {
 	// define the content for each of the test protobuf files
 	files := []string{
 		0: `
@@ -221,6 +219,7 @@ func TestDelete(t *testing.T) {
 			repeated string field3 = 3;
 		}
 		`,
+
 		1: `
 		syntax = "proto3";
 		package test2.subtest;
@@ -232,6 +231,7 @@ func TestDelete(t *testing.T) {
 			repeated string field3 = 3;
 		}
 		`,
+
 		2: `
 		syntax = "proto3";
 		package test3.subtest.part3;
@@ -247,6 +247,7 @@ func TestDelete(t *testing.T) {
 			optional string example = 10001;
 		}
 		`,
+
 		3: `
 		syntax = "proto3";
 		package test4.part4;
@@ -257,6 +258,7 @@ func TestDelete(t *testing.T) {
 			repeated string field3 = 3;
 		}
 		`,
+
 		4: `
 		syntax = "proto3";
 		package test5.sub5;
@@ -266,386 +268,244 @@ func TestDelete(t *testing.T) {
 			string field2 = 2;
 			repeated string field3 = 3;
 		}
-		`,
-		5: `
-	syntax = "proto2";
-
-	package foo.bar;
-
-	option go_package = "github.com/kralicky/protocompile/internal/testprotos";
-
-	import "google/protobuf/descriptor.proto";
-
-	message Simple {
-		optional string name = 1;
-		optional uint64 id = 2;
-		optional bytes _extra = 3; // default JSON name will be capitalized
-		repeated bool _ = 4; // default JSON name will be empty(!)
-	}
-
-	extend . google. // identifier broken up strangely should still be accepted
-		protobuf .
-		ExtensionRangeOptions {
-		optional string label = 20000;
-	}
-
-	message Test {
-		optional string foo = 1 [json_name = "|foo|"];
-		repeated int32 array = 2;
-		optional Simple s = 3;
-		repeated Simple r = 4;
-		map<string, int32> m = 5;
-
-		optional bytes b = 6 [default = "\0\1\2\3\4\5\6\7fubar!"];
-
-		extensions 100 to 200;
-
-		extensions 249, 300 to 350, 500 to 550, 20000 to max [(label) = "jazz"];
-
-		message Nested {
-			extend google.protobuf.MessageOptions {
-				optional int32 fooblez = 20003;
-			}
-			message _NestedNested {
-				enum EEE {
-					OK = 0;
-					V1 = 1;
-					V2 = 2;
-					V3 = 3;
-					V4 = 4;
-					V5 = 5;
-					V6 = 6;
-				}
-				option (fooblez) = 10101;
-				extend Test {
-					optional string _garblez = 100;
-				}
-				option (rept) = { foo: "goo" [foo.bar.Test.Nested._NestedNested._garblez]: "boo" };
-				message NestedNestedNested {
-					option (rept) = { foo: "hoo" [Test.Nested._NestedNested._garblez]: "spoo" };
-
-					optional Test Test = 1;
-				}
-			}
-		}
-	}
-
-	enum EnumWithReservations {
-		X = 2;
-		Y = 3;
-		Z = 4;
-		reserved 1000 to max;
-		reserved -2 to 1;
-		reserved 5 to 10, 12 to 15, 18;
-		reserved -5 to -3;
-		reserved "C", "B", "A";
-	}
-
-	message MessageWithReservations {
-		reserved 5 to 10, 12 to 15, 18;
-		reserved 1000 to max;
-		reserved "A", "B", "C";
-	}
-
-	message MessageWithMap {
-		map<string, Simple> vals = 1;
-	}
-
-	extend google.protobuf.MessageOptions {
-		repeated Test rept = 20002;
-		optional Test.Nested._NestedNested.EEE eee = 20010;
-		optional Another a = 20020;
-		optional MessageWithMap map_vals = 20030;
-	}
-
-	message Another {
-			option (.foo.bar.rept) = { foo: "abc" s < name: "foo", id: 123 >, array: [1, 2 ,3], r:[<name:"f">, {name:"s"}, {id:456} ], };
-			option (foo.bar.rept) = { foo: "def" s { name: "bar", id: 321 }, array: [3, 2 ,1], r:{name:"g"} r:{name:"s"}};
-			option (rept) = { foo: "def" };
-			option (eee) = V1;
-		option (a) = { fff: OK };
-		option (a).test = { m { key: "foo" value: 100 } m { key: "bar" value: 200 }};
-		option (a).test.foo = "m&m";
-		option (a).test.s.name = "yolo";
-			option (a).test.s.id = 98765;
-			option (a).test.array = 1;
-			option (a).test.array = 2;
-			option (a).test.(.foo.bar.Test.Nested._NestedNested._garblez) = "whoah!";
-
-		option (map_vals).vals = {}; // no key, no value
-		option (map_vals).vals = {key: "foo"}; // no value
-		option (map_vals).vals = {key: "bar", value: {name: "baz"}};
-
-			optional Test test = 1;
-			optional Test.Nested._NestedNested.EEE fff = 2 [default = V1];
-	}
-
-	message Validator {
-		optional bool authenticated = 1;
-
-		enum Action {
-			LOGIN = 0;
-			READ = 1;
-			WRITE = 2;
-		}
-		message Permission {
-			optional Action action = 1;
-			optional string entity = 2;
-		}
-
-		repeated Permission permission = 2;
-	}
-
-	extend google.protobuf.MethodOptions {
-		optional Validator validator = 12345;
-	}
-
-	service TestTestService {
-		rpc UserAuth(Test) returns (Test) {
-			option (validator) = {
-				authenticated: true
-				permission: {
-					action: LOGIN
-					entity: "client"
-				}
-			};
-		}
-		rpc Get(Test) returns (Test) {
-			option (validator) = {
-				authenticated: true
-				permission: {
-					action: READ
-					entity: "user"
-				}
-			};
-		}
-	}
-
-	message Rule {
-		message StringRule {
-			optional string pattern = 1;
-			optional bool allow_empty = 2;
-			optional int32 min_len = 3;
-			optional int32 max_len = 4;
-		}
-		message IntRule {
-			optional int64 min_val = 1;
-			optional uint64 max_val = 2;
-		}
-		message RepeatedRule {
-			optional bool allow_empty = 1;
-			optional int32 min_items = 2;
-			optional int32 max_items = 3;
-			optional Rule items = 4;
-		}
-		oneof rule {
-			StringRule string = 1;
-			RepeatedRule repeated = 2;
-			IntRule int = 3;
-		group FloatRule = 4 {
-			optional double min_val = 1;
-			optional double max_val = 2;
-		}
-		}
-	}
-
-	extend google.protobuf.FieldOptions {
-		optional Rule rules = 1234;
-	}
-
-	message IsAuthorizedReq {
-			repeated string subjects = 1
-				[(rules).repeated = {
-					min_items: 1,
-					items: { string: { pattern: "^(?:(?:team:(?:local|ldap))|user):[[:alnum:]_-]+$" } },
-				}];
-	}
-
-	// tests cases where field names collide with keywords
-
-	message KeywordCollisions {
-		optional bool syntax = 1;
-		optional bool import = 2;
-		optional bool public = 3;
-		optional bool weak = 4;
-		optional bool package = 5;
-		optional string string = 6;
-		optional bytes bytes = 7;
-		optional int32 int32 = 8;
-		optional int64 int64 = 9;
-		optional uint32 uint32 = 10;
-		optional uint64 uint64 = 11;
-		optional sint32 sint32 = 12;
-		optional sint64 sint64 = 13;
-		optional fixed32 fixed32 = 14;
-		optional fixed64 fixed64 = 15;
-		optional sfixed32 sfixed32 = 16;
-		optional sfixed64 sfixed64 = 17;
-		optional bool bool = 18;
-		optional float float = 19;
-		optional double double = 20;
-		optional bool optional = 21;
-		optional bool repeated = 22;
-		optional bool required = 23;
-		optional bool message = 24;
-		optional bool enum = 25;
-		optional bool service = 26;
-		optional bool rpc = 27;
-		optional bool option = 28;
-		optional bool extend = 29;
-		optional bool extensions = 30;
-		optional bool reserved = 31;
-		optional bool to = 32;
-		optional int32 true = 33;
-		optional int32 false = 34;
-		optional int32 default = 35;
-	}
-
-	extend google.protobuf.FieldOptions {
-		optional bool syntax = 20001;
-		optional bool import = 20002;
-		optional bool public = 20003;
-		optional bool weak = 20004;
-		optional bool package = 20005;
-		optional string string = 20006;
-		optional bytes bytes = 20007;
-		optional int32 int32 = 20008;
-		optional int64 int64 = 20009;
-		optional uint32 uint32 = 20010;
-		optional uint64 uint64 = 20011;
-		optional sint32 sint32 = 20012;
-		optional sint64 sint64 = 20013;
-		optional fixed32 fixed32 = 20014;
-		optional fixed64 fixed64 = 20015;
-		optional sfixed32 sfixed32 = 20016;
-		optional sfixed64 sfixed64 = 20017;
-		optional bool bool = 20018;
-		optional float float = 20019;
-		optional double double = 20020;
-		optional bool optional = 20021;
-		optional bool repeated = 20022;
-		optional bool required = 20023;
-		optional bool message = 20024;
-		optional bool enum = 20025;
-		optional bool service = 20026;
-		optional bool rpc = 20027;
-		optional bool option = 20028;
-		optional bool extend = 20029;
-		optional bool extensions = 20030;
-		optional bool reserved = 20031;
-		optional bool to = 20032;
-		optional int32 true = 20033;
-		optional int32 false = 20034;
-		optional int32 default = 20035;
-		optional KeywordCollisions boom = 20036;
-	}
-
-	message KeywordCollisionOptions {
-		optional uint64 id = 1 [
-			(syntax) = true, (import) = true, (public) = true, (weak) = true, (package) = true,
-			(string) = "string", (bytes) = "bytes", (bool) = true,
-			(float) = 3.14, (double) = 3.14159,
-			(int32) = 32, (int64) = 64, (uint32) = 3200, (uint64) = 6400, (sint32) = -32, (sint64) = -64,
-			(fixed32) = 3232, (fixed64) = 6464, (sfixed32) = -3232, (sfixed64) = -6464,
-			(optional) = true, (repeated) = true, (required) = true,
-			(message) = true, (enum) = true, (service) = true, (rpc) = true,
-			(option) = true, (extend) = true, (extensions) = true, (reserved) = true,
-			(to) = true, (true) = 111, (false) = -111, (default) = 222
-		];
-		optional string name = 2 [
-			(boom) = {
-				syntax: true, import: true, public: true, weak: true, package: true,
-				string: "string", bytes: "bytes", bool: true,
-				float: 3.14, double: 3.14159,
-				int32: 32, int64: 64, uint32: 3200, uint64: 6400, sint32: -32, sint64: -64,
-				fixed32: 3232, fixed64: 6464, sfixed32: -3232, sfixed64: -6464,
-				optional: true, repeated: true, required: true,
-				message: true, enum: true, service: true, rpc: true,
-				option: true, extend: true, extensions: true, reserved: true,
-				to: true, true: 111, false: -111, default: 222
-			}
-		];
-	}
-	// comment for last element in file, KeywordCollisionOptions
 	`,
 	}
-	h := reporter.NewHandler(nil)
 
-	tempSymtab := NewSymbolTable()
-	dep, err := protoregistry.GlobalFiles.FindFileByPath("google/protobuf/descriptor.proto")
-	require.NoError(t, err)
-	tempSymtab.Import(dep, h)
+	ts := newTestSymtab(t)
+	ts.parseAndLinkNamed(t, "test1.proto", files[0])
+	ts.parseAndLinkNamed(t, "test2.proto", files[1])
+	ts.parseAndLinkNamed(t, "test3.proto", files[2])
+	ts.parseAndLinkNamed(t, "test4.proto", files[3])
+	ts.parseAndLinkNamed(t, "test5.proto", files[4])
 
-	parseAndLinkNamed := func(name, contents string, prevDeps ...File) Result {
-		t.Helper()
-		fileAst, err := parser.Parse(name, strings.NewReader(contents), h, 0)
-		require.NoError(t, err)
-		parseResult, err := parser.ResultFromAST(fileAst, true, h)
-		require.NoError(t, err)
-		depAsFile, err := NewFile(dep, prevDeps)
-		require.NoError(t, err)
-		depFiles := Files{depAsFile}
-		depFiles = append(depFiles, prevDeps...)
-		linkResult, err := Link(parseResult, depFiles, tempSymtab, h)
-		require.NoError(t, err)
-		return linkResult
+	ts.run()
+}
+
+func TestSymbolPackageCollision(t *testing.T) {
+	files := []string{
+		0: `
+syntax = "proto2";
+package foo.bar;
+`,
+
+		1: `
+syntax = "proto2";
+
+import "google/protobuf/descriptor.proto";
+extend google.protobuf.FieldOptions {
+	optional string foo = 10001;
+}`,
+
+		2: `
+syntax = "proto2";
+
+import "google/protobuf/descriptor.proto";
+extend google.protobuf.FieldOptions {
+	optional string bar = 10001;
+}`,
 	}
 
-	fds := make(map[string]File, len(files))
-	desc, _ := NewFile(dep, nil)
-	fds["google/protobuf/descriptor.proto"] = desc
+	ts := newTestSymtab(t)
+	ts.parseAndLinkNamed(t, "f1.proto", files[0])
+	ts.parseAndLinkNamed(t, "f2.proto", files[1], func(err error) bool {
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "foo redeclared in this block")
+		return true
+	})
+	ts.parseAndLinkNamed(t, "f3.proto", files[2])
+	ts.run()
+}
 
-	fds["test1.proto"] = parseAndLinkNamed("test1.proto", files[0])
-	fds["test2.proto"] = parseAndLinkNamed("test2.proto", files[1], fds["test1.proto"], fds["google/protobuf/descriptor.proto"])
-	fds["test3.proto"] = parseAndLinkNamed("test3.proto", files[2], fds["test2.proto"], fds["google/protobuf/descriptor.proto"])
-	fds["test4.proto"] = parseAndLinkNamed("test4.proto", files[3], fds["test3.proto"])
-	fds["test5.proto"] = parseAndLinkNamed("test5.proto", files[4], fds["test4.proto"])
-	fds["test6.proto"] = parseAndLinkNamed("test6.proto", files[5], fds["google/protobuf/descriptor.proto"])
+func TestPackageSymbolCollision(t *testing.T) {
+	files := []string{
+		0: `
+syntax = "proto2";
 
-	filenames := []string{"test1.proto", "test2.proto", "test3.proto", "test4.proto", "test5.proto", "test6.proto"}
+import "google/protobuf/descriptor.proto";
+extend google.protobuf.FieldOptions {
+	optional string foo = 10001;
+}`,
+		1: `
+syntax = "proto2";
+package foo.bar;
+`,
+		2: `
+syntax = "proto2";
 
+import "google/protobuf/descriptor.proto";
+extend google.protobuf.FieldOptions {
+	optional string foo = 10001;
+}`,
+	}
+
+	ts := newTestSymtab(t)
+	ts.parseAndLinkNamed(t, "f1.proto", files[0])
+	ts.parseAndLinkNamed(t, "f2.proto", files[1], func(err error) bool {
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "foo redeclared in this block")
+		return true
+	})
+	ts.parseAndLinkNamed(t, "f3.proto", files[2], func(err error) bool {
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "foo redeclared in this block")
+		return true
+	})
+	ts.run()
+}
+
+func TestSymbolCollision(t *testing.T) {
+	files := []string{
+		0: `
+syntax = "proto2";
+package testprotos;
+
+message Test {
+	optional string foo = 1;
+}`,
+		1: `
+syntax = "proto2";
+package testprotos;
+
+import "test1.proto";
+message Test2 {
+	optional Test foo = 1;
+}
+`,
+		2: `
+syntax = "proto2";
+package testprotos;
+
+import "test1.proto";
+message Test2 {
+	optional Test foo = 1;
+}
+
+message Test{}
+`,
+	}
+
+	ts := newTestSymtab(t)
+	ts.parseAndLinkNamed(t, "test1.proto", files[0])
+	ts.parseAndLinkNamed(t, "test2.proto", files[1])
+	ts.runF(func(s *Symbols, h *reporter.Handler) {
+		err := s.Delete(ts.fds["test2.proto"], h)
+		require.NoError(t, err)
+		ts.parseAndLinkNamed(t, "test2.proto", files[2], func(err error) bool {
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "testprotos.Test redeclared in this block")
+			return true
+		})
+		ts.parseAndLinkNamed(t, "test2.proto", files[1])
+	})
+}
+
+type tempSymtab struct {
+	sym       *Symbols
+	t         *testing.T
+	fds       map[string]File
+	filenames []string
+}
+
+func newTestSymtab(t *testing.T) *tempSymtab {
+	ts := &tempSymtab{
+		sym: NewSymbolTable(),
+		fds: make(map[string]File),
+		t:   t,
+	}
+
+	h := reporter.NewHandler(nil)
+	dep, err := protoregistry.GlobalFiles.FindFileByPath("google/protobuf/descriptor.proto")
+	require.NoError(t, err)
+	ts.sym.Import(dep, h)
+	ts.fds["google/protobuf/descriptor.proto"], err = NewFile(dep, nil)
+	require.NoError(t, err)
+
+	return ts
+}
+
+func (ts *tempSymtab) parseAndLinkNamed(t *testing.T, name, contents string, handleLinkErr ...func(error) (cont bool)) {
+	h := reporter.NewHandler(nil)
+	fileAst, err := parser.Parse(name, strings.NewReader(contents), h, 0)
+	require.NoError(t, err)
+	parseResult, err := parser.ResultFromAST(fileAst, true, h)
+	require.NoError(t, err)
+
+	var depFiles Files
+	for _, decl := range parseResult.AST().Decls {
+		if imp, ok := decl.(*ast.ImportNode); ok {
+			f, ok := ts.fds[imp.Name.AsString()]
+			require.True(t, ok)
+			depFiles = append(depFiles, f)
+		}
+	}
+	symClone := ts.sym.Clone()
+	linkResult, err := Link(parseResult, depFiles, symClone, h)
+	if err != nil {
+		if len(handleLinkErr) > 0 {
+			if handleLinkErr[0](err) {
+				return
+			}
+		}
+	}
+	require.NoError(t, err)
+	ts.sym = symClone
+	ts.fds[name] = linkResult
+	ts.filenames = append(ts.filenames, name)
+
+	require.NoError(t, h.Error())
+}
+
+func (ts *tempSymtab) run() {
+	h := reporter.NewHandler(nil)
 	symtab := NewSymbolTable()
 
-	for z := 0; z < 100; z++ {
-		states := make([]*Symbols, 0, len(files))
+	for range 10 {
+		states := make([]*Symbols, 0, len(ts.filenames))
 		// import each file and record the state of the symbol table
-		for _, filename := range filenames {
+		for _, filename := range ts.filenames {
 			beforeImport := symtab.Clone()
-			err := symtab.Import(fds[filename], h)
+			err := symtab.Import(ts.fds[filename], h)
 			afterImport := symtab.Clone()
-			require.NoError(t, err)
-			err = symtab.Delete(fds[filename], h)
-			require.NoError(t, err)
-			requireSymbolsEqual(t, beforeImport, symtab)
-			err = symtab.Import(fds[filename], h)
-			require.NoError(t, err)
-			requireSymbolsEqual(t, afterImport, symtab)
+			require.NoError(ts.t, err)
+			err = symtab.Delete(ts.fds[filename], h)
+			require.NoError(ts.t, err)
+			requireSymbolsEqual(ts.t, beforeImport, symtab)
+			err = symtab.Import(ts.fds[filename], h)
+			require.NoError(ts.t, err)
+			requireSymbolsEqual(ts.t, afterImport, symtab)
 			states = append(states, symtab.Clone())
+
+			require.NoError(ts.t, h.Error())
 		}
 
 		// delete each file and verify that the state of the symbol table is restored to the previous state
-		for i := len(filenames) - 1; i >= 0; i-- {
-			err := symtab.Delete(fds[filenames[i]], h)
-			require.NoError(t, err)
+		for i := len(ts.filenames) - 1; i >= 0; i-- {
+			err := symtab.Delete(ts.fds[ts.filenames[i]], h)
+			require.NoError(ts.t, err)
 
 			// if this is the last file, the symbol table should be empty
 			if i == 0 {
-				requireSymbolsEmpty(t, symtab)
+				requireSymbolsEmpty(ts.t, symtab)
 			} else {
 				// otherwise, the symbol table should match the state recorded after the previous file was imported
-				requireSymbolsEqual(t, states[i-1], symtab)
+				requireSymbolsEqual(ts.t, states[i-1], symtab)
 			}
 		}
 	}
 
-	requireSymbolsEmpty(t, symtab)
+	requireSymbolsEmpty(ts.t, symtab)
+}
+
+func (ts *tempSymtab) runF(fn func(s *Symbols, h *reporter.Handler)) {
+	h := reporter.NewHandler(nil)
+	fn(ts.sym, h)
+	require.NoError(ts.t, h.Error())
 }
 
 func requireSymbolsEmpty(t *testing.T, s *Symbols) {
 	t.Helper()
 	require.Empty(t, s.pkgTrie.children)
 	require.Empty(t, s.pkgTrie.exts)
-	require.Empty(t, s.pkgTrie.files)
 	require.Empty(t, s.pkgTrie.symbols)
 }
 
@@ -663,7 +523,6 @@ func requirePackageSymbolsEqual(t *testing.T, expected, actual *packageSymbols) 
 		}
 	}
 	requireEquivalent(t, expected.exts, actual.exts)
-	requireEquivalent(t, expected.files, actual.files)
 	requireEquivalent(t, expected.symbols, actual.symbols)
 }
 

@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package completion;
+
+import "google/protobuf/descriptor.proto";
+
+message ExampleMessage {
+  // This is a documentation string
+  string stringField = 1;
+}
+
+extend google.protobuf.FieldOptions {
+  ExampleMessage exampleMsg = 35000;
+}
+
+message Main {
+  int32 foo = 1 [
+    (exampleMsg) = {
+      stringField: "a"
+    }
+  ];
+}
