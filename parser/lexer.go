@@ -935,6 +935,10 @@ func (l *protoLex) endCompoundIdent(lval *protoSymType) int {
 				return cmp.Compare(a.Start(), b.Start())
 			})
 		}
+		if len(lval.cid.dots) > 0 && len(parts) > 0 && parts[0].IsExtension() && lval.cid.dots[0].Token() < parts[0].Open.Token() {
+			// warn on extension idents that start with '.(foo)'
+			l.ErrExtendedSyntaxAt("unexpected leading '.'", lval.cid.dots[0], CategoryExtraTokens)
+		}
 		lval.optName = ast.NewOptionNameNode(parts, lval.cid.dots)
 		return _EXTENSION_IDENT
 	}
