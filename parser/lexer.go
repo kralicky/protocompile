@@ -310,7 +310,15 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 				l.insertSemi = immediate | insertComma
 			}
 		case ':':
-			l.insertSemi = atNextNewline | onlyIfLastTokenOnLine
+			if _, ok := l.matchNextRune('}'); ok {
+				if l.peekNewline() {
+					l.insertSemi = atNextNewline | onlyIfLastTokenOnLine
+				} else {
+					l.insertSemi = immediate
+				}
+			} else {
+				l.insertSemi = atNextNewline | onlyIfLastTokenOnLine
+			}
 		case '\n':
 			if l.insertSemi&atNextNewline != 0 {
 				rn := ';'
