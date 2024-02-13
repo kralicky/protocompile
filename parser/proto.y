@@ -122,7 +122,7 @@ import (
 %type <mtdElement>   methodElement
 %type <mtdElements>  methodElements methodBody
 %type <mtdMsgType>   methodMessageType
-%type <b>            nonVirtualSemicolonOrInvalidComma optionalTrailingComma virtualComma nonVirtualSemicolon virtualSemicolon messageLiteralOpen messageLiteralClose
+%type <b>            nonVirtualSemicolonOrInvalidComma optionalTrailingComma virtualComma nonVirtualSemicolon virtualSemicolon commaOrInvalidSemicolon messageLiteralOpen messageLiteralClose
 
 // same for terminals
 %token <sv>      _STRING_LIT
@@ -643,11 +643,11 @@ compactOptions
 	}
 
 compactOptionDecls
-	:	compactOption ',' {
+	:	compactOption commaOrInvalidSemicolon {
 		$1.AddSemicolon($2)
 		$$ = &compactOptionSlices{options: []*ast.OptionNode{$1}}
 	}
-	| compactOptionDecls compactOption ',' {
+	| compactOptionDecls compactOption commaOrInvalidSemicolon {
 		$2.AddSemicolon($3)
 		$1.options = append($1.options, $2)
 		$$ = $1
@@ -1603,6 +1603,16 @@ virtualComma
 			protolex.(*protoLex).ErrExtendedSyntaxAt("unexpected ','", $1, CategoryExtraTokens)
 		}
 		$$ = $1
+	}
+
+commaOrInvalidSemicolon
+	: ','
+	| ';' {
+		if $1.Virtual {
+			protolex.(*protoLex).ErrExtendedSyntaxAt("expected ','", $1, CategoryMissingToken)
+		} else {
+			protolex.(*protoLex).ErrExtendedSyntaxAt("expected ',', found ';'", $1, CategoryIncorrectToken)
+		}
 	}
 
 messageLiteralOpen
