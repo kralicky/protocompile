@@ -157,6 +157,22 @@ func (f *FileNode) SourcePos(offset int) SourcePos {
 	return f.fileInfo.SourcePos(offset)
 }
 
+func (f *FileNode) GetSyntaxNode() *SyntaxNode {
+	return f.Syntax
+}
+
+func (f *FileNode) GetEditionNode() *EditionNode {
+	return f.Edition
+}
+
+func (f *FileNode) GetDecls() []FileElement {
+	return f.Decls
+}
+
+func (f *FileNode) GetEOF() *RuneNode {
+	return f.EOF
+}
+
 // ItemAtOffset returns the token or comment at the given offset. Only one of
 // the return values will be valid. If the item is a token then the returned
 // comment will be a zero value and thus invalid (i.e. comment.IsValid() returns

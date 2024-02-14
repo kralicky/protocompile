@@ -889,6 +889,9 @@ func (c Comment) Start() SourcePos {
 	return c.fileInfo.SourcePos(span.offset)
 }
 
+// TODO: for some reason, this returns the position of the last character in the
+// comment, not the character after the last one, as is the case for tokens.
+// Unsure why this is the case, possibly unintentional?
 func (c Comment) End() SourcePos {
 	span := c.fileInfo.items[c.AsItem()]
 	return c.fileInfo.SourcePos(span.offset + span.length - 1)
