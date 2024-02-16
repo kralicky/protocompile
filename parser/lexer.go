@@ -390,7 +390,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 					l.setError(lval, numError(err, "float", token))
 					return _ERROR
 				}
-				l.setFloat(lval, f)
+				l.setFloat(lval, f, token)
 				if _, ok := l.matchNextRune(',', ']'); !ok {
 					l.insertSemi |= atNextNewline | onlyIfLastTokenOnLine
 				}
@@ -604,7 +604,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 					l.setError(lval, numError(err, "hexadecimal integer", token[2:]))
 					return _ERROR
 				}
-				l.setInt(lval, ui)
+				l.setInt(lval, ui, token)
 				if _, ok := l.matchNextRune(',', ']'); !ok {
 					l.insertSemi |= atNextNewline | onlyIfLastTokenOnLine
 				}
@@ -617,7 +617,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 					l.setError(lval, numError(err, "float", token))
 					return _ERROR
 				}
-				l.setFloat(lval, f)
+				l.setFloat(lval, f, token)
 				if _, ok := l.matchNextRune(',', ']'); !ok {
 					l.insertSemi |= atNextNewline | onlyIfLastTokenOnLine
 				}
@@ -639,7 +639,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 					kind = "float"
 					f, err = parseFloat(token)
 					if err == nil {
-						l.setFloat(lval, f)
+						l.setFloat(lval, f, token)
 						return _FLOAT_LIT
 					}
 				}
@@ -649,7 +649,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 			if _, ok := l.matchNextRune('[', ',', ']'); !ok {
 				l.insertSemi |= atNextNewline | onlyIfLastTokenOnLine
 			}
-			l.setInt(lval, ui)
+			l.setInt(lval, ui, token)
 			return _INT_LIT
 		}
 
@@ -820,13 +820,13 @@ func (l *protoLex) setIdent(lval *protoSymType, val string) {
 	l.setPrevAndAddComments(lval.id)
 }
 
-func (l *protoLex) setInt(lval *protoSymType, val uint64) {
-	lval.i = ast.NewUintLiteralNode(val, l.newToken())
+func (l *protoLex) setInt(lval *protoSymType, val uint64, raw string) {
+	lval.i = ast.NewUintLiteralNode(val, l.newToken(), raw)
 	l.setPrevAndAddComments(lval.i)
 }
 
-func (l *protoLex) setFloat(lval *protoSymType, val float64) {
-	lval.f = ast.NewFloatLiteralNode(val, l.newToken())
+func (l *protoLex) setFloat(lval *protoSymType, val float64, raw string) {
+	lval.f = ast.NewFloatLiteralNode(val, l.newToken(), raw)
 	l.setPrevAndAddComments(lval.f)
 }
 

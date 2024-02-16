@@ -172,13 +172,16 @@ type UintLiteralNode struct {
 	terminalNode
 	// Val is the numeric value indicated by the literal
 	Val uint64
+	// Raw is the original string representation of the literal
+	Raw string
 }
 
 // NewUintLiteralNode creates a new *UintLiteralNode with the given val.
-func NewUintLiteralNode(val uint64, tok Token) *UintLiteralNode {
+func NewUintLiteralNode(val uint64, tok Token, raw string) *UintLiteralNode {
 	return &UintLiteralNode{
 		terminalNode: tok.asTerminalNode(),
 		Val:          val,
+		Raw:          raw,
 	}
 }
 
@@ -263,13 +266,16 @@ type FloatLiteralNode struct {
 	terminalNode
 	// Val is the numeric value indicated by the literal
 	Val float64
+	// Raw is the original string representation of the literal
+	Raw string
 }
 
 // NewFloatLiteralNode creates a new *FloatLiteralNode with the given val.
-func NewFloatLiteralNode(val float64, tok Token) *FloatLiteralNode {
+func NewFloatLiteralNode(val float64, tok Token, raw string) *FloatLiteralNode {
 	return &FloatLiteralNode{
 		terminalNode: tok.asTerminalNode(),
 		Val:          val,
+		Raw:          raw,
 	}
 }
 
