@@ -15,8 +15,26 @@
 package ast
 
 import (
+	"errors"
 	"fmt"
 )
+
+var (
+	// WalkContinue is a sentinel error value that can be returned from a walk
+	// function to indicate that none of the children of the current node should
+	// be visited (if any), and that the walk should proceed to the next sibling
+	// of the current node.
+	WalkContinue = errors.New("skip subtree")
+
+	// WalkBreak is a sentinel error value that can be returned from a walk
+	// function to indicate that the entire walk operation should be completed
+	// immediately with no error.
+	WalkBreak = errors.New("break")
+)
+
+func SkipVisitor[N Node](n N) error {
+	return WalkContinue
+}
 
 // Walk conducts a walk of the AST rooted at the given root using the
 // given visitor. It performs a "pre-order traversal", visiting a
@@ -31,7 +49,10 @@ func Walk(root Node, v Visitor, opts ...WalkOption) error {
 	for _, opt := range opts {
 		opt(&wOpts)
 	}
-	return walk(root, v, wOpts)
+	if err := walk(root, v, wOpts); err != nil && err != WalkBreak {
+		return err
+	}
+	return nil
 }
 
 // WalkOption represents an option used with the Walk function. These
@@ -132,6 +153,9 @@ func walk(root Node, v Visitor, opts walkOptions) (err error) {
 
 	if canVisit {
 		if err := Visit(root, v); err != nil {
+			if err == WalkContinue {
+				return nil
+			}
 			return err
 		}
 	}
@@ -139,6 +163,9 @@ func walk(root Node, v Visitor, opts walkOptions) (err error) {
 	if comp, ok := root.(CompositeNode); ok {
 		for _, child := range comp.Children() {
 			if err := walk(child, v, opts); err != nil {
+				if err == WalkBreak {
+					break
+				}
 				return err
 			}
 		}
@@ -290,6 +317,9 @@ func (t *AncestorTracker) Parent() Node {
 func VisitChildren(n CompositeNode, v Visitor) error {
 	for _, ch := range n.Children() {
 		if err := Visit(ch, v); err != nil {
+			if err == WalkContinue {
+				continue
+			}
 			return err
 		}
 	}
