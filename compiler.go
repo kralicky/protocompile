@@ -883,7 +883,7 @@ func (t *task) link(parseRes parser.Result, deps linker.Files, interpretOpts ...
 			// If an unrecoverable link error occurs, do not commit the updated symbol
 			// table, as it may be in an inconsistent state.
 			t.e.symTxLock.Unlock()
-			return file, linkError
+			return nil, linkError
 		}
 		// If the error is recoverable, we can commit the updated symbol table.
 		linkIncomplete = true

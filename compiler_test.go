@@ -510,6 +510,68 @@ message See {
 	assert.NoError(t, err)
 }
 
+func TestPartialLink(t *testing.T) {
+	files := map[UnresolvedPath]string{
+		"a1.proto": `
+syntax = "proto2";
+
+package refs;
+
+message Example {
+	optional int32 foo = 1;
+}`,
+
+		"a2.proto": `
+syntax = "proto3";
+
+package refs;
+
+import "a1.proto";
+
+message A2 {
+  Example a2 = 1;
+}`,
+	}
+	resolver := ResolverFunc(func(name UnresolvedPath, _ ImportContext) (SearchResult, error) {
+		if s, ok := files[name]; ok {
+			return SearchResult{
+				ResolvedPath: ResolvedPath(name),
+				Source:       strings.NewReader(s),
+			}, nil
+		}
+		return SearchResult{}, os.ErrNotExist
+	})
+	comp := Compiler{
+		Resolver:                resolver,
+		SourceInfoMode:          SourceInfoExtraComments | SourceInfoExtraOptionLocations,
+		RetainASTs:              true,
+		RetainResults:           true,
+		InterpretOptionsLenient: true,
+		Reporter: reporter.NewReporter(func(err reporter.ErrorWithPos) error {
+			return nil
+		}, func(ewp reporter.ErrorWithPos) {}),
+	}
+
+	_, err := comp.Compile(context.Background(), "a1.proto", "a2.proto")
+	require.NoError(t, err)
+
+	files["a1.proto"] = `
+	syntax = "proto2";
+
+	package refs;
+
+	message Example {
+		optional int32 foo =
+	}`
+
+	res1, err := comp.Compile(context.Background(), "a1.proto")
+	require.Error(t, reporter.ErrInvalidSource)
+	_ = res1
+	res2, err := comp.Compile(context.Background(), "a1.proto")
+	_ = res2
+	require.Error(t, reporter.ErrInvalidSource)
+}
+
 func buildBaseDescriptors() linker.Files {
 	comp := Compiler{
 		Resolver:       WithStandardImports(mkResolver(baseContents)),

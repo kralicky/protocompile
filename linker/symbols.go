@@ -693,6 +693,17 @@ func (s *Symbols) deleteFileLocked(fd protoreflect.FileDescriptor, handler *repo
 	pkgName := fd.Package()
 
 	pkg := s.getPackage(pkgName)
+	if pkg == nil {
+		// Check for the case where the file exists and has a package name, but
+		// no other symbols. If, for example, another file with the same package
+		// imports this one and is invalidated, the package will become empty and
+		// will have been cleaned up by the time we get here.
+		if fd.Messages().Len() == 0 && fd.Enums().Len() == 0 && fd.Extensions().Len() == 0 && fd.Services().Len() == 0 {
+			delete(s.files, fd.Path())
+			return nil
+		}
+		return fmt.Errorf("%w: no such package %s", ErrFileNotFound, pkgName)
+	}
 	pkg.mu.Lock()
 	deletedExtensions := pkg.deleteFileLocked(fd)
 	if pkg.isEmptyLocked() {
