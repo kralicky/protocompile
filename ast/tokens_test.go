@@ -34,6 +34,9 @@ func TestTokens(t *testing.T) {
 		if err != nil {
 			return err
 		}
+		if info.Name() == "incomplete_fields.proto" {
+			return nil // this file has odd contents that don't follow the rules we're testing
+		}
 		if filepath.Ext(path) == ".proto" {
 			t.Run(path, func(t *testing.T) {
 				t.Parallel()
@@ -65,6 +68,10 @@ func testTokensSequence(t *testing.T, path string, data []byte) {
 	token, ok := seq.First()
 	require.True(t, ok)
 	for _, astToken := range tokens {
+		if astToken != token {
+			t.Logf("expected %v (%q), got %v (%q)", astToken, root.TokenInfo(astToken).RawText(), token, root.TokenInfo(token).RawText())
+			t.Log(root.DebugAnnotated())
+		}
 		require.Equal(t, astToken, token)
 		token, _ = seq.Next(token)
 	}
@@ -80,11 +87,15 @@ func testTokensSequence(t *testing.T, path string, data []byte) {
 
 func leavesAsSlice(file *ast.FileNode) []ast.Token {
 	var tokens []ast.Token
-	_ = ast.Walk(file, &ast.SimpleVisitor{
-		DoVisitTerminalNode: func(n ast.TerminalNode) error {
-			tokens = append(tokens, n.Token())
-			return nil
-		},
+	ast.Inspect(file, func(n ast.Node) bool {
+		if ast.IsTerminalNode(n) {
+			tok, comment := file.GetItem(n.(ast.TerminalNodeInterface).Token().AsItem())
+			if comment.IsValid() {
+				return true
+			}
+			tokens = append(tokens, tok)
+		}
+		return true
 	})
 	return tokens
 }

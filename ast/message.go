@@ -14,8 +14,6 @@
 
 package ast
 
-import "fmt"
-
 // MessageDeclNode is a node in the AST that defines a message type. This
 // includes normal message fields as well as implicit messages:
 //   - *MessageNode
@@ -44,81 +42,26 @@ var (
 //	  bytes extra = 3;
 //	}
 type MessageNode struct {
-	compositeNode
-	Keyword *KeywordNode
-	Name    *IdentNode
-	MessageBody
+	Keyword    *KeywordNode
+	Name       *IdentNode
+	OpenBrace  *RuneNode
+	Decls      []MessageElement
+	CloseBrace *RuneNode
+	Semicolon  *RuneNode
 }
+
+func (m *MessageNode) Start() Token { return startToken(m.Keyword) }
+func (m *MessageNode) End() Token   { return endToken(m.Semicolon, m.CloseBrace) }
 
 func (*MessageNode) fileElement() {}
 func (*MessageNode) msgElement()  {}
 
-// NewMessageNode creates a new *MessageNode. All arguments must be non-nil.
-//   - keyword: The token corresponding to the "message" keyword.
-//   - name: The token corresponding to the field's name.
-//   - openBrace: The token corresponding to the "{" rune that starts the body.
-//   - decls: All declarations inside the message body.
-//   - closeBrace: The token corresponding to the "}" rune that ends the body.
-func NewMessageNode(keyword *KeywordNode, name *IdentNode, openBrace *RuneNode, decls []MessageElement, closeBrace *RuneNode) *MessageNode {
-	if keyword == nil {
-		panic("keyword is nil")
-	}
-	if name == nil {
-		panic("name is nil")
-	}
-	if openBrace == nil {
-		panic("openBrace is nil")
-	}
-	if closeBrace == nil {
-		panic("closeBrace is nil")
-	}
-	children := make([]Node, 0, 4+len(decls))
-	children = append(children, keyword, name, openBrace)
-	for _, decl := range decls {
-		children = append(children, decl)
-	}
-	children = append(children, closeBrace)
-
-	ret := &MessageNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Keyword: keyword,
-		Name:    name,
-	}
-	populateMessageBody(&ret.MessageBody, openBrace, decls, closeBrace)
-	return ret
+func (e *MessageNode) GetElements() []MessageElement {
+	return e.Decls
 }
 
 func (n *MessageNode) MessageName() Node {
 	return n.Name
-}
-
-// MessageBody represents the body of a message. It is used by both
-// MessageNodes and GroupNodes.
-type MessageBody struct {
-	OpenBrace  *RuneNode
-	Decls      []MessageElement
-	CloseBrace *RuneNode
-}
-
-func (m *MessageBody) GetElements() []MessageElement {
-	return m.Decls
-}
-
-func populateMessageBody(m *MessageBody, openBrace *RuneNode, decls []MessageElement, closeBrace *RuneNode) {
-	m.OpenBrace = openBrace
-	m.Decls = decls
-	for _, decl := range decls {
-		switch decl.(type) {
-		case *OptionNode, *FieldNode, *MapFieldNode, *GroupNode, *OneofNode,
-			*MessageNode, *EnumNode, *ExtendNode, *ExtensionRangeNode,
-			*ReservedNode, *EmptyDeclNode:
-		default:
-			panic(fmt.Sprintf("invalid MessageElement type: %T", decl))
-		}
-	}
-	m.CloseBrace = closeBrace
 }
 
 // MessageElement is an interface implemented by all AST nodes that can
@@ -148,13 +91,16 @@ var (
 //	  bool redacted = 33333;
 //	}
 type ExtendNode struct {
-	compositeNode
 	Keyword    *KeywordNode
 	Extendee   IdentValueNode
 	OpenBrace  *RuneNode
 	Decls      []ExtendElement
 	CloseBrace *RuneNode
+	Semicolon  *RuneNode
 }
+
+func (e *ExtendNode) Start() Token { return startToken(e.Keyword) }
+func (e *ExtendNode) End() Token   { return endToken(e.Semicolon, e.CloseBrace) }
 
 func (e *ExtendNode) GetElements() []ExtendElement {
 	return e.Decls
@@ -163,76 +109,8 @@ func (e *ExtendNode) GetElements() []ExtendElement {
 func (*ExtendNode) fileElement() {}
 func (*ExtendNode) msgElement()  {}
 
-// NewExtendNode creates a new *ExtendNode. All arguments must be non-nil.
-//   - keyword: The token corresponding to the "extend" keyword.
-//   - extendee: The token corresponding to the name of the extended message.
-//   - openBrace: The token corresponding to the "{" rune that starts the body.
-//   - decls: All declarations inside the message body.
-//   - closeBrace: The token corresponding to the "}" rune that ends the body.
-func NewExtendNode(keyword *KeywordNode, extendee IdentValueNode, openBrace *RuneNode, decls []ExtendElement, closeBrace *RuneNode) *ExtendNode {
-	if keyword == nil {
-		panic("keyword is nil")
-	}
-	if extendee == nil {
-		panic("extendee is nil")
-	}
-	if openBrace == nil {
-		panic("openBrace is nil")
-	}
-	if closeBrace == nil {
-		panic("closeBrace is nil")
-	}
-	children := make([]Node, 0, 4+len(decls))
-	children = append(children, keyword, extendee, openBrace)
-	for _, decl := range decls {
-		children = append(children, decl)
-	}
-	children = append(children, closeBrace)
-
-	ret := &ExtendNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Keyword:    keyword,
-		Extendee:   extendee,
-		OpenBrace:  openBrace,
-		Decls:      decls,
-		CloseBrace: closeBrace,
-	}
-	for _, decl := range decls {
-		switch decl := decl.(type) {
-		case *FieldNode:
-			decl.Extendee = ret
-		case *GroupNode:
-			decl.Extendee = ret
-		case *EmptyDeclNode:
-		default:
-			panic(fmt.Sprintf("invalid ExtendElement type: %T", decl))
-		}
-	}
-	return ret
-}
-
-func NewIncompleteExtendNode(keyword *KeywordNode, extendee IdentValueNode) *ExtendNode {
-	if keyword == nil {
-		panic("keyword is nil")
-	}
-	children := []Node{keyword}
-	if extendee != nil {
-		children = append(children, extendee)
-	}
-	ret := &ExtendNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Keyword:  keyword,
-		Extendee: extendee,
-	}
-	return ret
-}
-
 func (e *ExtendNode) IsIncomplete() bool {
-	return e.Extendee == nil || e.OpenBrace == nil || e.CloseBrace == nil
+	return IsNil(e.Extendee) || e.OpenBrace == nil || e.CloseBrace == nil
 }
 
 // ExtendElement is an interface implemented by all AST nodes that can

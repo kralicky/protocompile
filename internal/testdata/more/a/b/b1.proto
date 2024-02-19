@@ -2,4 +2,9 @@ syntax = "proto3";
 
 package a.b;
 
-message BeeOne {}
+message BeeOne {
+  string xyz = 10 [
+    /* default lead */
+    json_name = "fubar" /* default trail */
+  ];
+}

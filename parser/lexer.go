@@ -113,7 +113,7 @@ type protoLex struct {
 	handler *reporter.Handler
 	res     *ast.FileNode
 
-	prevSym    ast.TerminalNode
+	prevSym    ast.TerminalNodeInterface
 	prevOffset int
 	eof        ast.Token
 
@@ -588,6 +588,17 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 				l.setIdent(lval, str)
 				return keyword
 			}
+			// inf and nan are a special case, they are case-insensitive
+			if ln := len(str); ln == 3 || ln == 8 {
+				switch strings.ToLower(str) {
+				case "inf", "infinity":
+					l.setIdent(lval, str)
+					return _INF
+				case "nan":
+					l.setIdent(lval, str)
+					return _NAN
+				}
+			}
 
 			l.setIdent(lval, str)
 			return _SINGULAR_IDENT
@@ -751,7 +762,7 @@ func (l *protoLex) newToken() ast.Token {
 	return l.info.AddToken(offset, length)
 }
 
-func (l *protoLex) setPrevAndAddComments(n ast.TerminalNode) {
+func (l *protoLex) setPrevAndAddComments(n ast.TerminalNodeInterface) {
 	comments := l.comments
 	l.comments = nil
 	var prevTrailingComments []ast.Token
@@ -806,9 +817,14 @@ func (l *protoLex) setPrevAndAddComments(n ast.TerminalNode) {
 }
 
 func (l *protoLex) setString(lval *protoSymType, val string) {
-	node := ast.NewStringLiteralNode(val, l.newToken())
+	node := &ast.StringLiteralNode{TerminalNode: l.newToken().AsTerminalNode(), Val: val}
 	if l.inCompoundStringLiteral && lval.sv != nil {
-		lval.sv = ast.NewCompoundStringLiteralNode(lval.sv, node)
+		switch sv := lval.sv.(type) {
+		case *ast.StringLiteralNode:
+			lval.sv = &ast.CompoundStringLiteralNode{Elements: []ast.StringValueNode{sv, node}}
+		case *ast.CompoundStringLiteralNode:
+			lval.sv = &ast.CompoundStringLiteralNode{Elements: append(sv.Elements, node)}
+		}
 	} else {
 		lval.sv = node
 	}
@@ -816,27 +832,27 @@ func (l *protoLex) setString(lval *protoSymType, val string) {
 }
 
 func (l *protoLex) setIdent(lval *protoSymType, val string) {
-	lval.id = ast.NewIdentNode(val, l.newToken())
+	lval.id = &ast.IdentNode{TerminalNode: l.newToken().AsTerminalNode(), Val: val}
 	l.setPrevAndAddComments(lval.id)
 }
 
 func (l *protoLex) setInt(lval *protoSymType, val uint64, raw string) {
-	lval.i = ast.NewUintLiteralNode(val, l.newToken(), raw)
+	lval.i = &ast.UintLiteralNode{TerminalNode: l.newToken().AsTerminalNode(), Val: val, Raw: raw}
 	l.setPrevAndAddComments(lval.i)
 }
 
 func (l *protoLex) setFloat(lval *protoSymType, val float64, raw string) {
-	lval.f = ast.NewFloatLiteralNode(val, l.newToken(), raw)
+	lval.f = &ast.FloatLiteralNode{TerminalNode: l.newToken().AsTerminalNode(), Val: val, Raw: raw}
 	l.setPrevAndAddComments(lval.f)
 }
 
 func (l *protoLex) setRune(lval *protoSymType, val rune) {
-	lval.b = ast.NewRuneNode(val, l.newToken())
+	lval.b = &ast.RuneNode{TerminalNode: l.newToken().AsTerminalNode(), Rune: val}
 	l.setPrevAndAddComments(lval.b)
 }
 
 func (l *protoLex) setVirtualRune(lval *protoSymType, val rune) {
-	lval.b = ast.NewVirtualRuneNode(val, l.newToken())
+	lval.b = &ast.RuneNode{TerminalNode: l.newToken().AsTerminalNode(), Rune: val, Virtual: true}
 	l.setPrevAndAddComments(lval.b)
 }
 
@@ -868,14 +884,8 @@ func (l *protoLex) endExtensionIdent(lval *protoSymType) {
 	switch {
 	case nDots == 0 && nIdents == 1:
 		name = lval.cid.idents[0]
-	case nDots > 0 && nIdents == 0:
-		name = ast.NewCompoundIdentNode(lval.cid.dots[0], nil, lval.cid.dots[1:])
-	case nDots > 0 && nIdents > 0:
-		if lval.cid.dots[0].Token() < lval.cid.idents[0].Token() {
-			name = ast.NewCompoundIdentNode(lval.cid.dots[0], lval.cid.idents, lval.cid.dots[1:])
-		} else {
-			name = ast.NewCompoundIdentNode(nil, lval.cid.idents, lval.cid.dots)
-		}
+	case nDots > 0:
+		name = &ast.CompoundIdentNode{Components: lval.cid.idents, Dots: lval.cid.dots}
 	default:
 		if ast.ExtendedSyntaxEnabled {
 			l.ErrExtendedSyntax("extension name cannot be empty", CategoryEmptyDecl)
@@ -884,11 +894,7 @@ func (l *protoLex) endExtensionIdent(lval *protoSymType) {
 		}
 	}
 
-	if name == nil || lval.refp.close == nil {
-		lval.xid.refs = append(lval.xid.refs, ast.NewIncompleteExtensionFieldReferenceNode(lval.refp.open, name, lval.refp.close))
-	} else {
-		lval.xid.refs = append(lval.xid.refs, ast.NewExtensionFieldReferenceNode(lval.refp.open, name, lval.refp.close))
-	}
+	lval.xid.refs = append(lval.xid.refs, &ast.FieldReferenceNode{Open: lval.refp.open, Name: name, Close: lval.refp.close})
 	lval.cid, lval.xid = lval.xid, nil
 	lval.refp = nil
 	l.inExtensionIdent = false
@@ -920,7 +926,7 @@ func (l *protoLex) endCompoundIdent(lval *protoSymType) int {
 	}()
 
 	if len(lval.cid.idents) == 0 && len(lval.cid.refs) == 0 {
-		lval.idv = ast.NewCompoundIdentNode(lval.cid.dots[0], nil, nil)
+		lval.idv = &ast.CompoundIdentNode{Components: nil, Dots: lval.cid.dots}
 		return _FULLY_QUALIFIED_IDENT // '.' (invalid, but important for completion)
 	}
 
@@ -929,7 +935,7 @@ func (l *protoLex) endCompoundIdent(lval *protoSymType) int {
 		if len(lval.cid.idents) > 0 {
 			// interleave idents and refs by position
 			for _, id := range lval.cid.idents {
-				parts = append(parts, ast.NewFieldReferenceNode(id))
+				parts = append(parts, &ast.FieldReferenceNode{Name: id})
 			}
 			slices.SortFunc(parts, func(a, b *ast.FieldReferenceNode) int {
 				return cmp.Compare(a.Start(), b.Start())
@@ -939,16 +945,15 @@ func (l *protoLex) endCompoundIdent(lval *protoSymType) int {
 			// warn on extension idents that start with '.(foo)'
 			l.ErrExtendedSyntaxAt("unexpected leading '.'", lval.cid.dots[0], CategoryExtraTokens)
 		}
-		lval.optName = ast.NewOptionNameNode(parts, lval.cid.dots)
+		lval.optName = &ast.OptionNameNode{Parts: parts, Dots: lval.cid.dots}
 		return _EXTENSION_IDENT
 	}
 
 	// if the first dot appears before the first ident, this is a fully qualified ident
+	lval.idv = &ast.CompoundIdentNode{Components: lval.cid.idents, Dots: lval.cid.dots}
 	if lval.cid.dots[0].Token() < lval.cid.idents[0].Token() {
-		lval.idv = ast.NewCompoundIdentNode(lval.cid.dots[0], lval.cid.idents, lval.cid.dots[1:])
 		return _FULLY_QUALIFIED_IDENT
 	}
-	lval.idv = ast.NewCompoundIdentNode(nil, lval.cid.idents, lval.cid.dots)
 	return _QUALIFIED_IDENT
 }
 

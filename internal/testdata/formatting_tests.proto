@@ -32,6 +32,7 @@ message Foo {
       {id: 456}
     ]
   };
+
   optional string bar = 1 [ // a
     (foo.bar.syntax) = true, // b
     (foo.bar.import) = true, // c
@@ -45,6 +46,10 @@ message Foo {
     },
     (foo.bar.weak) = true,
     (a)            = 1
+  ];
+  optional string xyz = 10 [
+    /* default lead */
+    default = "fubar" /* default trail */
   ];
 }
 

@@ -15,6 +15,7 @@
 package ast
 
 import (
+	"bytes"
 	"fmt"
 	"slices"
 	"sort"
@@ -303,7 +304,7 @@ func (f *FileInfo) GetItem(i Item) (Token, Comment) {
 		return f.comments[c].index >= int(i)
 	})
 	if c < len(f.comments) && f.comments[c].index == int(i) {
-		return TokenError, Comment{fileInfo: f, index: c}
+		return TokenError, Comment{fileInfo: f, info: f.comments[c]}
 	}
 	// f.isComment(i) returned true, but we couldn't find it
 	// in f.comments? Uh oh... that shouldn't be possible.
@@ -540,13 +541,17 @@ func (t Token) AsItem() Item {
 	return Item(t)
 }
 
-func (t Token) asTerminalNode() terminalNode {
-	return terminalNode(t)
+func (t Token) AsTerminalNode() TerminalNode {
+	return TerminalNode(t)
 }
 
 // Item represents an item lexed from source. It represents either
 // a Token or a Comment.
 type Item int
+
+func (i Item) IsValid() bool {
+	return i != -1
+}
 
 // ItemInfo provides details about an item's location in the source file and
 // its contents.
@@ -580,7 +585,11 @@ func (s sourceSpan) End() SourcePos {
 }
 
 func (s sourceSpan) String() string {
-	return fmt.Sprintf("%s:%d:%d-%d", s.StartPos.Filename, s.StartPos.Line, s.StartPos.Col, s.EndPos.Col)
+	if s.StartPos.Col == s.EndPos.Col {
+		return fmt.Sprintf("%s:%d:%d", s.StartPos.Filename, s.StartPos.Line, s.StartPos.Col)
+	} else {
+		return fmt.Sprintf("%s:%d:%d-%d", s.StartPos.Filename, s.StartPos.Line, s.StartPos.Col, s.EndPos.Col)
+	}
 }
 
 var _ SourceSpan = sourceSpan{}
@@ -655,9 +664,20 @@ func (n NodeInfo) LeadingWhitespace() string {
 	}
 
 	tok := n.fileInfo.items[n.startIndex]
+	if tok.length == 0 && n.startIndex < len(n.fileInfo.items)-1 {
+		// leading whitespace is attributed to tokens that follow one or more
+		// zero-length tokens (except eof, since it is always the last token)
+		return ""
+	}
 	var prevEnd int
 	if n.startIndex > 0 {
-		prevTok := n.fileInfo.items[n.startIndex-1]
+		var prevTok itemSpan
+		for offset := -1; n.startIndex+offset >= 0; offset-- {
+			prevTok = n.fileInfo.items[n.startIndex+offset]
+			if prevTok.length > 0 {
+				break
+			}
+		}
 		prevEnd = prevTok.offset + prevTok.length
 	}
 	return string(n.fileInfo.data[prevEnd:tok.offset])
@@ -852,7 +872,7 @@ func (c Comments) Index(i int) Comment {
 	}
 	return Comment{
 		fileInfo: c.fileInfo,
-		index:    c.first + i,
+		info:     c.fileInfo.comments[c.first+i],
 		virtual:  virtual,
 	}
 }
@@ -867,7 +887,7 @@ func (c Comments) Index(i int) Comment {
 //	// this is a separate comment.
 type Comment struct {
 	fileInfo *FileInfo
-	index    int
+	info     commentInfo
 	virtual  bool
 }
 
@@ -876,12 +896,12 @@ var _ ItemInfo = Comment{}
 // IsValid returns true if this comment is valid. If this comment is
 // a zero-value struct, it is not valid.
 func (c Comment) IsValid() bool {
-	return c.fileInfo != nil && c.index >= 0
+	return c.fileInfo != nil && c.info.index >= 0
 }
 
 // AsItem returns the Item that corresponds to c.
 func (c Comment) AsItem() Item {
-	return Item(c.fileInfo.comments[c.index].index)
+	return Item(c.info.index)
 }
 
 func (c Comment) Start() SourcePos {
@@ -901,12 +921,26 @@ func (c Comment) IsVirtual() bool {
 	return c.virtual
 }
 
+func (c Comment) VirtualItem() Item {
+	return Item(c.info.virtualIndex)
+}
+
+func (c Comment) AttributedTo() Item {
+	return Item(c.info.attributedToIndex)
+}
+
 func (c Comment) LeadingWhitespace() string {
 	item := c.AsItem()
 	span := c.fileInfo.items[item]
 	var prevEnd int
 	if item > 0 {
-		prevItem := c.fileInfo.items[item-1]
+		var prevItem itemSpan
+		for offset := -1; int(item)+offset >= 0; offset-- {
+			prevItem = c.fileInfo.items[int(item)+offset]
+			if prevItem.length > 0 {
+				break
+			}
+		}
 		prevEnd = prevItem.offset + prevItem.length
 	}
 	return string(c.fileInfo.data[prevEnd:span.offset])
@@ -936,4 +970,51 @@ func NewNodeReference[F interface{ NodeInfo(Node) NodeInfo }](f F, node Node) No
 		Node:     node,
 		NodeInfo: f.NodeInfo(node),
 	}
+}
+
+func (f *FileInfo) DebugAnnotated() string {
+	var buf bytes.Buffer
+
+	zltCount := 0
+	for i, item := range f.items {
+		info := f.ItemInfo(Item(i))
+		start, end := item.offset, item.offset+item.length
+		data := f.data[start:end]
+		tokenLen := end - start
+		if tokenLen == 0 {
+			zltCount++
+			continue
+		} else if zltCount > 0 {
+			// for zero-length tokens, print a bold black-on-white number
+			// for the count of consecutive zero-length tokens
+			buf.WriteString("\x1B[1;30;47m")
+			buf.WriteString(fmt.Sprintf("%d", zltCount))
+			buf.WriteString("\x1B[0m")
+			zltCount = 0
+		}
+		// background-color tokens blue, comments green (ansi codes)
+		// odd-numbered tokens are dimmed
+		var bgcolor string
+		var fgcolor string
+		if f.isComment(Item(i)) {
+			if i%2 == 0 {
+				bgcolor = "\x1B[48;5;2m"
+			} else {
+				bgcolor = "\x1B[48;5;22m"
+			}
+		} else {
+			if i%2 == 0 {
+				bgcolor = "\x1B[48;5;4m"
+			} else {
+				bgcolor = "\x1B[48;5;24m"
+			}
+		}
+		buf.WriteString(info.LeadingWhitespace())
+		buf.WriteString(bgcolor)
+		buf.WriteString(fgcolor)
+		buf.WriteString(string(data))
+		buf.WriteString("\x1B[0m")
+	}
+
+	return buf.String()
 }

@@ -15,8 +15,9 @@
 package ast
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 )
 
 // OptionDeclNode is a placeholder interface for AST nodes that represent
@@ -40,15 +41,15 @@ var (
 //
 //	option (custom.option) = "foo";
 type OptionNode struct {
-	compositeNode
 	Keyword   *KeywordNode // absent for compact options
 	Name      *OptionNameNode
 	Equals    *RuneNode
 	Val       ValueNode
 	Semicolon *RuneNode // for compact options, this is actually a comma
-
-	incomplete bool
 }
+
+func (n *OptionNode) Start() Token { return startToken(n.Keyword, n.Name, n.Equals, n.Val) }
+func (n *OptionNode) End() Token   { return endToken(n.Semicolon, n.Val) }
 
 func (n *OptionNode) fileElement()    {}
 func (n *OptionNode) msgElement()     {}
@@ -57,133 +58,19 @@ func (n *OptionNode) enumElement()    {}
 func (n *OptionNode) serviceElement() {}
 func (n *OptionNode) methodElement()  {}
 
-func (m *OptionNode) AddSemicolon(semi *RuneNode) {
-	m.Semicolon = semi
-	m.children = append(m.children, semi)
-}
-
-// NewOptionNode creates a new *OptionNode for a full option declaration (as
-// used in files, messages, oneofs, enums, services, and methods). All arguments
-// must be non-nil. (Also see NewCompactOptionNode.)
-//   - keyword: The token corresponding to the "option" keyword.
-//   - name: The token corresponding to the name of the option.
-//   - equals: The token corresponding to the "=" rune after the name.
-//   - val: The token corresponding to the option value.
-func NewOptionNode(keyword *KeywordNode, name *OptionNameNode, equals *RuneNode, val ValueNode) *OptionNode {
-	if keyword == nil {
-		panic("keyword is nil")
-	}
-	if name == nil {
-		panic("name is nil")
-	}
-	if equals == nil {
-		panic("equals is nil")
-	}
-	if val == nil {
-		panic("val is nil")
-	}
-	children := []Node{keyword, name, equals, val}
-	return &OptionNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Keyword: keyword,
-		Name:    name,
-		Equals:  equals,
-		Val:     val,
-	}
-}
-
-func NewIncompleteOptionNode(keyword *KeywordNode, name *OptionNameNode, equals *RuneNode, val ValueNode) *OptionNode {
-	if keyword == nil {
-		panic("keyword is nil")
-	}
-	children := []Node{keyword}
-	if name != nil {
-		children = append(children, name)
-	}
-	if equals != nil {
-		children = append(children, equals)
-	}
-	if val != nil {
-		children = append(children, val)
-	} else {
-		val = NoSourceNode{}
-	}
-	return &OptionNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Keyword:    keyword,
-		Name:       name,
-		Equals:     equals,
-		Val:        val,
-		incomplete: true,
-	}
-}
-
-// NewCompactOptionNode creates a new *OptionNode for a full compact declaration
-// (as used in fields, enum values, and extension ranges). All arguments must be
-// non-nil.
-//   - name: The token corresponding to the name of the option.
-//   - equals: The token corresponding to the "=" rune after the name.
-//   - val: The token corresponding to the option value.
-func NewCompactOptionNode(name *OptionNameNode, equals *RuneNode, val ValueNode) *OptionNode {
-	if name == nil {
-		panic("name is nil")
-	}
-	if equals == nil {
-		panic("equals is nil")
-	}
-	if val == nil {
-		panic("val is nil")
-	}
-	children := []Node{name, equals, val}
-	return &OptionNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Name:   name,
-		Equals: equals,
-		Val:    val,
-	}
-}
-
 func (n *OptionNode) GetName() Node {
-	if n.Name == nil {
-		return NoSourceNode{}
-	}
 	return n.Name
 }
 
 func (n *OptionNode) GetValue() ValueNode {
-	if n.Val == nil {
-		return NoSourceNode{}
+	if IsNil(n.Val) {
+		return nil
 	}
 	return n.Val
 }
 
 func (n *OptionNode) IsIncomplete() bool {
-	return n.incomplete || n.Name.IsIncomplete()
-}
-
-func NewIncompleteCompactOptionNode(name *OptionNameNode, equals *RuneNode) *OptionNode {
-	var children []Node
-	if name != nil {
-		children = append(children, name)
-	}
-	if equals != nil {
-		children = append(children, equals)
-	}
-	return &OptionNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Name:       name,
-		Equals:     equals,
-		Val:        NoSourceNode{},
-		incomplete: true,
-	}
+	return n.Name == nil || n.Name.IsIncomplete() || n.Equals == nil || IsNil(n.Val)
 }
 
 // OptionNameNode represents an option name or even a traversal through message
@@ -191,7 +78,6 @@ func NewIncompleteCompactOptionNode(name *OptionNameNode, equals *RuneNode) *Opt
 //
 //	(foo.bar).baz.(bob)
 type OptionNameNode struct {
-	compositeNode
 	Parts []*FieldReferenceNode
 	// Dots represent the separating '.' characters between name parts. The
 	// length of this slice must be exactly len(Parts)-1, each item in Parts
@@ -208,39 +94,59 @@ type OptionNameNode struct {
 	Dots []*RuneNode
 }
 
-// NewOptionNameNode creates a new *OptionNameNode. The dots arg must have a
-// length that is one less than the length of parts. The parts arg must not be
-// empty.
-func NewOptionNameNode(parts []*FieldReferenceNode, dots []*RuneNode) *OptionNameNode {
-	children := make([]Node, 0, len(parts)+len(dots))
-	for _, part := range parts {
-		children = append(children, part)
+func (n *OptionNameNode) Start() Token {
+	if len(n.Parts) > 0 {
+		if len(n.Dots) > 0 {
+			return min(n.Parts[0].Start(), n.Dots[0].Start())
+		}
+		return n.Parts[0].Start()
+	} else if len(n.Dots) > 0 {
+		return n.Dots[0].Start()
 	}
-	for _, dot := range dots {
-		children = append(children, dot)
+	return TokenError
+}
+
+func (n *OptionNameNode) End() Token {
+	if len(n.Parts) > 0 {
+		if len(n.Dots) > 0 {
+			return max(n.Parts[len(n.Parts)-1].End(), n.Dots[len(n.Dots)-1].End())
+		}
+		return n.Parts[len(n.Parts)-1].End()
+	} else if len(n.Dots) > 0 {
+		return n.Dots[len(n.Dots)-1].End()
 	}
-	sort.Slice(children, func(i, j int) bool {
-		return children[i].Start() < children[j].Start()
+	return TokenError
+}
+
+func (n *OptionNameNode) OrderedNodes() []Node {
+	nodes := make([]Node, 0, len(n.Parts)+len(n.Dots))
+	for _, comp := range n.Parts {
+		nodes = append(nodes, comp)
+	}
+	for _, dot := range n.Dots {
+		nodes = append(nodes, dot)
+	}
+	slices.SortFunc(nodes, func(i, j Node) int {
+		return cmp.Compare(i.Start(), j.Start())
 	})
-	return &OptionNameNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Parts: parts,
-		Dots:  dots,
-	}
+	return nodes
 }
 
 func OptionNameNodeFromIdentValue(ident IdentValueNode) *OptionNameNode {
 	switch ident := ident.(type) {
 	case *IdentNode:
-		return NewOptionNameNode([]*FieldReferenceNode{NewFieldReferenceNode(ident)}, nil)
+		return &OptionNameNode{
+			Parts: []*FieldReferenceNode{{Name: ident}},
+		}
 	case *CompoundIdentNode:
 		parts := make([]*FieldReferenceNode, len(ident.Components))
 		for i, comp := range ident.Components {
-			parts[i] = NewFieldReferenceNode(comp)
+			parts[i] = &FieldReferenceNode{Name: comp}
 		}
-		return NewOptionNameNode(parts, ident.Dots)
+		return &OptionNameNode{
+			Parts: parts,
+			Dots:  ident.Dots,
+		}
 	default:
 		panic(fmt.Sprintf("unknown ident type: %T", ident))
 	}
@@ -284,7 +190,6 @@ func (n *OptionNameNode) IsIncomplete() bool {
 //	[foo.bar]
 //	[type.googleapis.com/foo.bar]
 type FieldReferenceNode struct {
-	compositeNode
 	Open *RuneNode // only present for extension names and "any" type references
 
 	// only present for "any" type references
@@ -293,148 +198,58 @@ type FieldReferenceNode struct {
 
 	Name IdentValueNode
 
-	Close *RuneNode // only present for extension names and "any" type references
-
-	incomplete bool
+	Comma     *RuneNode // only present for extension names and "any" type references
+	Close     *RuneNode // only present for extension names and "any" type references
+	Semicolon *RuneNode // only present for extension names and "any" type references
 }
 
-// NewFieldReferenceNode creates a new *FieldReferenceNode for a regular field.
-// The name arg must not be nil.
-func NewFieldReferenceNode(name *IdentNode) *FieldReferenceNode {
-	if name == nil {
-		panic("name is nil")
-	}
-	children := []Node{name}
-	return &FieldReferenceNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Name: name,
-	}
+func (a *FieldReferenceNode) Start() Token {
+	return startToken(a.Open, a.URLPrefix, a.Slash, a.Name, a.Comma, a.Close, a.Semicolon)
 }
 
-// NewExtensionFieldReferenceNode creates a new *FieldReferenceNode for an
-// extension field. All args must be non-nil. The openSym and closeSym runes
-// should be "(" and ")" or "[" and "]".
-func NewExtensionFieldReferenceNode(openSym *RuneNode, name IdentValueNode, closeSym *RuneNode) *FieldReferenceNode {
-	if name == nil {
-		panic("name is nil")
-	}
-	if openSym == nil {
-		panic("openSym is nil")
-	}
-	if closeSym == nil {
-		panic("closeSym is nil")
-	}
-	children := []Node{openSym, name, closeSym}
-	return &FieldReferenceNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Open:  openSym,
-		Name:  name,
-		Close: closeSym,
-	}
-}
-
-// NewAnyTypeReferenceNode creates a new *FieldReferenceNode for an "any"
-// type reference. All args must be non-nil. The openSym and closeSym runes
-// should be "[" and "]". The slashSym run should be "/".
-func NewAnyTypeReferenceNode(openSym *RuneNode, urlPrefix IdentValueNode, slashSym *RuneNode, name IdentValueNode, closeSym *RuneNode) *FieldReferenceNode {
-	if name == nil {
-		panic("name is nil")
-	}
-	if openSym == nil {
-		panic("openSym is nil")
-	}
-	if closeSym == nil {
-		panic("closeSym is nil")
-	}
-	if urlPrefix == nil {
-		panic("urlPrefix is nil")
-	}
-	if slashSym == nil {
-		panic("slashSym is nil")
-	}
-	children := []Node{openSym, urlPrefix, slashSym, name, closeSym}
-	return &FieldReferenceNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Open:      openSym,
-		URLPrefix: urlPrefix,
-		Slash:     slashSym,
-		Name:      name,
-		Close:     closeSym,
-	}
-}
-
-func NewIncompleteExtensionFieldReferenceNode(openSym *RuneNode, name IdentValueNode, closeSym *RuneNode) *FieldReferenceNode {
-	if openSym == nil {
-		panic("openSym is nil")
-	}
-	var nameToken Token
-	children := []Node{openSym}
-	if name != nil {
-		children = append(children, name)
-		nameToken = name.Start()
-	} else {
-		nameToken = openSym.Token()
-	}
-	if closeSym != nil {
-		children = append(children, closeSym)
-	}
-	return &FieldReferenceNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Open:       openSym,
-		Name:       NewIncompleteIdentNode(name, nameToken),
-		Close:      closeSym,
-		incomplete: true,
-	}
-}
-
-func NewIncompleteFieldReferenceNode(name *IdentNode) *FieldReferenceNode {
-	if name == nil {
-		panic("name is nil")
-	}
-	return &FieldReferenceNode{
-		compositeNode: compositeNode{
-			children: []Node{name},
-		},
-		Name: NewIncompleteIdentNode(name, name.Token()),
-	}
+func (a *FieldReferenceNode) End() Token {
+	return endToken(a.Semicolon, a.Close, a.Comma, a.Name, a.Slash, a.URLPrefix, a.Open)
 }
 
 // IsExtension reports if this is an extension name or not (e.g. enclosed in
 // punctuation, such as parentheses or brackets).
 func (a *FieldReferenceNode) IsExtension() bool {
-	return a.Open != nil && a.Slash == nil
+	return a.Open != nil && a.Slash == nil && !IsNil(a.Name)
 }
 
 // IsAnyTypeReference reports if this is an Any type reference.
 func (a *FieldReferenceNode) IsAnyTypeReference() bool {
-	return a.Slash != nil
+	return !IsNil(a.URLPrefix) && a.Slash != nil && !IsNil(a.Name)
 }
 
 func (a *FieldReferenceNode) IsIncomplete() bool {
-	return a.incomplete
+	switch {
+	case a.Open != nil && a.Open.Rune == '(' && (IsNil(a.Name) || a.Close == nil):
+		return true
+	case a.Open != nil && a.Open.Rune == '[' && (IsNil(a.URLPrefix) || a.Slash == nil || IsNil(a.Name) || a.Close == nil):
+		return true
+	default:
+		return IsNil(a.Name)
+	}
 }
 
 func (a *FieldReferenceNode) Value() string {
+	var name string
+	if !IsNil(a.Name) {
+		name = string(a.Name.AsIdentifier())
+	}
 	if a.Open != nil {
 		var closeRune string
 		if a.Close != nil {
 			// extended syntax rule: account for possible missing close rune
 			closeRune = string(a.Close.Rune)
 		}
-		if a.Slash != nil {
-			return string(a.Open.Rune) + string(a.URLPrefix.AsIdentifier()) + string(a.Slash.Rune) + string(a.Name.AsIdentifier()) + closeRune
+		if a.IsAnyTypeReference() {
+			return string(a.Open.Rune) + string(a.URLPrefix.AsIdentifier()) + string(a.Slash.Rune) + name + closeRune
 		}
-		return string(a.Open.Rune) + string(a.Name.AsIdentifier()) + closeRune
+		return string(a.Open.Rune) + name + closeRune
 	}
-	return string(a.Name.AsIdentifier())
+	return name
 }
 
 // CompactOptionsNode represents a compact options declaration, as used with
@@ -442,30 +257,14 @@ func (a *FieldReferenceNode) Value() string {
 //
 //	[deprecated = true, json_name = "foo_bar"]
 type CompactOptionsNode struct {
-	compositeNode
 	OpenBracket  *RuneNode
 	Options      []*OptionNode
 	CloseBracket *RuneNode
+	Semicolon    *RuneNode
 }
 
-// NewCompactOptionsNode creates a *CompactOptionsNode. All args must be
-// non-nil.
-func NewCompactOptionsNode(openBracket *RuneNode, opts []*OptionNode, closeBracket *RuneNode) *CompactOptionsNode {
-	children := []Node{openBracket}
-	for _, opt := range opts {
-		children = append(children, opt)
-	}
-	children = append(children, closeBracket)
-
-	return &CompactOptionsNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		OpenBracket:  openBracket,
-		Options:      opts,
-		CloseBracket: closeBracket,
-	}
-}
+func (e *CompactOptionsNode) Start() Token { return e.OpenBracket.Start() }
+func (e *CompactOptionsNode) End() Token   { return endToken(e.Semicolon, e.CloseBracket) }
 
 func (e *CompactOptionsNode) GetElements() []*OptionNode {
 	if e == nil {

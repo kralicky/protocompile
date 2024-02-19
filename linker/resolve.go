@@ -237,7 +237,7 @@ func (r *result) resolveReferences(handler *reporter.Handler, s *Symbols) (err e
 					return err
 				}
 				if r.Syntax() == protoreflect.Proto3 && !allowedProto3Extendee(d.field.proto.GetExtendee()) {
-					node := r.FieldNode(d.field.proto).FieldExtendee()
+					node := r.FieldExtendeeNode(d.field.proto)
 					if err := handler.HandleErrorf(file.NodeInfo(node), "extend blocks in proto3 can only be used to define custom options"); err != nil {
 						return err
 					}
@@ -328,9 +328,9 @@ func resolveFieldTypes(f *fldDescriptor, handler *reporter.Handler, s *Symbols, 
 	scope := fmt.Sprintf("field %s", f.fqn)
 	if fld.GetExtendee() != "" {
 		scope := fmt.Sprintf("extension %s", f.fqn)
-		dsc := r.resolve(ast.NewNodeReference(file, node.FieldExtendee()), fld.GetExtendee(), false, scopes)
+		dsc := r.resolve(ast.NewNodeReference(file, r.FieldExtendeeNode(fld)), fld.GetExtendee(), false, scopes)
 		if dsc == nil {
-			return handler.HandleErrorWithPos(file.NodeInfo(node.FieldExtendee()), &errUndeclaredName{
+			return handler.HandleErrorWithPos(file.NodeInfo(r.FieldExtendeeNode(fld)), &errUndeclaredName{
 				scope:      scope,
 				what:       "extendee type",
 				name:       fld.GetExtendee(),
@@ -338,11 +338,11 @@ func resolveFieldTypes(f *fldDescriptor, handler *reporter.Handler, s *Symbols, 
 			})
 		}
 		if isSentinelDescriptor(dsc) {
-			return handler.HandleErrorf(file.NodeInfo(node.FieldExtendee()), "unknown extendee type %s; resolved to %s which is not defined; consider using a leading dot", fld.GetExtendee(), dsc.FullName())
+			return handler.HandleErrorf(file.NodeInfo(r.FieldExtendeeNode(fld)), "unknown extendee type %s; resolved to %s which is not defined; consider using a leading dot", fld.GetExtendee(), dsc.FullName())
 		}
 		extd, ok := dsc.(protoreflect.MessageDescriptor)
 		if !ok {
-			return handler.HandleErrorf(file.NodeInfo(node.FieldExtendee()), "extendee is invalid: %s is %s, not a message", dsc.FullName(), descriptorTypeWithArticle(dsc))
+			return handler.HandleErrorf(file.NodeInfo(r.FieldExtendeeNode(fld)), "extendee is invalid: %s is %s, not a message", dsc.FullName(), descriptorTypeWithArticle(dsc))
 		}
 		f.extendee = extd
 		extendeeName := "." + string(dsc.FullName())

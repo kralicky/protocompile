@@ -18,10 +18,10 @@
 // # Nodes
 //
 // All nodes of the tree implement the [Node] interface. Leaf nodes in the
-// tree implement [TerminalNode], and all others implement [CompositeNode].
+// tree implement [TerminalNodeInterface], and all others implement [CompositeNode].
 // The root of the tree for a proto source file is a *[FileNode].
 //
-// A [TerminalNode] represents a single lexical element, or [Token]. A
+// A [TerminalNodeInterface] represents a single lexical element, or [Token]. A
 // [CompositeNode] represents a sub-tree of the AST and range of tokens.
 //
 // Position information is tracked using a *[FileInfo]. The lexer invokes its
@@ -54,7 +54,7 @@
 //
 // A [Token] value corresponds to a component of the grammar, that is
 // used to produce an AST. They correspond to leaves in the AST (i.e.
-// [TerminalNode]).
+// [TerminalNodeInterface]).
 //
 // The *[FileInfo] and *[FileNode] types provide methods for querying
 // and iterating through all the items or tokens in the file. They also

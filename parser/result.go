@@ -61,8 +61,9 @@ type result struct {
 	file  *ast.FileNode
 	proto *descriptorpb.FileDescriptorProto
 
-	nodes        map[proto.Message]ast.Node
-	nodesInverse map[ast.Node]proto.Message
+	nodes              map[proto.Message]ast.Node
+	nodesInverse       map[ast.Node]proto.Message
+	fieldExtendeeNodes map[ast.FieldDeclNode]*ast.ExtendNode
 
 	// A position in the source file corresponding to the end of the last import
 	// statement (the point just after the semicolon). This can be used as an
@@ -93,9 +94,10 @@ func ResultWithoutAST(proto *descriptorpb.FileDescriptorProto) Result {
 func ResultFromAST(file *ast.FileNode, validate bool, handler *reporter.Handler) (Result, error) {
 	filename := file.Name()
 	r := &result{
-		file:         file,
-		nodes:        map[proto.Message]ast.Node{},
-		nodesInverse: map[ast.Node]proto.Message{},
+		file:               file,
+		nodes:              map[proto.Message]ast.Node{},
+		nodesInverse:       map[ast.Node]proto.Message{},
+		fieldExtendeeNodes: map[ast.FieldDeclNode]*ast.ExtendNode{},
 	}
 	r.createFileDescriptor(filename, file, handler)
 	if validate {
@@ -318,7 +320,7 @@ func (r *result) asUninterpretedOption(node *ast.OptionNode) *descriptorpb.Unint
 			var buf bytes.Buffer
 			for i, el := range n.Elements {
 				flattenNode(r.file, el, &buf)
-				if len(n.Seps) > i && n.Seps[i] != nil {
+				if len(n.Seps) > i && n.Seps[i] != nil && !n.Seps[i].Virtual {
 					buf.WriteRune(' ')
 					buf.WriteRune(n.Seps[i].Rune)
 				}
@@ -332,17 +334,19 @@ func (r *result) asUninterpretedOption(node *ast.OptionNode) *descriptorpb.Unint
 }
 
 func flattenNode(f *ast.FileNode, n ast.Node, buf *bytes.Buffer) {
-	if cn, ok := n.(ast.CompositeNode); ok {
-		for _, ch := range cn.Children() {
-			flattenNode(f, ch, buf)
+	ast.Inspect(n, func(node ast.Node) bool {
+		if ast.IsTerminalNode(node) {
+			if ast.IsVirtualNode(node) {
+				return true
+			}
+			if buf.Len() > 0 {
+				buf.WriteRune(' ')
+			}
+			str := f.NodeInfo(node).RawText()
+			buf.WriteString(str)
 		}
-		return
-	}
-
-	if buf.Len() > 0 {
-		buf.WriteRune(' ')
-	}
-	buf.WriteString(f.NodeInfo(n).RawText())
+		return true
+	})
 }
 
 func (r *result) asUninterpretedOptionName(parts []*ast.FieldReferenceNode) []*descriptorpb.UninterpretedOption_NamePart {
@@ -376,11 +380,13 @@ func (r *result) addExtensions(ext *ast.ExtendNode, flds *[]*descriptorpb.FieldD
 			fd.Extendee = proto.String(extendee)
 			*flds = append(*flds, fd)
 			r.putFieldNode(fd, decl)
+			r.fieldExtendeeNodes[decl] = ext
 		case *ast.GroupNode:
 			count++
 			// ditto: use higher limit right now
 			fd, md := r.asGroupDescriptors(decl, syntax, internal.MaxTag, handler, depth+1)
 			fd.Extendee = proto.String(extendee)
+			r.fieldExtendeeNodes[decl] = ext
 			*flds = append(*flds, fd)
 			*msgs = append(*msgs, md)
 		}
@@ -396,17 +402,19 @@ func (r *result) addExtensions(ext *ast.ExtendNode, flds *[]*descriptorpb.FieldD
 	}
 }
 
-func asLabel(lbl *ast.FieldLabel) *descriptorpb.FieldDescriptorProto_Label {
-	if !lbl.IsPresent() {
+func asLabel(lbl *ast.KeywordNode) *descriptorpb.FieldDescriptorProto_Label {
+	if lbl == nil {
 		return nil
 	}
-	switch {
-	case lbl.Repeated:
+	switch lbl.Val {
+	case "repeated":
 		return descriptorpb.FieldDescriptorProto_LABEL_REPEATED.Enum()
-	case lbl.Required:
+	case "required":
 		return descriptorpb.FieldDescriptorProto_LABEL_REQUIRED.Enum()
-	default:
+	case "optional":
 		return descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum()
+	default:
+		return nil
 	}
 }
 
@@ -415,7 +423,7 @@ func (r *result) asFieldDescriptor(node *ast.FieldNode, maxTag int32, syntax syn
 	if err := r.checkTag(node.Tag, tag, maxTag); err != nil {
 		_ = handler.HandleError(err)
 	}
-	fd := newFieldDescriptor(node.Name.Val, string(node.FldType.AsIdentifier()), int32(tag), asLabel(&node.Label))
+	fd := newFieldDescriptor(node.Name.Val, string(node.FldType.AsIdentifier()), int32(tag), asLabel(node.Label))
 	r.putFieldNode(fd, node)
 	if opts := node.Options.GetElements(); len(opts) > 0 {
 		fd.Options = &descriptorpb.FieldOptions{UninterpretedOption: r.asUninterpretedOptions(opts)}
@@ -477,7 +485,7 @@ func (r *result) asGroupDescriptors(group *ast.GroupNode, syntax syntaxType, max
 		Name:     proto.String(fieldName),
 		JsonName: proto.String(internal.JSONName(fieldName)),
 		Number:   proto.Int32(int32(tag)),
-		Label:    asLabel(&group.Label),
+		Label:    asLabel(group.Label),
 		Type:     descriptorpb.FieldDescriptorProto_TYPE_GROUP.Enum(),
 		TypeName: proto.String(group.Name.Val),
 	}
@@ -489,7 +497,7 @@ func (r *result) asGroupDescriptors(group *ast.GroupNode, syntax syntaxType, max
 	r.putMessageNode(md, group)
 	// don't bother processing body if we've exceeded depth
 	if r.checkDepth(depth, group, handler) {
-		r.addMessageBody(md, &group.MessageBody, syntax, handler, depth)
+		r.addMessageBody(md, group.Decls, syntax, handler, depth)
 	}
 	return fd, md
 }
@@ -637,7 +645,7 @@ func (r *result) asMessageDescriptor(node *ast.MessageNode, syntax syntaxType, h
 	r.putMessageNode(msgd, node)
 	// don't bother processing body if we've exceeded depth
 	if r.checkDepth(depth, node, handler) {
-		r.addMessageBody(msgd, &node.MessageBody, syntax, handler, depth)
+		r.addMessageBody(msgd, node.Decls, syntax, handler, depth)
 	}
 	return msgd
 }
@@ -690,9 +698,9 @@ func (r *result) checkDepth(depth int, node ast.MessageDeclNode, handler *report
 	return false
 }
 
-func (r *result) addMessageBody(msgd *descriptorpb.DescriptorProto, body *ast.MessageBody, syntax syntaxType, handler *reporter.Handler, depth int) {
+func (r *result) addMessageBody(msgd *descriptorpb.DescriptorProto, decls []ast.MessageElement, syntax syntaxType, handler *reporter.Handler, depth int) {
 	// first process any options
-	for _, decl := range body.Decls {
+	for _, decl := range decls {
 		if opt, ok := decl.(*ast.OptionNode); ok {
 			if opt.IsIncomplete() {
 				if opt.Name == nil || !ast.ExtendedSyntaxEnabled {
@@ -724,7 +732,7 @@ func (r *result) addMessageBody(msgd *descriptorpb.DescriptorProto, body *ast.Me
 	rsvdNames := map[string]ast.SourcePos{}
 
 	// now we can process the rest
-	for _, decl := range body.Decls {
+	for _, decl := range decls {
 		switch decl := decl.(type) {
 		case *ast.EnumNode:
 			msgd.EnumType = append(msgd.EnumType, r.asEnumDescriptor(decl, syntax, handler))
@@ -1021,6 +1029,13 @@ func (r *result) FieldNode(f *descriptorpb.FieldDescriptorProto) ast.FieldDeclNo
 		return ast.NewNoSourceNode(r.proto.GetName())
 	}
 	return r.nodes[f].(ast.FieldDeclNode)
+}
+
+func (r *result) FieldExtendeeNode(f *descriptorpb.FieldDescriptorProto) ast.Node {
+	if r.nodes == nil {
+		return ast.NewNoSourceNode(r.proto.GetName())
+	}
+	return r.fieldExtendeeNodes[r.FieldNode(f)]
 }
 
 func (r *result) OneofNode(o *descriptorpb.OneofDescriptorProto) ast.Node {

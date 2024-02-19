@@ -14,8 +14,6 @@
 
 package ast
 
-import "fmt"
-
 // FieldDeclNode is a node in the AST that defines a field. This includes
 // normal message fields as well as extensions. There are multiple types
 // of AST nodes that declare fields:
@@ -32,7 +30,6 @@ type FieldDeclNode interface {
 	FieldName() Node
 	FieldType() Node
 	FieldTag() Node
-	FieldExtendee() Node
 	GetGroupKeyword() Node
 	GetOptions() *CompactOptionsNode
 }
@@ -51,116 +48,53 @@ var (
 //
 //	optional string foo = 1;
 type FieldNode struct {
-	compositeNode
-	Label     FieldLabel
+	Label     *KeywordNode
 	FldType   IdentValueNode
 	Name      *IdentNode
 	Equals    *RuneNode
 	Tag       *UintLiteralNode
 	Options   *CompactOptionsNode
 	Semicolon *RuneNode
+}
 
-	// This is an up-link to the containing *ExtendNode for fields
-	// that are defined inside of "extend" blocks.
-	Extendee *ExtendNode
+func (n *FieldNode) Start() Token {
+	return startToken(n.Label, n.FldType, n.Name)
+}
+
+func (n *FieldNode) End() Token {
+	return endToken(n.Semicolon, n.Options, n.Tag, n.Equals, n.Name, n.FldType, n.Label)
 }
 
 func (*FieldNode) msgElement()    {}
 func (*FieldNode) oneofElement()  {}
 func (*FieldNode) extendElement() {}
 
-func (m *FieldNode) AddSemicolon(semi *RuneNode) {
-	m.Semicolon = semi
-	m.children = append(m.children, semi)
-}
-
-// NewFieldNode creates a new *FieldNode. The label and options arguments may be
-// nil but the others must be non-nil.
-//   - label: The token corresponding to the label keyword if present ("optional",
-//     "required", or "repeated").
-//   - fieldType: The token corresponding to the field's type.
-//   - name: The token corresponding to the field's name.
-//   - equals: The token corresponding to the '=' rune after the name.
-//   - tag: The token corresponding to the field's tag number.
-//   - opts: Optional set of field options.
-func NewFieldNode(label *KeywordNode, fieldType IdentValueNode, name *IdentNode, equals *RuneNode, tag *UintLiteralNode, opts *CompactOptionsNode) *FieldNode {
-	if fieldType == nil {
-		panic("fieldType is nil")
-	}
-	if name == nil {
-		panic("name is nil")
-	}
-	if equals == nil {
-		panic("equals is nil")
-	}
-	if tag == nil {
-		panic("tag is nil")
-	}
-	numChildren := 4
-	if label != nil {
-		numChildren++
-	}
-	if opts != nil {
-		numChildren++
-	}
-	children := make([]Node, 0, numChildren)
-	if label != nil {
-		children = append(children, label)
-	}
-	children = append(children, fieldType, name, equals, tag)
-	if opts != nil {
-		children = append(children, opts)
-	}
-
-	return &FieldNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Label:   newFieldLabel(label),
-		FldType: fieldType,
-		Name:    name,
-		Equals:  equals,
-		Tag:     tag,
-		Options: opts,
-	}
-}
-
 func (n *FieldNode) FieldLabel() Node {
-	// proto3 fields and fields inside one-ofs will not have a label and we need
-	// this check in order to return a nil node -- otherwise we'd return a
-	// non-nil node that has a nil pointer value in it :/
-	if n.Label.KeywordNode == nil {
+	if n.Label == nil {
 		return nil
 	}
-	return n.Label.KeywordNode
+	return n.Label
 }
 
 func (n *FieldNode) FieldName() Node {
-	if n.Name == nil {
-		return NoSourceNode{}
+	if IsNil(n.Name) {
+		return nil
 	}
 	return n.Name
 }
 
 func (n *FieldNode) FieldType() Node {
-	if n.FldType == nil {
-		return NoSourceNode{}
+	if IsNil(n.FldType) {
+		return nil
 	}
 	return n.FldType
 }
 
 func (n *FieldNode) FieldTag() Node {
-	if n.Tag == nil {
-		return NoSourceNode{}
+	if IsNil(n.Tag) {
+		return nil
 	}
 	return n.Tag
-}
-
-func (n *FieldNode) FieldExtendee() Node {
-	if n.Extendee != nil {
-		return n.Extendee.Extendee
-	}
-	return nil
 }
 
 func (n *FieldNode) GetGroupKeyword() Node {
@@ -175,77 +109,6 @@ func (n *FieldNode) IsIncomplete() bool {
 	return n.Tag == nil || n.Equals == nil || n.Name == nil
 }
 
-// FieldLabel represents the label of a field, which indicates its cardinality
-// (i.e. whether it is optional, required, or repeated).
-type FieldLabel struct {
-	*KeywordNode
-	Repeated bool
-	Required bool
-}
-
-func newFieldLabel(lbl *KeywordNode) FieldLabel {
-	repeated, required := false, false
-	if lbl != nil {
-		repeated = lbl.Val == "repeated"
-		required = lbl.Val == "required"
-	}
-	return FieldLabel{
-		KeywordNode: lbl,
-		Repeated:    repeated,
-		Required:    required,
-	}
-}
-
-// IsPresent returns true if a label keyword was present in the declaration
-// and false if it was absent.
-func (f *FieldLabel) IsPresent() bool {
-	return f.KeywordNode != nil
-}
-
-// NewPartialFieldNode creates a new *PartialFieldNode. The label and options arguments may be
-// nil but the others must be non-nil.
-//   - label: The token corresponding to the label keyword if present ("optional",
-//     "required", or "repeated").
-//   - fieldType: The token corresponding to the field's type.
-//   - name: The token corresponding to the field's name.
-//   - equals: The token corresponding to the '=' rune after the name.
-//   - tag: The token corresponding to the field's tag number.
-//   - opts: Optional set of field options.
-func NewIncompleteFieldNode(label *KeywordNode, fieldType IdentValueNode, name *IdentNode, equals *RuneNode, tag *UintLiteralNode, opts *CompactOptionsNode) *FieldNode {
-	var children []Node
-	if label != nil {
-		children = append(children, label)
-	}
-	if fieldType == nil {
-		fieldType = NewIncompleteIdentNode(fieldType, label.Token())
-	}
-	children = append(children, fieldType)
-	if name != nil {
-		children = append(children, name)
-	}
-	if equals != nil {
-		children = append(children, equals)
-	}
-	if tag != nil {
-		children = append(children, tag)
-	}
-	if opts != nil {
-		children = append(children, opts)
-	}
-
-	return &FieldNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Label:   newFieldLabel(label),
-		FldType: fieldType,
-		Name:    name,
-		Equals:  equals,
-		Tag:     tag,
-		Options: opts,
-	}
-}
-
 // GroupNode represents a group declaration, which doubles as a field and inline
 // message declaration. It can represent extension fields as well as
 // non-extension fields (both inside of messages and inside of one-ofs).
@@ -256,119 +119,60 @@ func NewIncompleteFieldNode(label *KeywordNode, fieldType IdentValueNode, name *
 //	  optional string name = 2;
 //	}
 type GroupNode struct {
-	compositeNode
-	Label   FieldLabel
-	Keyword *KeywordNode
-	Name    *IdentNode
-	Equals  *RuneNode
-	Tag     *UintLiteralNode
-	Options *CompactOptionsNode
-	MessageBody
-
-	// This is an up-link to the containing *ExtendNode for groups
-	// that are defined inside of "extend" blocks.
-	Extendee *ExtendNode
+	Label      *KeywordNode
+	Keyword    *KeywordNode
+	Name       *IdentNode
+	Equals     *RuneNode
+	Tag        *UintLiteralNode
+	Options    *CompactOptionsNode
+	OpenBrace  *RuneNode
+	Decls      []MessageElement
+	CloseBrace *RuneNode
+	Semicolon  *RuneNode
 }
+
+func (n *GroupNode) Start() Token {
+	return startToken(n.Label, n.Keyword, n.Name, n.Equals, n.Tag)
+}
+
+func (n *GroupNode) End() Token { return endToken(n.Semicolon, n.CloseBrace) }
 
 func (*GroupNode) msgElement()    {}
 func (*GroupNode) oneofElement()  {}
 func (*GroupNode) extendElement() {}
 
-// NewGroupNode creates a new *GroupNode. The label and options arguments may be
-// nil but the others must be non-nil.
-//   - label: The token corresponding to the label keyword if present ("optional",
-//     "required", or "repeated").
-//   - keyword: The token corresponding to the "group" keyword.
-//   - name: The token corresponding to the field's name.
-//   - equals: The token corresponding to the '=' rune after the name.
-//   - tag: The token corresponding to the field's tag number.
-//   - opts: Optional set of field options.
-//   - openBrace: The token corresponding to the "{" rune that starts the body.
-//   - decls: All declarations inside the group body.
-//   - closeBrace: The token corresponding to the "}" rune that ends the body.
-func NewGroupNode(label *KeywordNode, keyword *KeywordNode, name *IdentNode, equals *RuneNode, tag *UintLiteralNode, opts *CompactOptionsNode, openBrace *RuneNode, decls []MessageElement, closeBrace *RuneNode) *GroupNode {
-	if keyword == nil {
-		panic("fieldType is nil")
-	}
-	if name == nil {
-		panic("name is nil")
-	}
-	if equals == nil {
-		panic("equals is nil")
-	}
-	if tag == nil {
-		panic("tag is nil")
-	}
-	if openBrace == nil {
-		panic("openBrace is nil")
-	}
-	if closeBrace == nil {
-		panic("closeBrace is nil")
-	}
-	numChildren := 6 + len(decls)
-	if label != nil {
-		numChildren++
-	}
-	if opts != nil {
-		numChildren++
-	}
-	children := make([]Node, 0, numChildren)
-	if label != nil {
-		children = append(children, label)
-	}
-	children = append(children, keyword, name, equals, tag)
-	if opts != nil {
-		children = append(children, opts)
-	}
-	children = append(children, openBrace)
-	for _, decl := range decls {
-		children = append(children, decl)
-	}
-	children = append(children, closeBrace)
-
-	ret := &GroupNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Label:   newFieldLabel(label),
-		Keyword: keyword,
-		Name:    name,
-		Equals:  equals,
-		Tag:     tag,
-		Options: opts,
-	}
-	populateMessageBody(&ret.MessageBody, openBrace, decls, closeBrace)
-	return ret
-}
-
 func (n *GroupNode) FieldLabel() Node {
-	if n.Label.KeywordNode == nil {
-		// return nil interface to indicate absence, not a typed nil
+	if n.Label == nil {
 		return nil
 	}
-	return n.Label.KeywordNode
+	return n.Label
 }
 
 func (n *GroupNode) FieldName() Node {
+	if IsNil(n.Name) {
+		return nil
+	}
 	return n.Name
 }
 
 func (n *GroupNode) FieldType() Node {
+	if IsNil(n.Keyword) {
+		return nil
+	}
 	return n.Keyword
 }
 
 func (n *GroupNode) FieldTag() Node {
+	if IsNil(n.Tag) {
+		return nil
+	}
 	return n.Tag
 }
 
-func (n *GroupNode) FieldExtendee() Node {
-	if n.Extendee != nil {
-		return n.Extendee.Extendee
-	}
-	return nil
-}
-
 func (n *GroupNode) GetGroupKeyword() Node {
+	if IsNil(n.Keyword) {
+		return nil
+	}
 	return n.Keyword
 }
 
@@ -377,6 +181,9 @@ func (n *GroupNode) GetOptions() *CompactOptionsNode {
 }
 
 func (n *GroupNode) MessageName() Node {
+	if IsNil(n.Name) {
+		return nil
+	}
 	return n.Name
 }
 
@@ -401,12 +208,20 @@ type OneofDeclNode interface {
 //	  Labels by_label = 5;
 //	}
 type OneofNode struct {
-	compositeNode
 	Keyword    *KeywordNode
 	Name       *IdentNode
 	OpenBrace  *RuneNode
 	Decls      []OneofElement
 	CloseBrace *RuneNode
+	Semicolon  *RuneNode
+}
+
+func (n *OneofNode) Start() Token {
+	return startToken(n.Keyword, n.Name, n.OpenBrace)
+}
+
+func (n *OneofNode) End() Token {
+	return endToken(n.CloseBrace, n.Semicolon)
 }
 
 func (n *OneofNode) GetElements() []OneofElement {
@@ -414,54 +229,6 @@ func (n *OneofNode) GetElements() []OneofElement {
 }
 
 func (*OneofNode) msgElement() {}
-
-// NewOneofNode creates a new *OneofNode. All arguments must be non-nil. While
-// it is technically allowed for decls to be nil or empty, the resulting node
-// will not be a valid oneof, which must have at least one field.
-//   - keyword: The token corresponding to the "oneof" keyword.
-//   - name: The token corresponding to the oneof's name.
-//   - openBrace: The token corresponding to the "{" rune that starts the body.
-//   - decls: All declarations inside the oneof body.
-//   - closeBrace: The token corresponding to the "}" rune that ends the body.
-func NewOneofNode(keyword *KeywordNode, name *IdentNode, openBrace *RuneNode, decls []OneofElement, closeBrace *RuneNode) *OneofNode {
-	if keyword == nil {
-		panic("keyword is nil")
-	}
-	if name == nil {
-		panic("name is nil")
-	}
-	if openBrace == nil {
-		panic("openBrace is nil")
-	}
-	if closeBrace == nil {
-		panic("closeBrace is nil")
-	}
-	children := make([]Node, 0, 4+len(decls))
-	children = append(children, keyword, name, openBrace)
-	for _, decl := range decls {
-		children = append(children, decl)
-	}
-	children = append(children, closeBrace)
-
-	for _, decl := range decls {
-		switch decl := decl.(type) {
-		case *OptionNode, *FieldNode, *GroupNode, *EmptyDeclNode:
-		default:
-			panic(fmt.Sprintf("invalid OneofElement type: %T", decl))
-		}
-	}
-
-	return &OneofNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Keyword:    keyword,
-		Name:       name,
-		OpenBrace:  openBrace,
-		Decls:      decls,
-		CloseBrace: closeBrace,
-	}
-}
 
 func (n *OneofNode) OneofName() Node {
 	return n.Name
@@ -520,60 +287,22 @@ func (n *SyntheticOneof) OneofName() Node {
 //
 //	map<string, Values>
 type MapTypeNode struct {
-	compositeNode
 	Keyword    *KeywordNode
 	OpenAngle  *RuneNode
 	KeyType    *IdentNode
 	Comma      *RuneNode
 	ValueType  IdentValueNode
 	CloseAngle *RuneNode
+	Semicolon  *RuneNode
 }
 
-// NewMapTypeNode creates a new *MapTypeNode. All arguments must be non-nil.
-//   - keyword: The token corresponding to the "map" keyword.
-//   - openAngle: The token corresponding to the "<" rune after the keyword.
-//   - keyType: The token corresponding to the key type for the map.
-//   - comma: The token corresponding to the "," rune between key and value types.
-//   - valType: The token corresponding to the value type for the map.
-//   - closeAngle: The token corresponding to the ">" rune that ends the declaration.
-func NewMapTypeNode(keyword *KeywordNode, openAngle *RuneNode, keyType *IdentNode, comma *RuneNode, valType IdentValueNode, closeAngle *RuneNode) *MapTypeNode {
-	if keyword == nil {
-		panic("keyword is nil")
-	}
-	if openAngle == nil {
-		panic("openAngle is nil")
-	}
-	if keyType == nil {
-		panic("keyType is nil")
-	}
-	if comma == nil {
-		panic("comma is nil")
-	}
-	if valType == nil {
-		panic("valType is nil")
-	}
-	if closeAngle == nil {
-		panic("closeAngle is nil")
-	}
-	children := []Node{keyword, openAngle, keyType, comma, valType, closeAngle}
-	return &MapTypeNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Keyword:    keyword,
-		OpenAngle:  openAngle,
-		KeyType:    keyType,
-		Comma:      comma,
-		ValueType:  valType,
-		CloseAngle: closeAngle,
-	}
-}
+func (n *MapTypeNode) Start() Token { return n.Keyword.Token() }
+func (n *MapTypeNode) End() Token   { return n.Semicolon.Token() }
 
 // MapFieldNode represents a map field declaration. Example:
 //
 //	map<string,string> replacements = 3 [deprecated = true];
 type MapFieldNode struct {
-	compositeNode
 	MapType   *MapTypeNode
 	Name      *IdentNode
 	Equals    *RuneNode
@@ -582,54 +311,12 @@ type MapFieldNode struct {
 	Semicolon *RuneNode
 }
 
-func (m *MapFieldNode) AddSemicolon(semi *RuneNode) {
-	m.Semicolon = semi
-	m.children = append(m.children, semi)
+func (n *MapFieldNode) Start() Token { return n.MapType.Start() }
+func (n *MapFieldNode) End() Token {
+	return endToken(n.Semicolon, n.Options, n.Tag, n.Equals, n.Name, n.MapType)
 }
 
 func (*MapFieldNode) msgElement() {}
-
-// NewMapFieldNode creates a new *MapFieldNode. All arguments must be non-nil
-// except opts, which may be nil.
-//   - mapType: The token corresponding to the map type.
-//   - name: The token corresponding to the field's name.
-//   - equals: The token corresponding to the '=' rune after the name.
-//   - tag: The token corresponding to the field's tag number.
-//   - opts: Optional set of field options.
-func NewMapFieldNode(mapType *MapTypeNode, name *IdentNode, equals *RuneNode, tag *UintLiteralNode, opts *CompactOptionsNode) *MapFieldNode {
-	if mapType == nil {
-		panic("mapType is nil")
-	}
-	if name == nil {
-		panic("name is nil")
-	}
-	if equals == nil {
-		panic("equals is nil")
-	}
-	if tag == nil {
-		panic("tag is nil")
-	}
-	numChildren := 4
-	if opts != nil {
-		numChildren++
-	}
-	children := make([]Node, 0, numChildren)
-	children = append(children, mapType, name, equals, tag)
-	if opts != nil {
-		children = append(children, opts)
-	}
-
-	return &MapFieldNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		MapType: mapType,
-		Name:    name,
-		Equals:  equals,
-		Tag:     tag,
-		Options: opts,
-	}
-}
 
 func (n *MapFieldNode) FieldLabel() Node {
 	return nil
@@ -684,7 +371,7 @@ type SyntheticMapField struct {
 // number (1 for key, 2 for value).
 func NewSyntheticMapField(ident IdentValueNode, tagNum uint64) *SyntheticMapField {
 	tag := &UintLiteralNode{
-		terminalNode: ident.Start().asTerminalNode(),
+		TerminalNode: ident.Start().AsTerminalNode(),
 		Val:          tagNum,
 	}
 	return &SyntheticMapField{Ident: ident, Tag: tag}
@@ -707,14 +394,23 @@ func (n *SyntheticMapField) TrailingComments() []Comment {
 }
 
 func (n *SyntheticMapField) FieldLabel() Node {
+	if IsNil(n.Ident) {
+		return nil
+	}
 	return n.Ident
 }
 
 func (n *SyntheticMapField) FieldName() Node {
+	if IsNil(n.Ident) {
+		return nil
+	}
 	return n.Ident
 }
 
 func (n *SyntheticMapField) FieldType() Node {
+	if IsNil(n.Ident) {
+		return nil
+	}
 	return n.Ident
 }
 

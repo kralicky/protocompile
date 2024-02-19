@@ -14,6 +14,8 @@
 
 package ast
 
+import "reflect"
+
 // Node is the interface implemented by all nodes in the AST. It
 // provides information about the span of this AST node in terms
 // of location in the source file. It also provides information
@@ -24,75 +26,60 @@ type Node interface {
 	End() Token
 }
 
-// TerminalNode represents a leaf in the AST. These represent
+// TerminalNodeInterface represents a leaf in the AST. These represent
 // the items/lexemes in the protobuf language. Comments and
 // whitespace are accumulated by the lexer and associated with
 // the following lexed token.
-type TerminalNode interface {
+type TerminalNodeInterface interface {
 	Node
 	Token() Token
 }
 
 var (
-	_ TerminalNode = (*StringLiteralNode)(nil)
-	_ TerminalNode = (*UintLiteralNode)(nil)
-	_ TerminalNode = (*FloatLiteralNode)(nil)
-	_ TerminalNode = (*IdentNode)(nil)
-	_ TerminalNode = (*SpecialFloatLiteralNode)(nil)
-	_ TerminalNode = (*KeywordNode)(nil)
-	_ TerminalNode = (*RuneNode)(nil)
+	_ TerminalNodeInterface = (*StringLiteralNode)(nil)
+	_ TerminalNodeInterface = (*UintLiteralNode)(nil)
+	_ TerminalNodeInterface = (*FloatLiteralNode)(nil)
+	_ TerminalNodeInterface = (*IdentNode)(nil)
+	_ TerminalNodeInterface = (*SpecialFloatLiteralNode)(nil)
+	_ TerminalNodeInterface = (*KeywordNode)(nil)
+	_ TerminalNodeInterface = (*RuneNode)(nil)
 )
 
-// CompositeNode represents any non-terminal node in the tree. These
-// are interior or root nodes and have child nodes.
-type CompositeNode interface {
-	Node
-	// Children contains all AST nodes that are immediate children of this one.
-	Children() []Node
-}
-
-// terminalNode contains bookkeeping shared by all TerminalNode
+// TerminalNode contains bookkeeping shared by all TerminalNode
 // implementations. It is embedded in all such node types in this
-// package. It provides the implementation of the TerminalNode
+// package. It provides the implementation of the TerminalNodeInterface
 // interface.
-type terminalNode Token
+type TerminalNode Token
 
-func (n terminalNode) Start() Token {
+func (n TerminalNode) Start() Token {
 	return Token(n)
 }
 
-func (n terminalNode) End() Token {
+func (n TerminalNode) End() Token {
 	return Token(n)
 }
 
-func (n terminalNode) Token() Token {
+func (n TerminalNode) Token() Token {
 	return Token(n)
 }
 
-// compositeNode contains bookkeeping shared by all CompositeNode
-// implementations. It is embedded in all such node types in this
-// package. It provides the implementation of the CompositeNode
-// interface.
-type compositeNode struct {
-	children []Node
+func IsCompositeNode(n Node) bool {
+	_, ok := n.(TerminalNodeInterface)
+	return !ok
 }
 
-func (n *compositeNode) Children() []Node {
-	return n.children
+func IsTerminalNode(n Node) bool {
+	_, ok := n.(TerminalNodeInterface)
+	return ok
 }
 
-func (n *compositeNode) Start() Token {
-	if len(n.children) == 0 {
-		return TokenError
-	}
-	return n.children[0].Start()
+func IsVirtualNode(n Node) bool {
+	rn, ok := n.(*RuneNode)
+	return ok && rn.Virtual
 }
 
-func (n *compositeNode) End() Token {
-	if len(n.children) == 0 {
-		return TokenError
-	}
-	return n.children[len(n.children)-1].End()
+func IsNil(n Node) bool {
+	return n == nil || reflect.ValueOf(n).IsNil()
 }
 
 // RuneNode represents a single rune in protobuf source. Runes
@@ -104,7 +91,7 @@ func (n *compositeNode) End() Token {
 // then we don't need a Token to represent them and only need an offset
 // into the file's contents.
 type RuneNode struct {
-	terminalNode
+	TerminalNode
 	Rune rune
 
 	// Virtual is true if this rune is not actually present in the source file,
@@ -112,29 +99,15 @@ type RuneNode struct {
 	Virtual bool
 }
 
-// NewRuneNode creates a new *RuneNode with the given properties.
-func NewRuneNode(r rune, tok Token) *RuneNode {
-	return &RuneNode{
-		terminalNode: tok.asTerminalNode(),
-		Rune:         r,
-	}
-}
-
-func NewVirtualRuneNode(r rune, tok Token) *RuneNode {
-	return &RuneNode{
-		terminalNode: tok.asTerminalNode(),
-		Rune:         r,
-		Virtual:      true,
-	}
-}
-
 // EmptyDeclNode represents an empty declaration in protobuf source.
 // These amount to extra semicolons, with no actual content preceding
 // the semicolon.
 type EmptyDeclNode struct {
-	compositeNode
 	Semicolon *RuneNode
 }
+
+func (e *EmptyDeclNode) Start() Token { return e.Semicolon.Start() }
+func (e *EmptyDeclNode) End() Token   { return e.Semicolon.End() }
 
 // NewEmptyDeclNode creates a new *EmptyDeclNode. The one argument must
 // be non-nil.
@@ -143,9 +116,6 @@ func NewEmptyDeclNode(semicolon *RuneNode) *EmptyDeclNode {
 		panic("semicolon is nil")
 	}
 	return &EmptyDeclNode{
-		compositeNode: compositeNode{
-			children: []Node{semicolon},
-		},
 		Semicolon: semicolon,
 	}
 }
@@ -159,14 +129,15 @@ func (e *EmptyDeclNode) serviceElement() {}
 func (e *EmptyDeclNode) methodElement()  {}
 
 type ErrorNode struct {
-	compositeNode
+	E Node
 }
 
-func NewErrorNode(nodes ...Node) *ErrorNode {
+func (e *ErrorNode) Start() Token { return e.E.Start() }
+func (e *ErrorNode) End() Token   { return e.E.End() }
+
+func NewErrorNode(node Node) *ErrorNode {
 	return &ErrorNode{
-		compositeNode: compositeNode{
-			children: nodes,
-		},
+		E: node,
 	}
 }
 

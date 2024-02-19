@@ -900,7 +900,7 @@ func (t *task) link(parseRes parser.Result, deps linker.Files, interpretOpts ...
 	if err := file.ValidateOptions(t.h, linkIncomplete); err != nil {
 		return file, err
 	}
-	if t.r.explicitFile {
+	if t.r.explicitFile && file.AST() != nil {
 		file.CheckForUnusedImports(t.h)
 	}
 
@@ -912,7 +912,7 @@ func (t *task) link(parseRes parser.Result, deps linker.Files, interpretOpts ...
 		if t.e.c.SourceInfoMode&SourceInfoExtraOptionLocations != 0 {
 			srcInfoOpts = append(srcInfoOpts, sourceinfo.WithExtraOptionLocations())
 		}
-		parseRes.FileDescriptorProto().SourceCodeInfo = sourceinfo.GenerateSourceInfo(parseRes.AST(), optsIndex, srcInfoOpts...)
+		parseRes.FileDescriptorProto().SourceCodeInfo = sourceinfo.GenerateSourceInfo(parseRes, optsIndex, srcInfoOpts...)
 		file.PopulateSourceCodeInfo(optsIndex, descIndex)
 	}
 

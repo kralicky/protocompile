@@ -14,10 +14,6 @@
 
 package ast
 
-import (
-	"fmt"
-)
-
 // EnumDeclNode is a node in the AST that defines an enum type. This can be
 // either an *EnumNode or a NoSourceNode.
 type EnumDeclNode interface {
@@ -34,13 +30,16 @@ var (
 //
 //	enum Foo { BAR = 0; BAZ = 1 }
 type EnumNode struct {
-	compositeNode
 	Keyword    *KeywordNode
 	Name       *IdentNode
 	OpenBrace  *RuneNode
 	Decls      []EnumElement
 	CloseBrace *RuneNode
+	Semicolon  *RuneNode
 }
+
+func (e *EnumNode) Start() Token { return e.Keyword.Start() }
+func (e *EnumNode) End() Token   { return e.Semicolon.Token() }
 
 func (*EnumNode) fileElement() {}
 func (*EnumNode) msgElement()  {}
@@ -51,51 +50,6 @@ func (e *EnumNode) GetName() Node {
 
 func (e *EnumNode) GetElements() []EnumElement {
 	return e.Decls
-}
-
-// NewEnumNode creates a new *EnumNode. All arguments must be non-nil. While
-// it is technically allowed for decls to be nil or empty, the resulting node
-// will not be a valid enum, which must have at least one value.
-//   - keyword: The token corresponding to the "enum" keyword.
-//   - name: The token corresponding to the enum's name.
-//   - openBrace: The token corresponding to the "{" rune that starts the body.
-//   - decls: All declarations inside the enum body.
-//   - closeBrace: The token corresponding to the "}" rune that ends the body.
-func NewEnumNode(keyword *KeywordNode, name *IdentNode, openBrace *RuneNode, decls []EnumElement, closeBrace *RuneNode) *EnumNode {
-	if keyword == nil {
-		panic("keyword is nil")
-	}
-	if name == nil {
-		panic("name is nil")
-	}
-	if openBrace == nil {
-		panic("openBrace is nil")
-	}
-	if closeBrace == nil {
-		panic("closeBrace is nil")
-	}
-	children := make([]Node, 0, 4+len(decls))
-	children = append(children, keyword, name, openBrace)
-	for _, decl := range decls {
-		switch decl.(type) {
-		case *OptionNode, *EnumValueNode, *ReservedNode, *EmptyDeclNode:
-		default:
-			panic(fmt.Sprintf("invalid EnumElement type: %T", decl))
-		}
-		children = append(children, decl)
-	}
-	children = append(children, closeBrace)
-
-	return &EnumNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Keyword:    keyword,
-		Name:       name,
-		OpenBrace:  openBrace,
-		CloseBrace: closeBrace,
-		Decls:      decls,
-	}
 }
 
 // EnumElement is an interface implemented by all AST nodes that can
@@ -130,7 +84,6 @@ var (
 //
 //	UNSET = 0 [deprecated = true];
 type EnumValueNode struct {
-	compositeNode
 	Name      *IdentNode
 	Equals    *RuneNode
 	Number    IntValueNode
@@ -140,51 +93,16 @@ type EnumValueNode struct {
 
 func (*EnumValueNode) enumElement() {}
 
-// NewEnumValueNode creates a new *EnumValueNode. All arguments must be non-nil
-// except opts which is only non-nil if the declaration included options.
-//   - name: The token corresponding to the enum value's name.
-//   - equals: The token corresponding to the '=' rune after the name.
-//   - number: The token corresponding to the enum value's number.
-//   - opts: Optional set of enum value options.
-func NewEnumValueNode(name *IdentNode, equals *RuneNode, number IntValueNode, opts *CompactOptionsNode) *EnumValueNode {
-	if name == nil {
-		panic("name is nil")
-	}
-	if equals == nil {
-		panic("equals is nil")
-	}
-	if number == nil {
-		panic("number is nil")
-	}
-	numChildren := 3
-	if opts != nil {
-		numChildren++
-	}
-	children := make([]Node, 0, numChildren)
-	children = append(children, name, equals, number)
-	if opts != nil {
-		children = append(children, opts)
-	}
-	return &EnumValueNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Name:    name,
-		Equals:  equals,
-		Number:  number,
-		Options: opts,
-	}
-}
+func (e *EnumValueNode) Start() Token { return e.Name.Start() }
+func (e *EnumValueNode) End() Token   { return e.Semicolon.Token() }
 
 func (e *EnumValueNode) GetName() Node {
 	return e.Name
 }
 
 func (e *EnumValueNode) GetNumber() Node {
+	if IsNil(e.Number) {
+		return nil
+	}
 	return e.Number
-}
-
-func (m *EnumValueNode) AddSemicolon(semi *RuneNode) {
-	m.Semicolon = semi
-	m.children = append(m.children, semi)
 }

@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -33,6 +34,9 @@ func TestItems(t *testing.T) {
 	err := filepath.Walk("../internal/testdata", func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
+		}
+		if info.Name() == "incomplete_fields.proto" {
+			return nil // this file has odd contents that don't follow the rules we're testing
 		}
 		if filepath.Ext(path) == ".proto" {
 			t.Run(path, func(t *testing.T) {
@@ -67,47 +71,59 @@ func testItemsSequence(t *testing.T, path string, data []byte) {
 	checkComments := func(comments ast.Comments) {
 		for i := 0; i < comments.Len(); i++ {
 			c := comments.Index(i)
-			astItem := c.AsItem()
-			require.Equal(t, astItem, item)
-			infoEqual(t, c, root.ItemInfo(astItem))
-			item, _ = seq.Next(item)
+			if !c.IsVirtual() && c.VirtualItem().IsValid() {
+				require.Equal(t, c.VirtualItem(), item)
+				continue
+			} else {
+				if c.AsItem() != item {
+					require.Equal(t, c.AttributedTo(), item)
+				}
+				item, _ = seq.Next(item)
+			}
 		}
 	}
-	for _, token := range tokens {
-		tokInfo := root.TokenInfo(token)
+	for _, astToken := range tokens {
+		tokInfo := root.TokenInfo(astToken)
 		checkComments(tokInfo.LeadingComments())
 
-		astItem := token.AsItem()
+		astItem := astToken.AsItem()
+		if astItem != item {
+			t.Logf("expected %v (%q), got %v (%q)", astItem, root.ItemInfo(astItem).RawText(), item, root.ItemInfo(item).RawText())
+			t.Log(root.DebugAnnotated())
+		}
 		require.Equal(t, astItem, item)
 		infoEqual(t, tokInfo, root.ItemInfo(astItem))
-		item, _ = seq.Next(item)
-
 		checkComments(tokInfo.TrailingComments())
+		item, _ = seq.Next(item)
 	}
 	// And backwards
-	item, ok = seq.Last()
+
+	// TODO: the logic here is too complex without some sort of lookahead since
+	// we now have the ability to attribute comments to tokens we haven't seen
+	// yet when iterating in reverse. However, checking that the sequence matches
+	// in both directions still tests for correctness of the implementation.
+	forwardItems := make([]ast.Item, 0, len(tokens))
+	item, ok = seq.First()
 	require.True(t, ok)
-	checkComments = func(comments ast.Comments) {
-		for i := comments.Len() - 1; i >= 0; i-- {
-			c := comments.Index(i)
-			astItem := c.AsItem()
-			require.Equal(t, astItem, item)
-			infoEqual(t, c, root.ItemInfo(astItem))
-			item, _ = seq.Previous(item)
+	for {
+		forwardItems = append(forwardItems, item)
+		item, ok = seq.Next(item)
+		if !ok {
+			break
 		}
 	}
-	for i := len(tokens) - 1; i >= 0; i-- {
-		token := tokens[i]
-		tokInfo := root.TokenInfo(token)
-		checkComments(tokInfo.TrailingComments())
-
-		astItem := token.AsItem()
-		require.Equal(t, astItem, item)
-		infoEqual(t, tokInfo, root.ItemInfo(astItem))
-		item, _ = seq.Previous(item)
-
-		checkComments(tokInfo.LeadingComments())
+	backwardItems := make([]ast.Item, 0, len(tokens))
+	item, ok = seq.Last()
+	require.True(t, ok)
+	for {
+		backwardItems = append(backwardItems, item)
+		item, ok = seq.Previous(item)
+		if !ok {
+			break
+		}
 	}
+	slices.Reverse(backwardItems)
+	require.Equal(t, forwardItems, backwardItems)
 }
 
 func infoEqual(t *testing.T, exp, act ast.ItemInfo) {

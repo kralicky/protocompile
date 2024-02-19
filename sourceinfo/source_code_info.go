@@ -30,6 +30,7 @@ import (
 
 	"github.com/kralicky/protocompile/ast"
 	"github.com/kralicky/protocompile/internal"
+	"github.com/kralicky/protocompile/parser"
 )
 
 // OptionIndex is a mapping of AST nodes that define options to corresponding
@@ -101,15 +102,19 @@ func (*MessageLiteralSourceInfo) isChildSourceInfo() {}
 // opts is present, it can generate source code info for interpreted options.
 // Otherwise, any options in the AST will get source code info as uninterpreted
 // options.
-func GenerateSourceInfo(file *ast.FileNode, opts OptionIndex, genOpts ...GenerateOption) *descriptorpb.SourceCodeInfo {
-	if file == nil {
+func GenerateSourceInfo(parseRes parser.Result, opts OptionIndex, genOpts ...GenerateOption) *descriptorpb.SourceCodeInfo {
+	if parseRes == nil {
 		return nil
 	}
-	sci := sourceCodeInfo{file: file, commentsUsed: map[ast.SourcePos]struct{}{}}
+	sci := sourceCodeInfo{
+		parseRes:     parseRes,
+		file:         parseRes.AST(),
+		commentsUsed: map[ast.SourcePos]struct{}{},
+	}
 	for _, sourceInfoOpt := range genOpts {
 		sourceInfoOpt.apply(&sci)
 	}
-	generateSourceInfoForFile(opts, &sci, file)
+	generateSourceInfoForFile(opts, &sci)
 	return &descriptorpb.SourceCodeInfo{Location: sci.locs}
 }
 
@@ -150,21 +155,20 @@ func (e extraOptionLocationsOption) apply(info *sourceCodeInfo) {
 	info.extraOptionLocs = true
 }
 
-func generateSourceInfoForFile(opts OptionIndex, sci *sourceCodeInfo, file *ast.FileNode) {
+func generateSourceInfoForFile(opts OptionIndex, sci *sourceCodeInfo) {
 	path := make([]int32, 0, 10)
+	sci.newLocWithoutComments(sci.file, nil)
 
-	sci.newLocWithoutComments(file, nil)
-
-	if file.Syntax != nil {
-		sci.newLocWithComments(file.Syntax, append(path, internal.FileSyntaxTag))
+	if sci.file.Syntax != nil {
+		sci.newLocWithComments(sci.file.Syntax, append(path, internal.FileSyntaxTag))
 	}
-	if file.Edition != nil {
-		sci.newLocWithComments(file.Edition, append(path, internal.FileEditionTag))
+	if sci.file.Edition != nil {
+		sci.newLocWithComments(sci.file.Edition, append(path, internal.FileEditionTag))
 	}
 
 	var depIndex, pubDepIndex, weakDepIndex, optIndex, msgIndex, enumIndex, extendIndex, svcIndex int32
 
-	for _, child := range file.Decls {
+	for _, child := range sci.file.Decls {
 		switch child := child.(type) {
 		case *ast.ImportNode:
 			sci.newLocWithComments(child, append(path, internal.FileDependencyTag, depIndex))
@@ -495,14 +499,20 @@ func generateSourceCodeInfoForOneof(opts OptionIndex, sci *sourceCodeInfo, n *as
 func generateSourceCodeInfoForField(opts OptionIndex, sci *sourceCodeInfo, n ast.FieldDeclNode, path []int32) {
 	var fieldType string
 	if f, ok := n.(*ast.FieldNode); ok {
-		fieldType = string(f.FldType.AsIdentifier())
+		if !ast.IsNil(f.FldType) {
+			fieldType = string(f.FldType.AsIdentifier())
+		}
 	}
-
+	fldDesc := sci.parseRes.FieldDescriptor(n)
+	var fieldExtendee *ast.ExtendNode
+	if fldDesc != nil {
+		fieldExtendee, _ = sci.parseRes.FieldExtendeeNode(fldDesc).(*ast.ExtendNode)
+	}
 	if n.GetGroupKeyword() != nil {
 		// comments will appear on group message
 		sci.newLocWithoutComments(n, path)
-		if n.FieldExtendee() != nil {
-			sci.newLoc(n.FieldExtendee(), append(path, internal.FieldExtendeeTag))
+		if fieldExtendee != nil {
+			sci.newLoc(fieldExtendee, append(path, internal.FieldExtendeeTag))
 		}
 		if n.FieldLabel() != nil {
 			// no comments here either (label is first token for group, so we want
@@ -514,8 +524,8 @@ func generateSourceCodeInfoForField(opts OptionIndex, sci *sourceCodeInfo, n ast
 		sci.newLocWithoutComments(n.FieldName(), append(path, internal.FieldNameTag))
 	} else {
 		sci.newLocWithComments(n, path)
-		if n.FieldExtendee() != nil {
-			sci.newLoc(n.FieldExtendee(), append(path, internal.FieldExtendeeTag))
+		if fieldExtendee != nil {
+			sci.newLoc(fieldExtendee, append(path, internal.FieldExtendeeTag))
 		}
 		if n.FieldLabel() != nil {
 			sci.newLoc(n.FieldLabel(), append(path, internal.FieldLabelTag))
@@ -623,6 +633,7 @@ func generateSourceCodeInfoForMethod(opts OptionIndex, sci *sourceCodeInfo, n *a
 }
 
 type sourceCodeInfo struct {
+	parseRes        parser.Result
 	file            *ast.FileNode
 	extraComments   bool
 	extraOptionLocs bool
@@ -639,16 +650,13 @@ func (sci *sourceCodeInfo) newLocWithoutComments(n ast.Node, path []int32) {
 		// as part of the span. We want the span to only include
 		// actual lexical elements in the file (which also excludes
 		// whitespace and comments).
-		children := sci.file.Children()
-		if len(children) > 0 && isEOF(children[len(children)-1]) {
-			children = children[:len(children)-1]
-		}
-		if len(children) == 0 {
+		endExcl := sci.file.EndExclusive()
+		if endExcl == ast.TokenError {
 			start = ast.SourcePos{Filename: sci.file.Name(), Line: 1, Col: 1}
 			end = start
 		} else {
 			start = sci.file.TokenInfo(n.Start()).Start()
-			end = sci.file.TokenInfo(children[len(children)-1].End()).End()
+			end = sci.file.TokenInfo(endExcl).End()
 		}
 	} else {
 		info := sci.file.NodeInfo(n)
@@ -661,6 +669,9 @@ func (sci *sourceCodeInfo) newLocWithoutComments(n ast.Node, path []int32) {
 }
 
 func (sci *sourceCodeInfo) newLoc(n ast.Node, path []int32) {
+	if n == nil {
+		return
+	}
 	info := sci.file.NodeInfo(n)
 	if !sci.extraComments {
 		dup := make([]int32, len(path))

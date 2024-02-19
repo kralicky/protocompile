@@ -43,6 +43,7 @@ func init() {
 	for str, i := range keywords {
 		setTokenName(i, fmt.Sprintf(`"%s"`, str))
 	}
+	setTokenName(_INF, `"inf"`) // inf has two valid keywords, set one for consistency
 }
 
 func setTokenName(token int, text string) {
@@ -153,6 +154,9 @@ type Result interface {
 	// FileDescriptorProto hierarchy. If this result has no AST, this returns a
 	// placeholder node.
 	FieldNode(*descriptorpb.FieldDescriptorProto) ast.FieldDeclNode
+	// FieldExtendeeNode returns the containing *ExtendNode for fields that are
+	// defined inside of "extend" blocks.
+	FieldExtendeeNode(*descriptorpb.FieldDescriptorProto) ast.Node
 	// OneofNode returns the AST node corresponding to the given oneof. This can
 	// return nil, such as if the given oneof is not part of the
 	// FileDescriptorProto hierarchy. If this result has no AST, this returns a

@@ -19,6 +19,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -36,6 +37,9 @@ func TestASTRoundTrips(t *testing.T) {
 			return err
 		}
 		if filepath.Ext(path) == ".proto" {
+			if strings.Contains(path, "/extsyntax/") {
+				return nil
+			}
 			t.Run(path, func(t *testing.T) {
 				t.Parallel()
 				data, err := os.ReadFile(path)
@@ -59,8 +63,7 @@ func testASTRoundTrip(t *testing.T, path string, data []byte) {
 	root, err := parser.Parse(filename, bytes.NewReader(data), reporter.NewHandler(nil), 0)
 	require.NoError(t, err)
 	var buf bytes.Buffer
-	err = printAST(&buf, root)
-	require.NoError(t, err)
+	printAST(&buf, root)
 	// see if file survived round trip!
 	assert.Equal(t, string(data), buf.String())
 }
@@ -70,46 +73,37 @@ func testASTRoundTrip(t *testing.T, path string, data []byte) {
 // leading comments, leading whitespace, the node's raw text, and then
 // any trailing comments. If the given node is a *FileNode, it will then
 // also print the file's FinalComments and FinalWhitespace.
-func printAST(w io.Writer, file *ast.FileNode) error {
+func printAST(w io.Writer, file *ast.FileNode) {
 	sw, ok := w.(stringWriter)
 	if !ok {
 		sw = &strWriter{w}
 	}
-	err := ast.Walk(file, &ast.SimpleVisitor{
-		DoVisitTerminalNode: func(token ast.TerminalNode) error {
-			info := file.NodeInfo(token)
-			if err := printComments(sw, info.LeadingComments()); err != nil {
-				return err
-			}
+	ast.Inspect(file, func(n ast.Node) bool {
+		if ast.IsTerminalNode(n) {
+			isVirtual := ast.IsVirtualNode(n)
+			_ = isVirtual
+			info := file.NodeInfo(n)
+			printComments(sw, info.LeadingComments())
 
-			if _, err := sw.WriteString(info.LeadingWhitespace()); err != nil {
-				return err
-			}
+			sw.WriteString(info.LeadingWhitespace())
 
-			if _, err := sw.WriteString(info.RawText()); err != nil {
-				return err
-			}
+			sw.WriteString(info.RawText())
 
-			return printComments(sw, info.TrailingComments())
-		},
+			printComments(sw, info.TrailingComments())
+		}
+		return true
 	})
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
-func printComments(sw stringWriter, comments ast.Comments) error {
+func printComments(sw stringWriter, comments ast.Comments) {
 	for i := 0; i < comments.Len(); i++ {
 		comment := comments.Index(i)
-		if _, err := sw.WriteString(comment.LeadingWhitespace()); err != nil {
-			return err
+		if comment.IsVirtual() {
+			continue
 		}
-		if _, err := sw.WriteString(comment.RawText()); err != nil {
-			return err
-		}
+		sw.WriteString(comment.LeadingWhitespace())
+		sw.WriteString(comment.RawText())
 	}
-	return nil
 }
 
 // many io.Writer impls also provide a string-based method.

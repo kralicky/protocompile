@@ -143,263 +143,267 @@ func TestLexer(t *testing.T) {
 		comments   []string
 		trailCount int
 	}{
-		0: {t: _SYNTAX, v: "syntax"},
-		1: {t: '=', v: '='},
-		2: {t: _STRING_LIT, v: "proto2"},
-		3: {t: ';', v: ';', virtual: false},
+		{t: _SYNTAX, v: "syntax"},
+		{t: '=', v: '='},
+		{t: _STRING_LIT, v: "proto2"},
+		{t: ';', v: ';', virtual: false},
 
-		4:  {t: _MESSAGE, v: "message"},
-		5:  {t: _SINGULAR_IDENT, v: "Foo"},
-		6:  {t: '{', v: '{'},
-		7:  {t: _INT32, v: "int32"},
-		8:  {t: _SINGULAR_IDENT, v: "name"},
-		9:  {t: '=', v: '='},
-		10: {t: _INT_LIT, v: uint64(1)},
-		11: {t: '[', v: '['},
-		12: {t: _SINGULAR_IDENT, v: "opt"},
-		13: {t: '=', v: '='},
-		14: {t: _STRING_LIT, v: "\032\x16\n\rfoobar\"zapanother\tstring's\t"},
-		15: {t: ']', v: ']'},
-		16: {t: ';', v: ';', virtual: true},
-		17: {t: '}', v: '}'},
-		18: {t: ';', v: ';', virtual: true},
+		{t: _MESSAGE, v: "message"},
+		{t: _SINGULAR_IDENT, v: "Foo"},
+		{t: '{', v: '{'},
+		{t: _INT32, v: "int32"},
+		{t: _SINGULAR_IDENT, v: "name"},
+		{t: '=', v: '='},
+		{t: _INT_LIT, v: uint64(1)},
+		{t: '[', v: '['},
+		{t: _SINGULAR_IDENT, v: "opt"},
+		{t: '=', v: '='},
+		{t: _STRING_LIT, v: "\032\x16\n\rfoobar\"zapanother\tstring's\t"},
+		{t: ',', v: ',', virtual: true},
+		{t: ']', v: ']'},
+		{t: ';', v: ';', virtual: true},
+		{t: '}', v: '}'},
+		{t: ';', v: ';', virtual: true},
 
-		19: {t: _SERVICE, v: "service"},
-		20: {t: _SINGULAR_IDENT, v: "Foo"},
-		21: {t: '{', v: '{'},
-		22: {t: _RPC, v: "rpc"},
-		23: {t: _SINGULAR_IDENT, v: "Foo"},
-		24: {t: '(', v: '('},
-		25: {t: _FULLY_QUALIFIED_IDENT, v: ".type"},
-		26: {t: ')', v: ')'},
-		27: {t: _RETURNS, v: "returns"},
-		28: {t: '(', v: '('},
-		29: {t: _FULLY_QUALIFIED_IDENT, v: ".f.q.n"},
-		30: {t: ')', v: ')'},
-		31: {t: '{', v: '{'},
-		32: {t: '}', v: '}'},
-		33: {t: ';', v: ';', virtual: true},
-		34: {t: _RPC, v: "rpc"},
-		35: {t: _SINGULAR_IDENT, v: "Foo"},
-		36: {t: '(', v: '('},
-		37: {t: _SINGULAR_IDENT, v: "name"},
-		38: {t: ')', v: ')'},
-		39: {t: _RETURNS, v: "returns"},
-		40: {t: '(', v: '('},
-		41: {t: _QUALIFIED_IDENT, v: "f.q.n"},
-		42: {t: ')', v: ')'},
-		43: {t: ';', v: ';', virtual: false},
-		44: {t: '}', v: '}'},
-		45: {t: ';', v: ';', virtual: true},
+		{t: _SERVICE, v: "service"},
+		{t: _SINGULAR_IDENT, v: "Foo"},
+		{t: '{', v: '{'},
+		{t: _RPC, v: "rpc"},
+		{t: _SINGULAR_IDENT, v: "Foo"},
+		{t: '(', v: '('},
+		{t: _FULLY_QUALIFIED_IDENT, v: ".type"},
+		{t: ')', v: ')'},
+		{t: _RETURNS, v: "returns"},
+		{t: '(', v: '('},
+		{t: _FULLY_QUALIFIED_IDENT, v: ".f.q.n"},
+		{t: ')', v: ')'},
+		{t: '{', v: '{'},
+		{t: '}', v: '}'},
+		{t: ';', v: ';', virtual: true},
+		{t: _RPC, v: "rpc"},
+		{t: _SINGULAR_IDENT, v: "Foo"},
+		{t: '(', v: '('},
+		{t: _SINGULAR_IDENT, v: "name"},
+		{t: ')', v: ')'},
+		{t: _RETURNS, v: "returns"},
+		{t: '(', v: '('},
+		{t: _QUALIFIED_IDENT, v: "f.q.n"},
+		{t: ')', v: ')'},
+		{t: ';', v: ';', virtual: false},
+		{t: '}', v: '}'},
+		{t: ';', v: ';', virtual: true},
 
 		// message Foo {
-		46: {t: _MESSAGE, v: "message"},
-		47: {t: _SINGULAR_IDENT, v: "Foo"},
-		48: {t: '{', v: '{'},
+		{t: _MESSAGE, v: "message"},
+		{t: _SINGULAR_IDENT, v: "Foo"},
+		{t: '{', v: '{'},
 		// .type a = 1 [option=foo]
-		49: {t: _FULLY_QUALIFIED_IDENT, v: ".type"},
-		50: {t: _SINGULAR_IDENT, v: "a"},
-		51: {t: '=', v: '='},
-		52: {t: _INT_LIT, v: uint64(1)},
-		53: {t: '[', v: '['},
-		54: {t: _OPTION, v: "option"}, // this is lexed as a keyword token, but parsed as an identifier
-		55: {t: '=', v: '='},
-		56: {t: _SINGULAR_IDENT, v: "foo"},
-		57: {t: ']', v: ']'},
-		58: {t: ';', v: ';', virtual: true},
+		{t: _FULLY_QUALIFIED_IDENT, v: ".type"},
+		{t: _SINGULAR_IDENT, v: "a"},
+		{t: '=', v: '='},
+		{t: _INT_LIT, v: uint64(1)},
+		{t: '[', v: '['},
+		{t: _OPTION, v: "option"}, // this is lexed as a keyword token, but parsed as an identifier
+		{t: '=', v: '='},
+		{t: _SINGULAR_IDENT, v: "foo"},
+		{t: ',', v: ',', virtual: true},
+		{t: ']', v: ']'},
+		{t: ';', v: ';', virtual: true},
 		// .f.q.n b = 2
-		59: {t: _FULLY_QUALIFIED_IDENT, v: ".f.q.n"},
-		60: {t: _SINGULAR_IDENT, v: "b"},
-		61: {t: '=', v: '='},
-		62: {t: _INT_LIT, v: uint64(2)},
-		63: {t: ';', v: ';', virtual: true},
+		{t: _FULLY_QUALIFIED_IDENT, v: ".f.q.n"},
+		{t: _SINGULAR_IDENT, v: "b"},
+		{t: '=', v: '='},
+		{t: _INT_LIT, v: uint64(2)},
+		{t: ';', v: ';', virtual: true},
 		// name c = 2
-		64: {t: _SINGULAR_IDENT, v: "name"},
-		65: {t: _SINGULAR_IDENT, v: "c"},
-		66: {t: '=', v: '='},
-		67: {t: _INT_LIT, v: uint64(2)},
-		68: {t: ';', v: ';', virtual: true},
+		{t: _SINGULAR_IDENT, v: "name"},
+		{t: _SINGULAR_IDENT, v: "c"},
+		{t: '=', v: '='},
+		{t: _INT_LIT, v: uint64(2)},
+		{t: ';', v: ';', virtual: true},
 		// f.q.n d = 4
-		69: {t: _QUALIFIED_IDENT, v: "f.q.n"},
-		70: {t: _SINGULAR_IDENT, v: "d"},
-		71: {t: '=', v: '='},
-		72: {t: _INT_LIT, v: uint64(4)},
-		73: {t: ';', v: ';', virtual: true},
+		{t: _QUALIFIED_IDENT, v: "f.q.n"},
+		{t: _SINGULAR_IDENT, v: "d"},
+		{t: '=', v: '='},
+		{t: _INT_LIT, v: uint64(4)},
+		{t: ';', v: ';', virtual: true},
 		// option a.(b.c).d = .01
-		74: {t: _OPTION, v: "option"},
-		75: {t: _EXTENSION_IDENT, v: "a.(b.c).d"},
-		76: {t: '=', v: '='},
-		77: {t: _FLOAT_LIT, v: 0.01},
-		78: {t: ';', v: ';', virtual: true},
+		{t: _OPTION, v: "option"},
+		{t: _EXTENSION_IDENT, v: "a.(b.c).d"},
+		{t: '=', v: '='},
+		{t: _FLOAT_LIT, v: 0.01},
+		{t: ';', v: ';', virtual: true},
 		// option a.(b.c). = .01e12
-		79: {t: _OPTION, v: "option"},
-		80: {t: _EXTENSION_IDENT, v: "a.(b.c)."},
-		81: {t: '=', v: '='},
-		82: {t: _FLOAT_LIT, v: 0.01e12},
-		83: {t: ';', v: ';', virtual: true},
+		{t: _OPTION, v: "option"},
+		{t: _EXTENSION_IDENT, v: "a.(b.c)."},
+		{t: '=', v: '='},
+		{t: _FLOAT_LIT, v: 0.01e12},
+		{t: ';', v: ';', virtual: true},
 		// option a.(b.c) = .01e+5
-		84: {t: _OPTION, v: "option"},
-		85: {t: _EXTENSION_IDENT, v: "a.(b.c)"},
-		86: {t: '=', v: '='},
-		87: {t: _FLOAT_LIT, v: 0.01e+5},
-		88: {t: ';', v: ';', virtual: true},
+		{t: _OPTION, v: "option"},
+		{t: _EXTENSION_IDENT, v: "a.(b.c)"},
+		{t: '=', v: '='},
+		{t: _FLOAT_LIT, v: 0.01e+5},
+		{t: ';', v: ';', virtual: true},
 		// option (a.b) = .033e-1
-		89: {t: _OPTION, v: "option"},
-		90: {t: _EXTENSION_IDENT, v: "(a.b)"},
-		91: {t: '=', v: '='},
-		92: {t: _FLOAT_LIT, v: 0.033e-1},
-		93: {t: ';', v: ';', virtual: true},
+		{t: _OPTION, v: "option"},
+		{t: _EXTENSION_IDENT, v: "(a.b)"},
+		{t: '=', v: '='},
+		{t: _FLOAT_LIT, v: 0.033e-1},
+		{t: ';', v: ';', virtual: true},
 		// option (a). = 12345
-		94: {t: _OPTION, v: "option"},
-		95: {t: _EXTENSION_IDENT, v: "(a)."},
-		96: {t: '=', v: '='},
-		97: {t: _INT_LIT, v: uint64(12345)},
-		98: {t: ';', v: ';', virtual: true},
+		{t: _OPTION, v: "option"},
+		{t: _EXTENSION_IDENT, v: "(a)."},
+		{t: '=', v: '='},
+		{t: _INT_LIT, v: uint64(12345)},
+		{t: ';', v: ';', virtual: true},
 		// option (a).(b) = -12345
-		99:  {t: _OPTION, v: "option"},
-		100: {t: _EXTENSION_IDENT, v: "(a).(b)"},
-		101: {t: '=', v: '='},
-		102: {t: '-', v: '-'},
-		103: {t: _INT_LIT, v: uint64(12345)},
-		104: {t: ';', v: ';', virtual: true},
+		{t: _OPTION, v: "option"},
+		{t: _EXTENSION_IDENT, v: "(a).(b)"},
+		{t: '=', v: '='},
+		{t: '-', v: '-'},
+		{t: _INT_LIT, v: uint64(12345)},
+		{t: ';', v: ';', virtual: true},
 		// option (a.) = 123.1234
-		105: {t: _OPTION, v: "option"},
-		106: {t: _EXTENSION_IDENT, v: "(a.)"},
-		107: {t: '=', v: '='},
-		108: {t: _FLOAT_LIT, v: 123.1234},
-		109: {t: ';', v: ';', virtual: true},
+		{t: _OPTION, v: "option"},
+		{t: _EXTENSION_IDENT, v: "(a.)"},
+		{t: '=', v: '='},
+		{t: _FLOAT_LIT, v: 123.1234},
+		{t: ';', v: ';', virtual: true},
 		// option (a.b.) = 0.123
-		110: {t: _OPTION, v: "option"},
-		111: {t: _EXTENSION_IDENT, v: "(a.b.)"},
-		112: {t: '=', v: '='},
-		113: {t: _FLOAT_LIT, v: 0.123},
-		114: {t: ';', v: ';', virtual: true},
+		{t: _OPTION, v: "option"},
+		{t: _EXTENSION_IDENT, v: "(a.b.)"},
+		{t: '=', v: '='},
+		{t: _FLOAT_LIT, v: 0.123},
+		{t: ';', v: ';', virtual: true},
 		// option (a.b.c) = 012345
-		115: {t: _OPTION, v: "option"},
-		116: {t: _EXTENSION_IDENT, v: "(a.b.c)"},
-		117: {t: '=', v: '='},
-		118: {t: _INT_LIT, v: uint64(0o12345)},
-		119: {t: ';', v: ';', virtual: true},
+		{t: _OPTION, v: "option"},
+		{t: _EXTENSION_IDENT, v: "(a.b.c)"},
+		{t: '=', v: '='},
+		{t: _INT_LIT, v: uint64(0o12345)},
+		{t: ';', v: ';', virtual: true},
 		// option a.(b.).(c) = 0x2134abcdef30
-		120: {t: _OPTION, v: "option"},
-		121: {t: _EXTENSION_IDENT, v: "a.(b.).(c)"},
-		122: {t: '=', v: '='},
-		123: {t: _INT_LIT, v: uint64(0x2134abcdef30)},
-		124: {t: ';', v: ';', virtual: true},
+		{t: _OPTION, v: "option"},
+		{t: _EXTENSION_IDENT, v: "a.(b.).(c)"},
+		{t: '=', v: '='},
+		{t: _INT_LIT, v: uint64(0x2134abcdef30)},
+		{t: ';', v: ';', virtual: true},
 		// option a = -0543
-		125: {t: _OPTION, v: "option"},
-		126: {t: _SINGULAR_IDENT, v: "a"},
-		127: {t: '=', v: '='},
-		128: {t: '-', v: '-'},
-		129: {t: _INT_LIT, v: uint64(0o543)},
-		130: {t: ';', v: ';', virtual: true},
+		{t: _OPTION, v: "option"},
+		{t: _SINGULAR_IDENT, v: "a"},
+		{t: '=', v: '='},
+		{t: '-', v: '-'},
+		{t: _INT_LIT, v: uint64(0o543)},
+		{t: ';', v: ';', virtual: true},
 		// option b = -0xff76
-		131: {t: _OPTION, v: "option"},
-		132: {t: _SINGULAR_IDENT, v: "b"},
-		133: {t: '=', v: '='},
-		134: {t: '-', v: '-'},
-		135: {t: _INT_LIT, v: uint64(0xff76)},
-		136: {t: ';', v: ';', virtual: true},
+		{t: _OPTION, v: "option"},
+		{t: _SINGULAR_IDENT, v: "b"},
+		{t: '=', v: '='},
+		{t: '-', v: '-'},
+		{t: _INT_LIT, v: uint64(0xff76)},
+		{t: ';', v: ';', virtual: true},
 		// option a.(b).c.(d) = 101.0102
-		137: {t: _OPTION, v: "option"},
-		138: {t: _EXTENSION_IDENT, v: "a.(b).c.(d)"},
-		139: {t: '=', v: '='},
-		140: {t: _FLOAT_LIT, v: 101.0102},
-		141: {t: ';', v: ';', virtual: true},
+		{t: _OPTION, v: "option"},
+		{t: _EXTENSION_IDENT, v: "a.(b).c.(d)"},
+		{t: '=', v: '='},
+		{t: _FLOAT_LIT, v: 101.0102},
+		{t: ';', v: ';', virtual: true},
 		// option a.(b).c.(d). = 202.0203e1
-		142: {t: _OPTION, v: "option"},
-		143: {t: _EXTENSION_IDENT, v: "a.(b).c.(d)."},
-		144: {t: '=', v: '='},
-		145: {t: _FLOAT_LIT, v: 202.0203e1},
-		146: {t: ';', v: ';', virtual: true},
+		{t: _OPTION, v: "option"},
+		{t: _EXTENSION_IDENT, v: "a.(b).c.(d)."},
+		{t: '=', v: '='},
+		{t: _FLOAT_LIT, v: 202.0203e1},
+		{t: ';', v: ';', virtual: true},
 		// option a.(b).c. = 304.0304e-10
-		147: {t: _OPTION, v: "option"},
-		148: {t: _EXTENSION_IDENT, v: "a.(b).c."},
-		149: {t: '=', v: '='},
-		150: {t: _FLOAT_LIT, v: 304.0304e-10},
-		151: {t: ';', v: ';', virtual: true},
+		{t: _OPTION, v: "option"},
+		{t: _EXTENSION_IDENT, v: "a.(b).c."},
+		{t: '=', v: '='},
+		{t: _FLOAT_LIT, v: 304.0304e-10},
+		{t: ';', v: ';', virtual: true},
 		// option a.(b).c = 3.1234e+12
-		152: {t: _OPTION, v: "option"},
-		153: {t: _EXTENSION_IDENT, v: "a.(b).c"},
-		154: {t: '=', v: '='},
-		155: {t: _FLOAT_LIT, v: 3.1234e+12},
-		156: {t: ';', v: ';', virtual: true},
+		{t: _OPTION, v: "option"},
+		{t: _EXTENSION_IDENT, v: "a.(b).c"},
+		{t: '=', v: '='},
+		{t: _FLOAT_LIT, v: 3.1234e+12},
+		{t: ';', v: ';', virtual: true},
 		// }
-		157: {t: '}', v: '}'},
-		158: {t: ';', v: ';', virtual: true},
+		{t: '}', v: '}'},
+		{t: ';', v: ';', virtual: true},
 
 		// service Foo {
 		//   rpc Foo (.) returns (.) { option (.) = . }
 		// }
-		159: {t: _SERVICE, v: "service"},
-		160: {t: _SINGULAR_IDENT, v: "Foo"},
-		161: {t: '{', v: '{'},
-		162: {t: _RPC, v: "rpc"},
-		163: {t: _SINGULAR_IDENT, v: "Foo"},
-		164: {t: '(', v: '('},
-		165: {t: _FULLY_QUALIFIED_IDENT, v: "."},
-		166: {t: ')', v: ')'},
-		167: {t: _RETURNS, v: "returns"},
-		168: {t: '(', v: '('},
-		169: {t: _FULLY_QUALIFIED_IDENT, v: "."},
-		170: {t: ')', v: ')'},
-		171: {t: '{', v: '{'},
-		172: {t: _OPTION, v: "option"},
-		173: {t: _EXTENSION_IDENT, v: "(.)"},
-		174: {t: '=', v: '='},
-		175: {t: _FULLY_QUALIFIED_IDENT, v: "."},
-		176: {t: ';', v: ';', virtual: true},
-		177: {t: '}', v: '}'},
-		178: {t: ';', v: ';', virtual: true},
-		179: {t: '}', v: '}'},
-		180: {t: ';', v: ';', virtual: true},
+		{t: _SERVICE, v: "service"},
+		{t: _SINGULAR_IDENT, v: "Foo"},
+		{t: '{', v: '{'},
+		{t: _RPC, v: "rpc"},
+		{t: _SINGULAR_IDENT, v: "Foo"},
+		{t: '(', v: '('},
+		{t: _FULLY_QUALIFIED_IDENT, v: "."},
+		{t: ')', v: ')'},
+		{t: _RETURNS, v: "returns"},
+		{t: '(', v: '('},
+		{t: _FULLY_QUALIFIED_IDENT, v: "."},
+		{t: ')', v: ')'},
+		{t: '{', v: '{'},
+		{t: _OPTION, v: "option"},
+		{t: _EXTENSION_IDENT, v: "(.)"},
+		{t: '=', v: '='},
+		{t: _FULLY_QUALIFIED_IDENT, v: "."},
+		{t: ';', v: ';', virtual: true},
+		{t: '}', v: '}'},
+		{t: ';', v: ';', virtual: true},
+		{t: '}', v: '}'},
+		{t: ';', v: ';', virtual: true},
 
 		// extend .google.protobuf.FieldOptions {
 		//   optional uint64 foo = 1 [(syntax) = true]
 		// }
-		181: {t: _EXTEND, v: "extend"},
-		182: {t: _FULLY_QUALIFIED_IDENT, v: ".google.protobuf.FieldOptions"},
-		183: {t: '{', v: '{'},
-		184: {t: _OPTIONAL, v: "optional"},
-		185: {t: _UINT64, v: "uint64"},
-		186: {t: _SINGULAR_IDENT, v: "foo"},
-		187: {t: '=', v: '='},
-		188: {t: _INT_LIT, v: uint64(1)},
-		189: {t: '[', v: '['},
-		190: {t: _EXTENSION_IDENT, v: "(syntax)"},
-		191: {t: '=', v: '='},
-		192: {t: _TRUE, v: "true"},
-		193: {t: ']', v: ']'},
-		194: {t: ';', v: ';', virtual: true},
-		195: {t: '}', v: '}'},
-		196: {t: ';', v: ';', virtual: true},
+		{t: _EXTEND, v: "extend"},
+		{t: _FULLY_QUALIFIED_IDENT, v: ".google.protobuf.FieldOptions"},
+		{t: '{', v: '{'},
+		{t: _OPTIONAL, v: "optional"},
+		{t: _UINT64, v: "uint64"},
+		{t: _SINGULAR_IDENT, v: "foo"},
+		{t: '=', v: '='},
+		{t: _INT_LIT, v: uint64(1)},
+		{t: '[', v: '['},
+		{t: _EXTENSION_IDENT, v: "(syntax)"},
+		{t: '=', v: '='},
+		{t: _TRUE, v: "true"},
+		{t: ',', v: ',', virtual: true},
+		{t: ']', v: ']'},
+		{t: ';', v: ';', virtual: true},
+		{t: '}', v: '}'},
+		{t: ';', v: ';', virtual: true},
 
 		// message Foo {
 		//   optional bool rpc = 2
 		//   optional uint64 id = 1 [(syntax) = true];
 		// }
-		197: {t: _MESSAGE, v: "message"},
-		198: {t: _SINGULAR_IDENT, v: "Foo"},
-		199: {t: '{', v: '{'},
-		200: {t: _OPTIONAL, v: "optional"},
-		201: {t: _BOOL, v: "bool"},
-		202: {t: _RPC, v: "rpc"}, // this is lexed as a keyword token, but parsed as an identifier
-		203: {t: '=', v: '='},
-		204: {t: _INT_LIT, v: uint64(2)},
-		205: {t: ';', v: ';', virtual: true},
-		206: {t: _OPTIONAL, v: "optional"},
-		207: {t: _UINT64, v: "uint64"},
-		208: {t: _SINGULAR_IDENT, v: "id"},
-		209: {t: '=', v: '='},
-		210: {t: _INT_LIT, v: uint64(1)},
-		211: {t: '[', v: '['},
-		212: {t: _EXTENSION_IDENT, v: "(syntax)"},
-		213: {t: '=', v: '='},
-		214: {t: _TRUE, v: "true"},
-		215: {t: ']', v: ']'},
-		216: {t: ';', v: ';', virtual: false},
-		217: {t: '}', v: '}'},
-		218: {t: ';', v: ';', virtual: true},
+		{t: _MESSAGE, v: "message"},
+		{t: _SINGULAR_IDENT, v: "Foo"},
+		{t: '{', v: '{'},
+		{t: _OPTIONAL, v: "optional"},
+		{t: _BOOL, v: "bool"},
+		{t: _RPC, v: "rpc"}, // this is lexed as a keyword token, but parsed as an identifier
+		{t: '=', v: '='},
+		{t: _INT_LIT, v: uint64(2)},
+		{t: ';', v: ';', virtual: true},
+		{t: _OPTIONAL, v: "optional"},
+		{t: _UINT64, v: "uint64"},
+		{t: _SINGULAR_IDENT, v: "id"},
+		{t: '=', v: '='},
+		{t: _INT_LIT, v: uint64(1)},
+		{t: '[', v: '['},
+		{t: _EXTENSION_IDENT, v: "(syntax)"},
+		{t: '=', v: '='},
+		{t: _TRUE, v: "true"},
+		{t: ',', v: ',', virtual: true},
+		{t: ']', v: ']'},
+		{t: ';', v: ';', virtual: false},
+		{t: '}', v: '}'},
+		{t: ';', v: ';', virtual: true},
 
 		// message Simple {
 		//   .
@@ -410,11 +414,11 @@ func TestLexer(t *testing.T) {
 		//     (syntax) =
 		//   ]
 		// }
-		219: {t: _MESSAGE, v: "message"},
-		220: {t: _SINGULAR_IDENT, v: "Simple"},
-		221: {t: '{', v: '{'},
-		222: {t: _FULLY_QUALIFIED_IDENT, v: "."},
-		223: {t: ';', v: ';', virtual: true},
+		{t: _MESSAGE, v: "message"},
+		{t: _SINGULAR_IDENT, v: "Simple"},
+		{t: '{', v: '{'},
+		{t: _FULLY_QUALIFIED_IDENT, v: "."},
+		{t: ';', v: ';', virtual: true},
 		{t: _OPTIONAL, v: "optional"},
 		{t: _FULLY_QUALIFIED_IDENT, v: "."},
 		{t: ';', v: ';', virtual: true},
@@ -436,6 +440,8 @@ func TestLexer(t *testing.T) {
 		{t: _EXTENSION_IDENT, v: "(syntax)"},
 		{t: '=', v: '='},
 		{t: ',', v: ',', virtual: true},
+		{t: ']', v: ']'},
+		{t: ';', v: ';', virtual: true},
 		{t: '}', v: '}'},
 		{t: ';', v: ';', virtual: true},
 
@@ -919,7 +925,7 @@ func TestUTF8(t *testing.T) {
 		if !tc.succeeds {
 			assert.Equal(t, _ERROR, tok, "lexer should return error for %v", tc.data)
 		} else if assert.Equal(t, _STRING_LIT, tok, "lexer should return string literal token for %v", tc.data) {
-			assert.Equal(t, tc.expectVal, sym.sv)
+			assert.Equal(t, tc.expectVal, sym.sv.AsString())
 		}
 	}
 }
@@ -955,47 +961,43 @@ message Foo {
 
 	fileNode, err := Parse("test.proto", strings.NewReader(contents), reporter.NewHandler(nil), 0)
 	require.NoError(t, err)
-	require.NoError(
-		t,
-		ast.Walk(
-			fileNode,
-			&ast.SimpleVisitor{
-				DoVisitFieldReferenceNode: func(fieldReferenceNode *ast.FieldReferenceNode) error {
-					// We're only testing compact options, so we can confidently
-					// retrieve the leading comments from the FieldReference's name
-					// since it will always be a terminal *IdentNode unless the
-					// field reference has a '('.
-					info := fileNode.NodeInfo(fieldReferenceNode.Name)
-					if fieldReferenceNode.Open != nil {
-						// The leading comments will be attached to the '(', if one exists.
-						info = fileNode.NodeInfo(fieldReferenceNode.Open)
-					}
-					name := stringForFieldReference(fieldReferenceNode)
-					if assert.Equal(t, 1, info.LeadingComments().Len(), "%s should have a leading comment", name) {
-						assert.Equal(
-							t,
-							fmt.Sprintf("// Leading comment on %s.", name),
-							info.LeadingComments().Index(0).RawText(),
-						)
-					}
-					return nil
-				},
-				DoVisitFieldNode: func(fieldNode *ast.FieldNode) error {
-					// The fields in these tests always define a label,
-					// so we can confidently use it to retrieve the comments.
-					info := fileNode.NodeInfo(fieldNode.Label)
-					name := fieldNode.Name.Val
-					if assert.Equal(t, 1, info.LeadingComments().Len(), "%s should have a leading comment", name) {
-						assert.Equal(
-							t,
-							fmt.Sprintf("// Leading comment on %s.", name),
-							info.LeadingComments().Index(0).RawText(),
-						)
-					}
-					return nil
-				},
-			},
-		),
+	ast.Inspect(
+		fileNode,
+		func(node ast.Node) bool {
+			switch node := node.(type) {
+			case *ast.FieldReferenceNode:
+				// We're only testing compact options, so we can confidently
+				// retrieve the leading comments from the FieldReference's name
+				// since it will always be a terminal *IdentNode unless the
+				// field reference has a '('.
+				info := fileNode.NodeInfo(node.Name)
+				if node.Open != nil {
+					// The leading comments will be attached to the '(', if one exists.
+					info = fileNode.NodeInfo(node.Open)
+				}
+				name := stringForFieldReference(node)
+				if assert.Equal(t, 1, info.LeadingComments().Len(), "%s should have a leading comment", name) {
+					assert.Equal(
+						t,
+						fmt.Sprintf("// Leading comment on %s.", name),
+						info.LeadingComments().Index(0).RawText(),
+					)
+				}
+			case *ast.FieldNode:
+				// The fields in these tests always define a label,
+				// so we can confidently use it to retrieve the comments.
+				info := fileNode.NodeInfo(node.Label)
+				name := node.Name.Val
+				if assert.Equal(t, 1, info.LeadingComments().Len(), "%s should have a leading comment", name) {
+					assert.Equal(
+						t,
+						fmt.Sprintf("// Leading comment on %s.", name),
+						info.LeadingComments().Index(0).RawText(),
+					)
+				}
+			}
+			return true
+		},
 	)
 }
 

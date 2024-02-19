@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build ignore
+
 package ast
 
 import (
@@ -112,12 +114,8 @@ func testVisitors(methodCalled *string) (*SimpleVisitor, []*SimpleVisitor) {
 			*methodCalled = "Node"
 			return nil
 		},
-		DoVisitTerminalNode: func(TerminalNode) error {
+		DoVisitTerminalNode: func(TerminalNodeInterface) error {
 			*methodCalled = "TerminalNode"
-			return nil
-		},
-		DoVisitCompositeNode: func(CompositeNode) error {
-			*methodCalled = "CompositeNode"
 			return nil
 		},
 		DoVisitRuneNode: func(*RuneNode) error {

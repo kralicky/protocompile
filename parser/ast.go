@@ -59,14 +59,6 @@ type identSlices struct {
 	dots   []*ast.RuneNode
 }
 
-func (s *identSlices) toIdentValueNode(leadingDot *ast.RuneNode) ast.IdentValueNode {
-	if len(s.idents) == 1 && leadingDot == nil {
-		// single simple name
-		return s.idents[0]
-	}
-	return ast.NewCompoundIdentNode(leadingDot, s.idents, s.dots)
-}
-
 type messageFieldList struct {
 	field     *ast.MessageFieldNode
 	delimiter *ast.RuneNode

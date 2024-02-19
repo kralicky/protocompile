@@ -14,8 +14,6 @@
 
 package ast
 
-import "fmt"
-
 // ServiceDeclNode is a node in the AST that defines a service type. This
 // can be either a *ServiceNode or a NoSourceNode.
 type ServiceDeclNode interface {
@@ -35,61 +33,21 @@ var (
 //	  rpc Frobnitz (stream Parts) returns (Gyzmeaux);
 //	}
 type ServiceNode struct {
-	compositeNode
 	Keyword    *KeywordNode
 	Name       *IdentNode
 	OpenBrace  *RuneNode
 	Decls      []ServiceElement
 	CloseBrace *RuneNode
+	Semicolon  *RuneNode
 }
+
+func (s *ServiceNode) Start() Token { return s.Keyword.Start() }
+func (s *ServiceNode) End() Token   { return endToken(s.Semicolon, s.CloseBrace) }
 
 func (*ServiceNode) fileElement() {}
 
 func (s *ServiceNode) GetName() Node {
 	return s.Name
-}
-
-// NewServiceNode creates a new *ServiceNode. All arguments must be non-nil.
-//   - keyword: The token corresponding to the "service" keyword.
-//   - name: The token corresponding to the service's name.
-//   - openBrace: The token corresponding to the "{" rune that starts the body.
-//   - decls: All declarations inside the service body.
-//   - closeBrace: The token corresponding to the "}" rune that ends the body.
-func NewServiceNode(keyword *KeywordNode, name *IdentNode, openBrace *RuneNode, decls []ServiceElement, closeBrace *RuneNode) *ServiceNode {
-	if keyword == nil {
-		panic("keyword is nil")
-	}
-	if name == nil {
-		panic("name is nil")
-	}
-	if openBrace == nil {
-		panic("openBrace is nil")
-	}
-	if closeBrace == nil {
-		panic("closeBrace is nil")
-	}
-	children := make([]Node, 0, 4+len(decls))
-	children = append(children, keyword, name, openBrace)
-	for _, decl := range decls {
-		switch decl := decl.(type) {
-		case *OptionNode, *RPCNode, *EmptyDeclNode:
-		default:
-			panic(fmt.Sprintf("invalid ServiceElement type: %T", decl))
-		}
-		children = append(children, decl)
-	}
-	children = append(children, closeBrace)
-
-	return &ServiceNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Keyword:    keyword,
-		Name:       name,
-		OpenBrace:  openBrace,
-		Decls:      decls,
-		CloseBrace: closeBrace,
-	}
 }
 
 // ServiceElement is an interface implemented by all AST nodes that can
@@ -124,118 +82,21 @@ var (
 //
 //	rpc Foo (Bar) returns (Baz);
 type RPCNode struct {
-	compositeNode
 	Keyword    *KeywordNode
 	Name       *IdentNode
 	Input      *RPCTypeNode
 	Returns    *KeywordNode
 	Output     *RPCTypeNode
-	Semicolon  *RuneNode
 	OpenBrace  *RuneNode
 	Decls      []RPCElement
 	CloseBrace *RuneNode
+	Semicolon  *RuneNode
 }
+
+func (n *RPCNode) Start() Token { return n.Keyword.Start() }
+func (n *RPCNode) End() Token   { return n.Semicolon.Token() }
 
 func (n *RPCNode) serviceElement() {}
-
-func (m *RPCNode) AddSemicolon(semi *RuneNode) {
-	m.Semicolon = semi
-	m.children = append(m.children, semi)
-}
-
-// NewRPCNode creates a new *RPCNode with no body. All arguments must be non-nil.
-//   - keyword: The token corresponding to the "rpc" keyword.
-//   - name: The token corresponding to the RPC's name.
-//   - input: The token corresponding to the RPC input message type.
-//   - returns: The token corresponding to the "returns" keyword that precedes the output type.
-//   - output: The token corresponding to the RPC output message type.
-func NewRPCNode(keyword *KeywordNode, name *IdentNode, input *RPCTypeNode, returns *KeywordNode, output *RPCTypeNode) *RPCNode {
-	if keyword == nil {
-		panic("keyword is nil")
-	}
-	if name == nil {
-		panic("name is nil")
-	}
-	if input == nil {
-		panic("input is nil")
-	}
-	if returns == nil {
-		panic("returns is nil")
-	}
-	if output == nil {
-		panic("output is nil")
-	}
-	children := []Node{keyword, name, input, returns, output}
-	return &RPCNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Keyword: keyword,
-		Name:    name,
-		Input:   input,
-		Returns: returns,
-		Output:  output,
-	}
-}
-
-// NewRPCNodeWithBody creates a new *RPCNode that includes a body (and possibly
-// options). All arguments must be non-nil.
-//   - keyword: The token corresponding to the "rpc" keyword.
-//   - name: The token corresponding to the RPC's name.
-//   - input: The token corresponding to the RPC input message type.
-//   - returns: The token corresponding to the "returns" keyword that precedes the output type.
-//   - output: The token corresponding to the RPC output message type.
-//   - openBrace: The token corresponding to the "{" rune that starts the body.
-//   - decls: All declarations inside the RPC body.
-//   - closeBrace: The token corresponding to the "}" rune that ends the body.
-func NewRPCNodeWithBody(keyword *KeywordNode, name *IdentNode, input *RPCTypeNode, returns *KeywordNode, output *RPCTypeNode, openBrace *RuneNode, decls []RPCElement, closeBrace *RuneNode) *RPCNode {
-	if keyword == nil {
-		panic("keyword is nil")
-	}
-	if name == nil {
-		panic("name is nil")
-	}
-	if input == nil {
-		panic("input is nil")
-	}
-	if returns == nil {
-		panic("returns is nil")
-	}
-	if output == nil {
-		panic("output is nil")
-	}
-	if openBrace == nil {
-		panic("openBrace is nil")
-	}
-	if closeBrace == nil {
-		panic("closeBrace is nil")
-	}
-	children := make([]Node, 0, 7+len(decls))
-	children = append(children, keyword, name, input, returns, output, openBrace)
-	for _, decl := range decls {
-		switch decl := decl.(type) {
-		case *OptionNode, *EmptyDeclNode:
-		default:
-			panic(fmt.Sprintf("invalid RPCElement type: %T", decl))
-		}
-		children = append(children, decl)
-	}
-	children = append(children, closeBrace)
-
-	return &RPCNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Keyword:    keyword,
-		Name:       name,
-		Input:      input,
-		Returns:    returns,
-		Output:     output,
-		OpenBrace:  openBrace,
-		Decls:      decls,
-		CloseBrace: closeBrace,
-	}
-}
 
 func (n *RPCNode) GetName() Node {
 	return n.Name
@@ -276,73 +137,15 @@ var (
 //
 //	(stream foo.Bar)
 type RPCTypeNode struct {
-	compositeNode
 	OpenParen   *RuneNode
 	Stream      *KeywordNode
 	MessageType IdentValueNode
 	CloseParen  *RuneNode
 }
 
-// NewRPCTypeNode creates a new *RPCTypeNode. All arguments must be non-nil
-// except stream, which may be nil.
-//   - openParen: The token corresponding to the "(" rune that starts the declaration.
-//   - stream: The token corresponding to the "stream" keyword or nil if not present.
-//   - msgType: The token corresponding to the message type's name.
-//   - closeParen: The token corresponding to the ")" rune that ends the declaration.
-func NewRPCTypeNode(openParen *RuneNode, stream *KeywordNode, msgType IdentValueNode, closeParen *RuneNode) *RPCTypeNode {
-	if openParen == nil {
-		panic("openParen is nil")
-	}
-	if msgType == nil {
-		panic("msgType is nil")
-	}
-	if closeParen == nil {
-		panic("closeParen is nil")
-	}
-	var children []Node
-	if stream != nil {
-		children = []Node{openParen, stream, msgType, closeParen}
-	} else {
-		children = []Node{openParen, msgType, closeParen}
-	}
-
-	return &RPCTypeNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		OpenParen:   openParen,
-		Stream:      stream,
-		MessageType: msgType,
-		CloseParen:  closeParen,
-	}
-}
-
-func NewIncompleteRPCTypeNode(openParen *RuneNode, stream *KeywordNode, msgType IdentValueNode, closeParen *RuneNode) *RPCTypeNode {
-	if openParen == nil {
-		panic("openParen is nil")
-	}
-	if closeParen == nil {
-		panic("closeParen is nil")
-	}
-	children := []Node{openParen}
-	if stream != nil {
-		children = append(children, stream)
-	}
-	if msgType != nil {
-		children = append(children, msgType)
-	}
-	children = append(children, closeParen)
-	return &RPCTypeNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		OpenParen:   openParen,
-		Stream:      stream,
-		MessageType: msgType,
-		CloseParen:  closeParen,
-	}
-}
+func (n *RPCTypeNode) Start() Token { return n.OpenParen.Token() }
+func (n *RPCTypeNode) End() Token   { return n.CloseParen.Token() }
 
 func (n *RPCTypeNode) IsIncomplete() bool {
-	return n.MessageType == nil
+	return IsNil(n.MessageType)
 }

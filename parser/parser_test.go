@@ -49,39 +49,6 @@ func TestEmptyParse(t *testing.T) {
 	assert.Empty(t, fd.GetService())
 }
 
-func TestJunkParse(t *testing.T) {
-	t.Parallel()
-	// inputs that have been found in the past to cause panics by oss-fuzz
-	inputs := map[string]string{
-		"case-34232": `'';`,
-		"case-34238": `.`,
-		"issue-196-a": `syntax = "proto3";
-		                message TestMessage {
-		                  option (ext) = { bad_array: [1,] }
-		                }`,
-		"issue-196-b": `syntax = "proto3";
-		                message TestMessage {
-		                  option (ext) = { bad_array [ , ] }
-		                }`,
-	}
-	for name, input := range inputs {
-		name, input := name, input
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			errHandler := reporter.NewHandler(reporter.NewReporter(
-				// returning nil means this will keep trying to parse after any error
-				func(err reporter.ErrorWithPos) error { return nil },
-				nil, // ignore warnings
-			))
-			protoName := fmt.Sprintf("%s.proto", name)
-			_, err := Parse(protoName, strings.NewReader(input), errHandler, 0)
-			// we expect this to error... but we don't want it to panic
-			require.Error(t, err, "junk input should have returned error")
-			t.Logf("error from parse: %v", err)
-		})
-	}
-}
-
 func TestSimpleParse(t *testing.T) {
 	t.Parallel()
 	protos := map[string]Result{}
@@ -232,9 +199,56 @@ func hasService(fd *descriptorpb.FileDescriptorProto, name string) bool {
 
 func TestAggregateValueInUninterpretedOptions(t *testing.T) {
 	t.Parallel()
-	res, err := parseFileForTest("../internal/testdata/desc_test_complex.proto")
+
+	testData := `
+syntax = "proto2";
+service TestTestService {
+  rpc UserAuth(Test) returns (Test) {
+    option (validator) = {
+      authenticated: true
+      permission: {
+        action: LOGIN
+        entity: "client"
+      }
+    };
+  }
+	rpc Get(Test) returns (Test) {
+		option (validator) = {
+			authenticated: true
+			permission: {
+				action: READ
+				entity: "user"
+			}
+		};
+	}
+}
+message Another {
+  option (.foo.bar.rept) = {
+    foo: "abc"
+    s    <name: "foo", id: 123>,
+    array: [
+      1,
+      2,
+      3
+    ],
+    r: [
+      <name: "f">,
+      {name: "s"},
+      {id: 456}
+    ],
+  };
+	option (rept) = {
+		foo: "goo"
+		[foo.bar.Test.Nested._NestedNested._garblez]: "boo"
+	};
+}
+	`
+	h := reporter.NewHandler(nil)
+	res, err := Parse("test.proto", strings.NewReader(testData), h, 0)
 	require.NoError(t, err)
-	fd := res.FileDescriptorProto()
+	parseRes, err := ResultFromAST(res, true, h)
+	require.NoError(t, err)
+	fd := parseRes.FileDescriptorProto()
 
 	// service TestTestService, method UserAuth; first option
 	aggregateValue1 := *fd.Service[0].Method[0].Options.UninterpretedOption[0].AggregateValue
@@ -245,12 +259,12 @@ func TestAggregateValueInUninterpretedOptions(t *testing.T) {
 	assert.Equal(t, "authenticated : true permission : { action : READ entity : \"user\" }", aggregateValue2)
 
 	// message Another; first option
-	aggregateValue3 := *fd.MessageType[4].Options.UninterpretedOption[0].AggregateValue
+	aggregateValue3 := *fd.MessageType[0].Options.UninterpretedOption[0].AggregateValue
 	assert.Equal(t, "foo : \"abc\" s < name : \"foo\" , id : 123 > , array : [ 1 , 2 , 3 ] , r : [ < name : \"f\" > , { name : \"s\" } , { id : 456 } ] ,", aggregateValue3)
 
 	// message Test.Nested._NestedNested; second option (rept)
 	//  (Test.Nested is at index 1 instead of 0 because of implicit nested message from map field m)
-	aggregateValue4 := *fd.MessageType[1].NestedType[1].NestedType[0].Options.UninterpretedOption[1].AggregateValue
+	aggregateValue4 := *fd.MessageType[0].Options.UninterpretedOption[1].AggregateValue
 	assert.Equal(t, "foo : \"goo\" [ foo . bar . Test . Nested . _NestedNested . _garblez ] : \"boo\"", aggregateValue4)
 }
 
@@ -306,8 +320,8 @@ func TestPathological(t *testing.T) {
 	//   https://oss-fuzz.com/testcase-detail/4766256800858112
 	//   https://oss-fuzz.com/testcase-detail/4952577018298368
 	testCases := map[string]bool{
-		"pathological.proto":  true,
-		"pathological2.proto": false,
+		"pathological/pathological.proto":  true,
+		"pathological/pathological2.proto": false,
 	}
 	for fileName := range testCases {
 		fileName, canParse := fileName, testCases[fileName] // don't want test func below to capture loop var

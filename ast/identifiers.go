@@ -15,7 +15,8 @@
 package ast
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strings"
 )
 
@@ -33,7 +34,6 @@ type IdentValueNode interface {
 var (
 	_ IdentValueNode = (*IdentNode)(nil)
 	_ IdentValueNode = (*CompoundIdentNode)(nil)
-	_ IdentValueNode = (*IncompleteIdentNode)(nil)
 )
 
 // IdentNode represents a simple, unqualified identifier. These are used to name
@@ -41,16 +41,8 @@ var (
 //
 //	foobar
 type IdentNode struct {
-	terminalNode
+	TerminalNode
 	Val string
-}
-
-// NewIdentNode creates a new *IdentNode. The given val is the identifier text.
-func NewIdentNode(val string, tok Token) *IdentNode {
-	return &IdentNode{
-		terminalNode: tok.asTerminalNode(),
-		Val:          val,
-	}
 }
 
 func (n *IdentNode) Value() interface{} {
@@ -79,53 +71,32 @@ func (n *IdentNode) ToKeyword() *KeywordNode {
 //
 //	.com.foobar.Baz
 type CompoundIdentNode struct {
-	compositeNode
-	// Optional leading dot, indicating that the identifier is fully qualified.
-	LeadingDot *RuneNode
 	Components []*IdentNode
-	// Dots[0] is the dot after Components[0]. The length of Dots is always
-	// one less than the length of Components.
-	Dots []*RuneNode
-	// The text value of the identifier, with all components and dots
-	// concatenated.
-	Val string
+	Dots       []*RuneNode
 }
 
-// NewCompoundIdentNode creates a *CompoundIdentNode. The leadingDot may be nil.
-// The dots arg must have a length that is one less than the length of
-// components. The components arg must not be empty.
-func NewCompoundIdentNode(leadingDot *RuneNode, components []*IdentNode, dots []*RuneNode) *CompoundIdentNode {
-	children := make([]Node, 0, len(components)+len(dots)+1)
-	if leadingDot != nil {
-		children = append(children, leadingDot)
-	}
-	for _, part := range components {
-		children = append(children, part)
-	}
-	for _, dot := range dots {
-		children = append(children, dot)
-	}
-	sort.Slice(children, func(i, j int) bool {
-		return children[i].Start() < children[j].Start()
-	})
-	b := strings.Builder{}
-	for _, node := range children {
-		switch node := node.(type) {
-		case *IdentNode:
-			b.WriteString(node.Val)
-		case *RuneNode:
-			b.WriteRune(node.Rune)
+func (n *CompoundIdentNode) Start() Token {
+	if len(n.Components) > 0 {
+		if len(n.Dots) > 0 {
+			return min(n.Components[0].Start(), n.Dots[0].Start())
 		}
+		return n.Components[0].Start()
+	} else if len(n.Dots) > 0 {
+		return n.Dots[0].Start()
 	}
-	return &CompoundIdentNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		LeadingDot: leadingDot,
-		Components: components,
-		Dots:       dots,
-		Val:        b.String(),
+	return TokenError
+}
+
+func (n *CompoundIdentNode) End() Token {
+	if len(n.Components) > 0 {
+		if len(n.Dots) > 0 {
+			return max(n.Components[len(n.Components)-1].End(), n.Dots[len(n.Dots)-1].End())
+		}
+		return n.Components[len(n.Components)-1].End()
+	} else if len(n.Dots) > 0 {
+		return n.Dots[len(n.Dots)-1].End()
 	}
+	return TokenError
 }
 
 func (n *CompoundIdentNode) Value() interface{} {
@@ -133,7 +104,52 @@ func (n *CompoundIdentNode) Value() interface{} {
 }
 
 func (n *CompoundIdentNode) AsIdentifier() Identifier {
-	return Identifier(n.Val)
+	b := strings.Builder{}
+	nodes := make([]Node, 0, len(n.Components)+len(n.Dots))
+	for _, comp := range n.Components {
+		nodes = append(nodes, comp)
+	}
+	for _, dot := range n.Dots {
+		nodes = append(nodes, dot)
+	}
+	slices.SortFunc(nodes, func(i, j Node) int {
+		return cmp.Compare(i.Start(), j.Start())
+	})
+	for _, node := range nodes {
+		if ident, ok := node.(*IdentNode); ok {
+			b.WriteString(ident.Val)
+		} else if dot, ok := node.(*RuneNode); ok {
+			b.WriteRune(dot.Rune)
+		}
+	}
+	return Identifier(b.String())
+}
+
+func (n *CompoundIdentNode) LeadingDot() (dot *RuneNode, ok bool) {
+	if len(n.Dots) > 0 {
+		if len(n.Components) == 0 {
+			return n.Dots[0], true
+		}
+		if n.Dots[0].Token() < n.Components[0].Token() {
+			return n.Dots[0], true
+		}
+		return nil, false
+	}
+	return nil, false
+}
+
+func (n *CompoundIdentNode) OrderedNodes() []Node {
+	nodes := make([]Node, 0, len(n.Components)+len(n.Dots))
+	for _, comp := range n.Components {
+		nodes = append(nodes, comp)
+	}
+	for _, dot := range n.Dots {
+		nodes = append(nodes, dot)
+	}
+	slices.SortFunc(nodes, func(i, j Node) int {
+		return cmp.Compare(i.Start(), j.Start())
+	})
+	return nodes
 }
 
 // KeywordNode is an AST node that represents a keyword. Keywords are
@@ -142,37 +158,3 @@ func (n *CompoundIdentNode) AsIdentifier() Identifier {
 //
 //	message
 type KeywordNode IdentNode
-
-// NewKeywordNode creates a new *KeywordNode. The given val is the keyword.
-func NewKeywordNode(val string, tok Token) *KeywordNode {
-	return &KeywordNode{
-		terminalNode: tok.asTerminalNode(),
-		Val:          val,
-	}
-}
-
-// IncompleteIdentNode represents an identifier that could not be parsed due to
-// a syntax error. It is equivalent to an *IdentNode with an empty value when
-// used as the IdentValueNode interface, but the invalid text can be retrieved
-// using the IncompleteVal field on the concrete type.
-type IncompleteIdentNode struct {
-	terminalNode
-	IncompleteVal IdentValueNode
-}
-
-// AsIdentifier implements IdentValueNode.
-func (*IncompleteIdentNode) AsIdentifier() Identifier {
-	return ""
-}
-
-// Value implements IdentValueNode.
-func (*IncompleteIdentNode) Value() interface{} {
-	return nil
-}
-
-func NewIncompleteIdentNode(base IdentValueNode, tok Token) *IncompleteIdentNode {
-	return &IncompleteIdentNode{
-		terminalNode:  tok.asTerminalNode(),
-		IncompleteVal: base,
-	}
-}

@@ -75,17 +75,9 @@ var (
 //
 //	"proto2"
 type StringLiteralNode struct {
-	terminalNode
+	TerminalNode
 	// Val is the actual string value that the literal indicates.
 	Val string
-}
-
-// NewStringLiteralNode creates a new *StringLiteralNode with the given val.
-func NewStringLiteralNode(val string, tok Token) *StringLiteralNode {
-	return &StringLiteralNode{
-		terminalNode: tok.asTerminalNode(),
-		Val:          val,
-	}
 }
 
 func (n *StringLiteralNode) Value() interface{} {
@@ -101,35 +93,21 @@ func (n *StringLiteralNode) AsString() string {
 //
 //	"this "  "is"   " all one "   "string"
 type CompoundStringLiteralNode struct {
-	compositeNode
-	Val string
+	Elements []StringValueNode
 }
 
-// NewCompoundStringLiteralNode creates a new *CompoundStringLiteralNode that
-// consists of the given string components. The components argument may not be
-// empty.
-func NewCompoundStringLiteralNode(components ...StringValueNode) *CompoundStringLiteralNode {
-	if len(components) == 0 {
-		panic("must have at least one component")
+func (n *CompoundStringLiteralNode) Start() Token {
+	if len(n.Elements) == 0 {
+		return TokenError
 	}
-	children := make([]Node, 0, len(components))
-	var b strings.Builder
-	for _, comp := range components {
-		switch comp := comp.(type) {
-		case *StringLiteralNode:
-			b.WriteString(comp.Val)
-			children = append(children, comp)
-		case *CompoundStringLiteralNode:
-			children = append(children, comp.children...)
-			b.WriteString(comp.Val)
-		}
+	return n.Elements[0].Start()
+}
+
+func (n *CompoundStringLiteralNode) End() Token {
+	if len(n.Elements) == 0 {
+		return TokenError
 	}
-	return &CompoundStringLiteralNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Val: b.String(),
-	}
+	return n.Elements[len(n.Elements)-1].End()
 }
 
 func (n *CompoundStringLiteralNode) Value() interface{} {
@@ -137,7 +115,11 @@ func (n *CompoundStringLiteralNode) Value() interface{} {
 }
 
 func (n *CompoundStringLiteralNode) AsString() string {
-	return n.Val
+	var sb strings.Builder
+	for _, elem := range n.Elements {
+		sb.WriteString(elem.AsString())
+	}
+	return sb.String()
 }
 
 // IntValueNode is an AST node that represents an integer literal. If
@@ -169,20 +151,11 @@ var (
 
 // UintLiteralNode represents a simple integer literal with no sign character.
 type UintLiteralNode struct {
-	terminalNode
+	TerminalNode
 	// Val is the numeric value indicated by the literal
 	Val uint64
 	// Raw is the original string representation of the literal
 	Raw string
-}
-
-// NewUintLiteralNode creates a new *UintLiteralNode with the given val.
-func NewUintLiteralNode(val uint64, tok Token, raw string) *UintLiteralNode {
-	return &UintLiteralNode{
-		terminalNode: tok.asTerminalNode(),
-		Val:          val,
-		Raw:          raw,
-	}
 }
 
 func (n *UintLiteralNode) Value() interface{} {
@@ -206,45 +179,32 @@ func (n *UintLiteralNode) AsFloat() float64 {
 
 // NegativeIntLiteralNode represents an integer literal with a negative (-) sign.
 type NegativeIntLiteralNode struct {
-	compositeNode
 	Minus *RuneNode
 	Uint  *UintLiteralNode
-	Val   int64
 }
 
-// NewNegativeIntLiteralNode creates a new *NegativeIntLiteralNode. Both
-// arguments must be non-nil.
-func NewNegativeIntLiteralNode(sign *RuneNode, i *UintLiteralNode) *NegativeIntLiteralNode {
-	if sign == nil {
-		panic("sign is nil")
-	}
-	if i == nil {
-		panic("i is nil")
-	}
-	children := []Node{sign, i}
-	return &NegativeIntLiteralNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Minus: sign,
-		Uint:  i,
-		Val:   -int64(i.Val),
-	}
+func (n *NegativeIntLiteralNode) Start() Token {
+	return n.Minus.Token()
+}
+
+func (n *NegativeIntLiteralNode) End() Token {
+	return n.Uint.End()
 }
 
 func (n *NegativeIntLiteralNode) Value() interface{} {
-	return n.Val
+	return -int64(n.Uint.Val)
 }
 
 func (n *NegativeIntLiteralNode) AsInt64() (int64, bool) {
-	return n.Val, true
+	return -int64(n.Uint.Val), true
 }
 
 func (n *NegativeIntLiteralNode) AsUint64() (uint64, bool) {
-	if n.Val < 0 {
+	i64, _ := n.AsInt64()
+	if i64 < 0 {
 		return 0, false
 	}
-	return uint64(n.Val), true
+	return uint64(i64), true
 }
 
 // FloatValueNode is an AST node that represents a numeric literal with
@@ -263,20 +223,11 @@ var (
 
 // FloatLiteralNode represents a floating point numeric literal.
 type FloatLiteralNode struct {
-	terminalNode
+	TerminalNode
 	// Val is the numeric value indicated by the literal
 	Val float64
 	// Raw is the original string representation of the literal
 	Raw string
-}
-
-// NewFloatLiteralNode creates a new *FloatLiteralNode with the given val.
-func NewFloatLiteralNode(val float64, tok Token, raw string) *FloatLiteralNode {
-	return &FloatLiteralNode{
-		terminalNode: tok.asTerminalNode(),
-		Val:          val,
-		Raw:          raw,
-	}
 }
 
 func (n *FloatLiteralNode) Value() interface{} {
@@ -323,42 +274,30 @@ func (n *SpecialFloatLiteralNode) AsFloat() float64 {
 
 // SignedFloatLiteralNode represents a signed floating point number.
 type SignedFloatLiteralNode struct {
-	compositeNode
 	Sign  *RuneNode
 	Float FloatValueNode
-	Val   float64
 }
 
-// NewSignedFloatLiteralNode creates a new *SignedFloatLiteralNode. Both
-// arguments must be non-nil.
-func NewSignedFloatLiteralNode(sign *RuneNode, f FloatValueNode) *SignedFloatLiteralNode {
-	if sign == nil {
-		panic("sign is nil")
-	}
-	if f == nil {
-		panic("f is nil")
-	}
-	children := []Node{sign, f}
-	val := f.AsFloat()
-	if sign.Rune == '-' {
-		val = -val
-	}
-	return &SignedFloatLiteralNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Sign:  sign,
-		Float: f,
-		Val:   val,
-	}
+func (n *SignedFloatLiteralNode) Start() Token {
+	return startToken(n.Sign, n.Float)
+}
+
+func (n *SignedFloatLiteralNode) End() Token {
+	return endToken(n.Float, n.Sign)
 }
 
 func (n *SignedFloatLiteralNode) Value() interface{} {
-	return n.Val
+	return n.AsFloat()
 }
 
 func (n *SignedFloatLiteralNode) AsFloat() float64 {
-	return n.Val
+	val := n.Float.AsFloat()
+	if n.Sign != nil {
+		if n.Sign.Rune == '-' {
+			val = -val
+		}
+	}
+	return val
 }
 
 // ArrayLiteralNode represents an array literal, which is only allowed inside of
@@ -366,41 +305,19 @@ func (n *SignedFloatLiteralNode) AsFloat() float64 {
 //
 //	["foo", "bar", "baz"]
 type ArrayLiteralNode struct {
-	compositeNode
-	OpenBracket *RuneNode
-	Elements    []ValueNode
-	// Commas represent the separating ',' characters between elements. The
-	// length of this slice must be exactly len(Elements)-1, with each item
-	// in Elements having a corresponding item in this slice *except the last*
-	// (since a trailing comma is not allowed).
+	OpenBracket  *RuneNode
+	Elements     []ValueNode
 	Commas       []*RuneNode
 	CloseBracket *RuneNode
+	Semicolon    *RuneNode
 }
 
-// NewArrayLiteralNode creates a new *ArrayLiteralNode. The openBracket and
-// closeBracket args must be non-nil and represent the "[" and "]" runes that
-// surround the array values. The given commas arg must have a length that is
-// one less than the length of the vals arg. However, vals may be empty, in
-// which case commas must also be empty.
-func NewArrayLiteralNode(openBracket *RuneNode, vals []ValueNode, commas []*RuneNode, closeBracket *RuneNode) *ArrayLiteralNode {
-	if len(vals) == 0 && len(commas) != 0 {
-		panic("vals is empty but commas is not")
-	}
-	children := createCommaSeparatedNodes(
-		[]Node{openBracket},
-		vals,
-		commas,
-		[]Node{closeBracket},
-	)
-	return &ArrayLiteralNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		OpenBracket:  openBracket,
-		Elements:     vals,
-		Commas:       commas,
-		CloseBracket: closeBracket,
-	}
+func (n *ArrayLiteralNode) Start() Token {
+	return n.OpenBracket.Token()
+}
+
+func (n *ArrayLiteralNode) End() Token {
+	return endToken(n.Semicolon, n.CloseBracket)
 }
 
 func (n *ArrayLiteralNode) Value() interface{} {
@@ -413,7 +330,6 @@ func (n *ArrayLiteralNode) Value() interface{} {
 //
 //	{ foo:1 foo:2 foo:3 bar:<name:"abc" id:123> }
 type MessageLiteralNode struct {
-	compositeNode
 	Open     *RuneNode // should be '{' or '<'
 	Elements []*MessageFieldNode
 	// Separator characters between elements, which can be either ','
@@ -421,59 +337,21 @@ type MessageLiteralNode struct {
 	// length, with each item in Elements having one corresponding item
 	// in Seps. Separators in message literals are optional, so a given
 	// item in this slice may be nil to indicate absence of a separator.
-	Seps  []*RuneNode
-	Close *RuneNode // should be '}' or '>', depending on Open
+	Seps      []*RuneNode
+	Close     *RuneNode // should be '}' or '>', depending on Open
+	Semicolon *RuneNode
+}
+
+func (n *MessageLiteralNode) Start() Token {
+	return n.Open.Token()
+}
+
+func (n *MessageLiteralNode) End() Token {
+	return endToken(n.Semicolon, n.Close)
 }
 
 func (n *MessageLiteralNode) GetElements() []*MessageFieldNode {
 	return n.Elements
-}
-
-// NewMessageLiteralNode creates a new *MessageLiteralNode. The openSym and
-// closeSym runes must not be nil and should be "{" and "}" or "<" and ">".
-//
-// Unlike separators (dots and commas) used for other AST nodes that represent
-// a list of elements, the seps arg must be the SAME length as vals, and it may
-// contain nil values to indicate absence of a separator (in fact, it could be
-// all nils).
-func NewMessageLiteralNode(openSym *RuneNode, vals []*MessageFieldNode, seps []*RuneNode, closeSym *RuneNode) *MessageLiteralNode {
-	if openSym == nil {
-		panic("openSym is nil")
-	}
-	if closeSym == nil {
-		panic("closeSym is nil")
-	}
-	if len(seps) != len(vals) {
-		panic(fmt.Sprintf("%d vals requires %d commas, not %d", len(vals), len(vals), len(seps)))
-	}
-	numChildren := len(vals) + 2
-	for _, sep := range seps {
-		if sep != nil {
-			numChildren++
-		}
-	}
-	children := make([]Node, 0, numChildren)
-	children = append(children, openSym)
-	for i, val := range vals {
-		if val == nil {
-			panic(fmt.Sprintf("vals[%d] is nil", i))
-		}
-		children = append(children, val)
-		if seps[i] != nil {
-			children = append(children, seps[i])
-		}
-	}
-	children = append(children, closeSym)
-
-	return &MessageLiteralNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Open:     openSym,
-		Elements: vals,
-		Seps:     seps,
-		Close:    closeSym,
-	}
 }
 
 func (n *MessageLiteralNode) Value() interface{} {
@@ -485,73 +363,26 @@ func (n *MessageLiteralNode) Value() interface{} {
 //
 //	foo:"bar"
 type MessageFieldNode struct {
-	compositeNode
 	Name *FieldReferenceNode
 	// Sep represents the ':' separator between the name and value. If
 	// the value is a message or list literal (and thus starts with '<',
 	// '{', or '['), then the separator may be omitted and this field may
 	// be nil.
-	Sep *RuneNode
-	Val ValueNode
+	Sep       *RuneNode
+	Val       ValueNode
+	Semicolon *RuneNode
 }
 
-// NewMessageFieldNode creates a new *MessageFieldNode. All args except sep
-// must be non-nil.
-func NewMessageFieldNode(name *FieldReferenceNode, sep *RuneNode, val ValueNode) *MessageFieldNode {
-	if name == nil {
-		panic("name is nil")
-	}
-	if val == nil {
-		panic("val is nil")
-	}
-	numChildren := 2
-	if sep != nil {
-		numChildren++
-	}
-	children := make([]Node, 0, numChildren)
-	children = append(children, name)
-	if sep != nil {
-		children = append(children, sep)
-	}
-	children = append(children, val)
-
-	return &MessageFieldNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Name: name,
-		Sep:  sep,
-		Val:  val,
-	}
+func (n *MessageFieldNode) Start() Token {
+	return n.Name.Start()
 }
 
-func NewIncompleteMessageFieldNode(name *FieldReferenceNode, sep *RuneNode, val ValueNode) *MessageFieldNode {
-	var children []Node
-	if name != nil {
-		children = append(children, name)
-	} else {
-		panic("name is nil")
-	}
-	if sep != nil {
-		children = append(children, sep)
-	}
-	if val != nil {
-		children = append(children, val)
-	} else {
-		val = NoSourceNode{}
-	}
-	return &MessageFieldNode{
-		compositeNode: compositeNode{
-			children: children,
-		},
-		Name: name,
-		Sep:  sep,
-		Val:  val,
-	}
+func (n *MessageFieldNode) End() Token {
+	return endToken(n.Semicolon, n.Val)
 }
 
 func (n *MessageFieldNode) IsIncomplete() bool {
-	if n.Val == (NoSourceNode{}) {
+	if IsNil(n.Val) {
 		return true
 	}
 	if n.Sep == nil {
@@ -563,8 +394,4 @@ func (n *MessageFieldNode) IsIncomplete() bool {
 		}
 	}
 	return false
-}
-
-func (n *MessageFieldNode) AddSemicolon(semi *RuneNode) {
-	n.children = append(n.children, semi)
 }
