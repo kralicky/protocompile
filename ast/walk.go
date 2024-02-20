@@ -682,7 +682,6 @@ func (t *AncestorTracker) AsWalkOptions() []WalkOption {
 		}),
 		WithAfter(func(n Node) {
 			t.ancestors = t.ancestors[:len(t.ancestors)-1]
-			return
 		}),
 	}
 }

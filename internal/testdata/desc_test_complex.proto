@@ -4,7 +4,7 @@ package foo.bar;
 
 import "google/protobuf/descriptor.proto";
 
-option go_package = "github.com/kralicky/protocompile/internal/testprotos";
+option go_package = "github.com/kralicky/protocompile/internal/testdata;testprotos";
 
 message Simple {
   optional string name   = 1;

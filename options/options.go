@@ -1342,7 +1342,7 @@ func (interp *interpreter) interpretField(mc *internal.MessageContext, msg proto
 	var val interpretedFieldValue
 	var index int
 	var err error
-	if optValNode.Value() == nil {
+	if optValNode == nil {
 		// We don't have an AST, so we get the value from the uninterpreted option proto.
 		// It's okay that we don't populate index as it is used to populate source code info,
 		// which can't be done without an AST.

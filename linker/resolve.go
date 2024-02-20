@@ -563,8 +563,11 @@ opts:
 		}
 		// also resolve any extension names found inside message literals in option values
 		mc.Option = opt
-		optVal := r.OptionNode(opt).GetValue()
-		if err := r.resolveOptionValue(handler, mc, optVal, scopes); err != nil {
+		optNode, ok := r.OptionNode(opt).(*ast.OptionNode)
+		if !ok || optNode.IsIncomplete() {
+			continue
+		}
+		if err := r.resolveOptionValue(handler, mc, optNode.Val, scopes); err != nil {
 			return err
 		}
 		mc.Option = nil

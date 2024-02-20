@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -28,6 +29,17 @@ import (
 	"github.com/kralicky/protocompile/ast"
 	"github.com/kralicky/protocompile/reporter"
 )
+
+type testCase struct {
+	t          int
+	line       int
+	col        int
+	span       int
+	v          interface{}
+	virtual    bool
+	comments   []string
+	trailCount int
+}
 
 func TestLexer(t *testing.T) {
 	t.Parallel()
@@ -132,17 +144,7 @@ func TestLexer(t *testing.T) {
 
 	`), handler)
 
-	var prev ast.Node
-	var sym protoSymType
-	expected := []struct {
-		t          int
-		line, col  int
-		span       int
-		v          interface{}
-		virtual    bool
-		comments   []string
-		trailCount int
-	}{
+	expected := []testCase{
 		{t: _SYNTAX, v: "syntax"},
 		{t: '=', v: '='},
 		{t: _STRING_LIT, v: "proto2"},
@@ -521,6 +523,100 @@ func TestLexer(t *testing.T) {
 
 	}
 
+	runLexerTest(t, l, expected)
+
+	// for i, exp := range expected {
+	// 	tok := l.Lex(&sym)
+	// 	if tok == 0 {
+	// 		t.Fatalf("lexer reported EOF but should have returned %v", exp)
+	// 	}
+	// 	var n ast.Node
+	// 	var val interface{}
+	// 	switch tok {
+	// 	case _SYNTAX, _OPTION, _INT32, _SERVICE, _RPC, _MESSAGE, _SINGULAR_IDENT:
+	// 		n = sym.id
+	// 		val = sym.id.Val
+	// 	case _QUALIFIED_IDENT, _FULLY_QUALIFIED_IDENT:
+	// 		n = sym.idv
+	// 		val = string(sym.idv.AsIdentifier())
+	// 	case _EXTENSION_IDENT:
+	// 		n = sym.optName
+	// 		val = sym.optName
+	// 	case _STRING_LIT:
+	// 		n = sym.sv
+	// 		val = sym.sv.AsString()
+	// 	case _INT_LIT:
+	// 		n = sym.i
+	// 		val = sym.i.Val
+	// 	case _FLOAT_LIT:
+	// 		n = sym.f
+	// 		val = sym.f.Val
+	// 	case _ERROR:
+	// 		val = sym.err
+	// 	default:
+	// 		n = sym.b
+	// 		val = nil
+	// 	}
+	// 	if !assert.Equal(t, exp.t, tok, "case %d: wrong token type (expecting %+v, got %+v)", i, exp.v, val) {
+	// 		break
+	// 	}
+	// 	if !assert.Equal(t, exp.v, val, "case %d: wrong token value", i) {
+	// 		break
+	// 	}
+	// 	nodeInfo := l.info.NodeInfo(n)
+	// 	var prevNodeInfo ast.NodeInfo
+	// 	if prev != nil {
+	// 		prevNodeInfo = l.info.NodeInfo(prev)
+	// 	}
+	// 	assert.Equal(t, exp.line, nodeInfo.Start().Line, "case %d: wrong line number", i)
+	// 	assert.Equal(t, exp.col, nodeInfo.Start().Col, "case %d: wrong column number (on line %d)", i, exp.line)
+	// 	assert.Equal(t, exp.line, nodeInfo.End().Line, "case %d: wrong end line number", i)
+	// 	assert.Equal(t, exp.col+exp.span, nodeInfo.End().Col, "case %d: wrong end column number", i)
+	// 	actualTrailCount := 0
+	// 	if prev != nil {
+	// 		actualTrailCount = prevNodeInfo.TrailingComments().Len()
+	// 	}
+	// 	assert.Equal(t, exp.trailCount, actualTrailCount, "case %d: wrong number of trailing comments", i)
+	// 	assert.Equal(t, len(exp.comments)-exp.trailCount, nodeInfo.LeadingComments().Len(), "case %d: wrong number of comments", i)
+	// 	for ci := range exp.comments {
+	// 		var c ast.Comment
+	// 		if ci < exp.trailCount {
+	// 			if assert.Less(t, ci, prevNodeInfo.TrailingComments().Len(), "missing comment") {
+	// 				c = prevNodeInfo.TrailingComments().Index(ci)
+	// 			} else {
+	// 				continue
+	// 			}
+	// 		} else {
+	// 			if assert.Less(t, ci-exp.trailCount, nodeInfo.LeadingComments().Len(), "missing comment") {
+	// 				c = nodeInfo.LeadingComments().Index(ci - exp.trailCount)
+	// 			} else {
+	// 				continue
+	// 			}
+	// 		}
+	// 		assert.Equal(t, exp.comments[ci], c.RawText(), "case %d, comment #%d: unexpected text", i, ci+1)
+	// 	}
+	// 	prev = n
+	// }
+	// if tok := l.Lex(&sym); tok != 0 {
+	// 	t.Fatalf("lexer reported symbol after what should have been EOF: %d", tok)
+	// }
+	// require.NoError(t, handler.Error())
+	// // Now we check final state of lexer for unattached comments and final whitespace
+	// // One of the final comments get associated as trailing comment for final token
+	// prevNodeInfo := l.info.NodeInfo(prev)
+	// assert.Equal(t, 1, prevNodeInfo.TrailingComments().Len(), "last token: wrong number of trailing comments")
+	// eofNodeInfo := l.info.TokenInfo(l.eof)
+	// finalComments := eofNodeInfo.LeadingComments()
+	// if assert.Equal(t, 2, finalComments.Len(), "wrong number of final remaining comments") {
+	// 	assert.Equal(t, "// comment attached to no tokens (upcoming token is EOF!)", finalComments.Index(0).RawText(), "incorrect final comment text")
+	// 	assert.Equal(t, "/* another comment followed by some final whitespace*/", finalComments.Index(1).RawText(), "incorrect final comment text")
+	// }
+	// assert.Equal(t, "\n\n\t\n\t", eofNodeInfo.LeadingWhitespace(), "incorrect final whitespace")
+}
+
+func runLexerTest(t *testing.T, l *protoLex, expected []testCase) {
+	var sym protoSymType
+
 	for i, exp := range expected {
 		tok := l.Lex(&sym)
 		if tok == 0 {
@@ -528,7 +624,7 @@ func TestLexer(t *testing.T) {
 		}
 		var val any
 		switch tok {
-		case _SYNTAX, _OPTION, _INT32, _SERVICE, _RPC, _MESSAGE, _RETURNS, _EXTEND, _OPTIONAL, _UINT64, _TRUE, _FALSE, _BOOL, _STRING:
+		case _SYNTAX, _OPTION, _INT32, _UINT32, _SERVICE, _RPC, _MESSAGE, _RETURNS, _EXTEND, _OPTIONAL, _REPEATED, _INT64, _UINT64, _TRUE, _FALSE, _BOOL, _STRING:
 			val = sym.id.Val
 		case _SINGULAR_IDENT:
 			val = sym.id.Val
@@ -544,7 +640,7 @@ func TestLexer(t *testing.T) {
 			val = sym.sv.AsString()
 		case ';':
 			if exp.t != ';' {
-				break // handle this error below
+				break
 			}
 			if !assert.Equal(t, exp.virtual, sym.b.Virtual, "case %d: wrong virtual flag", i) {
 				return
@@ -560,103 +656,111 @@ func TestLexer(t *testing.T) {
 		default:
 			assert.FailNow(t, fmt.Sprintf("case %d: unexpected token type: %d", i, tok))
 		}
-		if !assert.Equal(t, exp.t, tok, "case %d: wrong token type (expecting %#v, got %#v)", i, exp.v, val) {
+		if !assert.Equal(t, exp.t, tok, "case %d: wrong token type (expecting %#v ('%c'), got %#v)", i, exp.v, exp.v, val) {
 			return
 		}
 		if !assert.Equal(t, exp.v, val, "case %d: wrong token value", i) {
 			return
 		}
 	}
-
 	return
+}
 
-	for i, exp := range expected {
-		tok := l.Lex(&sym)
-		if tok == 0 {
-			t.Fatalf("lexer reported EOF but should have returned %v", exp)
+func TestLexerProto3(t *testing.T) {
+	t.Parallel()
+	handler := reporter.NewHandler(nil)
+	l := newTestLexer(t, strings.NewReader(`
+		syntax = "proto3";
+
+		message Simple {
+			.
+			.g
+			string name = 1;
+			uint64 id = 2 [
+				(syntax) =
+			]
+			uint32 name
 		}
-		var n ast.Node
-		var val interface{}
-		switch tok {
-		case _SYNTAX, _OPTION, _INT32, _SERVICE, _RPC, _MESSAGE, _SINGULAR_IDENT:
-			n = sym.id
-			val = sym.id.Val
-		case _QUALIFIED_IDENT, _FULLY_QUALIFIED_IDENT:
-			n = sym.idv
-			val = string(sym.idv.AsIdentifier())
-		case _EXTENSION_IDENT:
-			n = sym.optName
-			val = sym.optName
-		case _STRING_LIT:
-			n = sym.sv
-			val = sym.sv.AsString()
-		case _INT_LIT:
-			n = sym.i
-			val = sym.i.Val
-		case _FLOAT_LIT:
-			n = sym.f
-			val = sym.f.Val
-		case _ERROR:
-			val = sym.err
-		default:
-			n = sym.b
-			val = nil
+
+		message Test {
+			string a = 1;
+			r
+			string b = 2;
+			repeated s
+			string c = 3;
+			repeated string foo =
+			repeated
 		}
-		if !assert.Equal(t, exp.t, tok, "case %d: wrong token type (expecting %+v, got %+v)", i, exp.v, val) {
-			break
-		}
-		if !assert.Equal(t, exp.v, val, "case %d: wrong token value", i) {
-			break
-		}
-		nodeInfo := l.info.NodeInfo(n)
-		var prevNodeInfo ast.NodeInfo
-		if prev != nil {
-			prevNodeInfo = l.info.NodeInfo(prev)
-		}
-		assert.Equal(t, exp.line, nodeInfo.Start().Line, "case %d: wrong line number", i)
-		assert.Equal(t, exp.col, nodeInfo.Start().Col, "case %d: wrong column number (on line %d)", i, exp.line)
-		assert.Equal(t, exp.line, nodeInfo.End().Line, "case %d: wrong end line number", i)
-		assert.Equal(t, exp.col+exp.span, nodeInfo.End().Col, "case %d: wrong end column number", i)
-		actualTrailCount := 0
-		if prev != nil {
-			actualTrailCount = prevNodeInfo.TrailingComments().Len()
-		}
-		assert.Equal(t, exp.trailCount, actualTrailCount, "case %d: wrong number of trailing comments", i)
-		assert.Equal(t, len(exp.comments)-exp.trailCount, nodeInfo.LeadingComments().Len(), "case %d: wrong number of comments", i)
-		for ci := range exp.comments {
-			var c ast.Comment
-			if ci < exp.trailCount {
-				if assert.Less(t, ci, prevNodeInfo.TrailingComments().Len(), "missing comment") {
-					c = prevNodeInfo.TrailingComments().Index(ci)
-				} else {
-					continue
-				}
-			} else {
-				if assert.Less(t, ci-exp.trailCount, nodeInfo.LeadingComments().Len(), "missing comment") {
-					c = nodeInfo.LeadingComments().Index(ci - exp.trailCount)
-				} else {
-					continue
-				}
-			}
-			assert.Equal(t, exp.comments[ci], c.RawText(), "case %d, comment #%d: unexpected text", i, ci+1)
-		}
-		prev = n
+
+	`), handler)
+	l.parsedSyntax = "proto3" // the parser would usually set this
+
+	expected := [...]testCase{
+		{t: _SYNTAX, v: "syntax"},
+		{t: '=', v: '='},
+		{t: _STRING_LIT, v: "proto3"},
+		{t: ';', v: ';', virtual: false},
+		{t: _MESSAGE, v: "message"},
+		{t: _SINGULAR_IDENT, v: "Simple"},
+		{t: '{', v: '{'},
+		{t: _FULLY_QUALIFIED_IDENT, v: "..g"},
+		{t: ';', v: ';', virtual: true},
+		{t: _STRING, v: "string"},
+		{t: _SINGULAR_IDENT, v: "name"},
+		{t: '=', v: '='},
+		{t: _INT_LIT, v: uint64(1)},
+		{t: ';', v: ';', virtual: false},
+		{t: _UINT64, v: "uint64"},
+		{t: _SINGULAR_IDENT, v: "id"},
+		{t: '=', v: '='},
+		{t: _INT_LIT, v: uint64(2)},
+		{t: '[', v: '['},
+		{t: _EXTENSION_IDENT, v: "(syntax)"},
+		{t: '=', v: '='},
+		{t: ',', v: ',', virtual: true},
+		{t: ']', v: ']'},
+		{t: ';', v: ';', virtual: true},
+		{t: _UINT32, v: "uint32"},
+		{t: _SINGULAR_IDENT, v: "name"},
+		{t: ';', v: ';', virtual: true},
+		{t: '}', v: '}'},
+		{t: ';', v: ';', virtual: true},
+
+		{t: _MESSAGE, v: "message"},
+		{t: _SINGULAR_IDENT, v: "Test"},
+		{t: '{', v: '{'},
+		{t: _STRING, v: "string"},
+		{t: _SINGULAR_IDENT, v: "a"},
+		{t: '=', v: '='},
+		{t: _INT_LIT, v: uint64(1)},
+		{t: ';', v: ';', virtual: false},
+		{t: _SINGULAR_IDENT, v: "r"},
+		{t: ';', v: ';', virtual: true},
+		{t: _STRING, v: "string"},
+		{t: _SINGULAR_IDENT, v: "b"},
+		{t: '=', v: '='},
+		{t: _INT_LIT, v: uint64(2)},
+		{t: ';', v: ';', virtual: false},
+		{t: _REPEATED, v: "repeated"},
+		{t: _SINGULAR_IDENT, v: "s"},
+		{t: ';', v: ';', virtual: true},
+		{t: _STRING, v: "string"},
+		{t: _SINGULAR_IDENT, v: "c"},
+		{t: '=', v: '='},
+		{t: _INT_LIT, v: uint64(3)},
+		{t: ';', v: ';', virtual: false},
+		{t: _REPEATED, v: "repeated"},
+		{t: _STRING, v: "string"},
+		{t: _SINGULAR_IDENT, v: "foo"},
+		{t: '=', v: '='},
+		{t: ';', v: ';', virtual: true},
+		{t: _REPEATED, v: "repeated"},
+		{t: ';', v: ';', virtual: true},
+		{t: '}', v: '}'},
+		{t: ';', v: ';', virtual: true},
 	}
-	if tok := l.Lex(&sym); tok != 0 {
-		t.Fatalf("lexer reported symbol after what should have been EOF: %d", tok)
-	}
-	require.NoError(t, handler.Error())
-	// Now we check final state of lexer for unattached comments and final whitespace
-	// One of the final comments get associated as trailing comment for final token
-	prevNodeInfo := l.info.NodeInfo(prev)
-	assert.Equal(t, 1, prevNodeInfo.TrailingComments().Len(), "last token: wrong number of trailing comments")
-	eofNodeInfo := l.info.TokenInfo(l.eof)
-	finalComments := eofNodeInfo.LeadingComments()
-	if assert.Equal(t, 2, finalComments.Len(), "wrong number of final remaining comments") {
-		assert.Equal(t, "// comment attached to no tokens (upcoming token is EOF!)", finalComments.Index(0).RawText(), "incorrect final comment text")
-		assert.Equal(t, "/* another comment followed by some final whitespace*/", finalComments.Index(1).RawText(), "incorrect final comment text")
-	}
-	assert.Equal(t, "\n\n\t\n\t", eofNodeInfo.LeadingWhitespace(), "incorrect final whitespace")
+
+	runLexerTest(t, l, expected[:])
 }
 
 func TestLexerErrors(t *testing.T) {
@@ -1037,4 +1141,41 @@ func stringForOptionName(optionNameNode *ast.OptionNameNode) string {
 		}
 	}
 	return result
+}
+
+func TestMinimumPossibleIdentCount(t *testing.T) {
+	cases := []struct {
+		inputs []string
+		expect int
+	}{
+		{[]string{}, 0},
+		{[]string{"a"}, 1},
+		{[]string{""}, 1},
+		{[]string{"."}, 1},
+		{[]string{".", "."}, 1},
+		{[]string{"a", "b"}, 2},
+		{[]string{"a.", ".b"}, 1},
+		{[]string{"a", "b", "c"}, 3},
+		{[]string{"a.", "b"}, 1},
+		{[]string{"a", ".", "b"}, 1},
+		{[]string{"a.", ".", ".", ".", "b"}, 1},
+		{[]string{"a.", "b", "c"}, 2},
+		{[]string{"a.", "b.", "c"}, 1},
+		{[]string{"a.", "b.", "c", "d"}, 2},
+		{[]string{".a", "b"}, 2},
+		{[]string{".a", "b", "c"}, 3},
+		{[]string{".a", "b.", "c"}, 2},
+		{[]string{".a.", ".b.", ".c", "d"}, 2},
+		{[]string{"a.b", "c"}, 2},
+		{[]string{"a.b", "c", "d"}, 3},
+		{[]string{"a.b", "c.", "d"}, 2},
+		{[]string{"a.b.", "c.", "d"}, 1},
+		{[]string{"a.b.", "c.", "d", "e"}, 2},
+	}
+
+	for i, c := range cases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			assert.Equal(t, c.expect, minimumPossibleIdentCount(c.inputs...))
+		})
+	}
 }

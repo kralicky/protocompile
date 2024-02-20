@@ -108,10 +108,11 @@ const (
 )
 
 type protoLex struct {
-	input   *runeReader
-	info    *ast.FileInfo
-	handler *reporter.Handler
-	res     *ast.FileNode
+	input        *runeReader
+	info         *ast.FileInfo
+	handler      *reporter.Handler
+	res          *ast.FileNode
+	parsedSyntax string
 
 	prevSym    ast.TerminalNodeInterface
 	prevOffset int
@@ -900,7 +901,37 @@ func (l *protoLex) endExtensionIdent(lval *protoSymType) {
 	l.inExtensionIdent = false
 }
 
-func (l *protoLex) endCompoundIdent(lval *protoSymType) int {
+func (l *protoLex) endCompoundIdent(lval *protoSymType) (result int) {
+	defer func() {
+		// after a qualified ident, the next token has limited valid options:
+		// - a singular ident, as in 'foo.Bar baz = 1;'
+		// - ';' (in various contexts)
+		// - '>' as in 'map<string, foo.Bar>'
+		// - '=' as in 'option foo.bar = 1;'
+		// - ',' as in '[foo.bar,]: xyz' (virtual comma)
+		// - '/' as in '[type.googleapis.com/...]
+		// - ')' as in 'returns (foo.bar)'
+		//
+		// importantly, it is not possible to have a qualified ident followed by
+		// *two* idents. this is important to help disambiguate the following
+		// scenario:
+		//
+		// message Foo {
+		//  foo.bar
+		//  string baz = 1;
+		// }
+		//
+		// in this case, 'foo.bar' is a partial field, and 'string baz = 1'; is
+		// a separate field. we can look-ahead after lexing 'foo.bar' to see if
+		// we can insert a semicolon immediately to split the two fields.
+		switch result {
+		case _QUALIFIED_IDENT, _FULLY_QUALIFIED_IDENT:
+			idents, _ := l.peekNextIdentsFast(2)
+			if len(idents) == 2 {
+				l.insertSemi = immediate
+			}
+		}
+	}()
 	// possible compound identifiers:
 	// 1. _QUALIFIED_IDENT: compound ident without a leading dot
 	//   ex: 'foo.bar.baz', 'foo.Bar', 'foo.'
@@ -1374,6 +1405,10 @@ func (l *protoLex) peekNextIdentFast() (ident string, nextRune rune, ok bool) {
 func (l *protoLex) peekNextIdentsFast(n int) (idents []string, nextRune rune) {
 	l.input.save()
 	defer l.input.restore()
+	return l.unsafePeekNextIdentsFast(n)
+}
+
+func (l *protoLex) unsafePeekNextIdentsFast(n int) (idents []string, nextRune rune) {
 	for i := 0; i < n; i++ {
 		nextRune = l.skipToNextRune()
 		mark := l.input.offset()
@@ -1511,6 +1546,26 @@ func canDirectlyPrecedeVirtualComma(c rune) bool {
 	return true
 }
 
+func (l *protoLex) getSyntax() string {
+	if l.parsedSyntax != "" {
+		return l.parsedSyntax
+	}
+
+	if l.res == nil {
+		l.parsedSyntax = "proto2"
+	} else {
+		switch {
+		case l.res.Syntax != nil:
+			l.parsedSyntax = l.res.Syntax.Syntax.AsString()
+		case l.res.Edition != nil:
+			l.parsedSyntax = l.res.Edition.Edition.AsString()
+		default:
+			l.parsedSyntax = "proto2"
+		}
+	}
+	return l.parsedSyntax
+}
+
 func (l *protoLex) maybeProcessPartialField(ident string) {
 	// Determine if this ident terminates a partial field declaration, then
 	// insert virtual semicolons as appropriate.
@@ -1549,12 +1604,7 @@ func (l *protoLex) maybeProcessPartialField(ident string) {
 		return
 	}
 
-	var syntax string
-	if l.res == nil || l.res.Syntax == nil {
-		syntax = "proto2"
-	} else {
-		syntax = l.res.Syntax.Syntax.AsString()
-	}
+	syntax := l.getSyntax()
 
 	matchKeyword := func(ident string) bool {
 		// match any keyword that can start a field declaration
@@ -1567,7 +1617,10 @@ func (l *protoLex) maybeProcessPartialField(ident string) {
 		return false
 	}
 
-	nextIdents, nextRune := l.peekNextIdentsFast(2)
+	l.input.save()
+	nextIdents, nextRune := l.unsafePeekNextIdentsFast(2)
+	defer l.input.restore()
+
 	switch len(nextIdents) {
 	case 2:
 		if ident == "option" {
@@ -1577,12 +1630,43 @@ func (l *protoLex) maybeProcessPartialField(ident string) {
 		}
 		if matchKeyword(nextIdents[0]) || matchKeyword(nextIdents[1]) {
 			l.insertSemi |= atNextNewline
+		} else if minimumPossibleIdentCount(ident, nextIdents[0], nextIdents[1]) == 3 {
+			atKeyword := false
+			switch ident {
+			case "optional", "repeated":
+				atKeyword = true
+			case "required":
+				atKeyword = syntax == "proto2"
+			default:
+				atKeyword = false
+			}
+
+			if !atKeyword {
+				// 3 non-keyword idents in a row, must be a partial field
+				l.insertSemi |= atNextNewline
+			} else {
+				// need to read a third ident to determine if this is a partial field
+				ident3, nextRune := l.unsafePeekNextIdentsFast(1)
+				if len(ident3) == 1 && minimumPossibleIdentCount(ident, nextIdents[0], nextIdents[1], ident3[0]) == 4 {
+					l.insertSemi |= atNextNewline
+				} else if nextRune == '=' {
+					// make sure the rune following the '=' is a number
+					l.skipToNextRune()
+					l.input.readRune()
+					tagRune := l.skipToNextRune()
+					if tagRune < '0' || tagRune > '9' {
+						l.insertSemi |= atNextNewline
+					}
+				}
+			}
 		}
 	case 1:
 		if nextRune != '{' && matchKeyword(nextIdents[0]) {
 			l.insertSemi |= atNextNewline
 		} else if nextRune == ':' {
 			l.insertSemi |= atNextNewline | onlyIfLastTokenOnLine
+		} else if nextRune == '}' {
+			l.insertSemi |= atNextNewline
 		}
 	case 0:
 		switch nextRune {
@@ -1597,4 +1681,20 @@ func (l *protoLex) maybeProcessPartialField(ident string) {
 		}
 		return
 	}
+}
+
+func minimumPossibleIdentCount(idents ...string) int {
+	// compound idents like 'foo.bar' ignore whitespace around dots, so they can
+	// be written as 'foo . bar' or 'foo. bar' or 'foo .bar .' etc.
+	// this function finds the minimum number of unique identifiers that could
+	// be formed from the input strings.
+
+	minimum := len(idents)
+	for i := 0; i < len(idents)-1; i++ {
+		a, b := idents[i], idents[i+1]
+		if a[len(a)-1] == '.' || b[0] == '.' {
+			minimum--
+		}
+	}
+	return minimum
 }
