@@ -233,61 +233,61 @@ fileElement
 
 syntaxDecl
 	: _SYNTAX '=' _STRING_LIT {
-		$$ = &ast.SyntaxNode{Keyword: $1, Equals: $2, Syntax: $3}
+		$$ = &ast.SyntaxNode{Keyword: $1.ToKeyword(), Equals: $2, Syntax: $3}
 	}
 
 editionDecl
 	: _EDITION '=' _STRING_LIT {
-		$$ = &ast.EditionNode{Keyword: $1, Equals: $2, Edition: $3}
+		$$ = &ast.EditionNode{Keyword: $1.ToKeyword(), Equals: $2, Edition: $3}
 	}
 
 importDecl
 	: _IMPORT _STRING_LIT {
-		$$ = &ast.ImportNode{Keyword: $1, Name: $2}
+		$$ = &ast.ImportNode{Keyword: $1.ToKeyword(), Name: $2}
 	}
 	| _IMPORT _WEAK _STRING_LIT {
-		$$ = &ast.ImportNode{Keyword: $1, Weak: $2, Name: $3}
+		$$ = &ast.ImportNode{Keyword: $1.ToKeyword(), Weak: $2.ToKeyword(), Name: $3}
 	}
 	| _IMPORT _PUBLIC _STRING_LIT {
-		$$ = &ast.ImportNode{Keyword: $1, Public: $2, Name: $3}
+		$$ = &ast.ImportNode{Keyword: $1.ToKeyword(), Public: $2.ToKeyword(), Name: $3}
 	}
 	| _IMPORT {
 		protolex.(*protoLex).ErrExtendedSyntax("expecting string literal or \"weak\" or \"public\"", CategoryIncompleteDecl)
-		$$ = &ast.ImportNode{Keyword: $1}
+		$$ = &ast.ImportNode{Keyword: $1.ToKeyword()}
 	}
 	| _IMPORT _WEAK {
 		protolex.(*protoLex).ErrExtendedSyntax("expecting string literal", CategoryIncompleteDecl)
-		$$ = &ast.ImportNode{Keyword: $1, Weak: $2}
+		$$ = &ast.ImportNode{Keyword: $1.ToKeyword(), Weak: $2.ToKeyword()}
 	}
 	| _IMPORT _PUBLIC {
 		protolex.(*protoLex).ErrExtendedSyntax("expecting string literal", CategoryIncompleteDecl)
-		$$ = &ast.ImportNode{Keyword: $1, Public: $2}
+		$$ = &ast.ImportNode{Keyword: $1.ToKeyword(), Public: $2.ToKeyword()}
 	}
 
 packageDecl
 	: _PACKAGE anyIdentifier {
-		$$ = &ast.PackageNode{Keyword: $1, Name: $2}
+		$$ = &ast.PackageNode{Keyword: $1.ToKeyword(), Name: $2}
 	}
 	| _PACKAGE {
 		protolex.(*protoLex).ErrExtendedSyntax("expected package name", CategoryIncompleteDecl)
-		$$ = &ast.PackageNode{Keyword: $1}
+		$$ = &ast.PackageNode{Keyword: $1.ToKeyword()}
 	}
 
 optionDecl
 	: _OPTION optionName '=' optionValue {
-		$$ = &ast.OptionNode{Keyword: $1, Name: $2, Equals: $3, Val: $4}
+		$$ = &ast.OptionNode{Keyword: $1.ToKeyword(), Name: $2, Equals: $3, Val: $4}
 	}
 	| _OPTION optionName '=' {
 		protolex.(*protoLex).ErrExtendedSyntax("expected value", CategoryIncompleteDecl)
-		$$ = &ast.OptionNode{Keyword: $1, Name: $2, Equals: $3}
+		$$ = &ast.OptionNode{Keyword: $1.ToKeyword(), Name: $2, Equals: $3}
 	}
 	| _OPTION optionName {
 		protolex.(*protoLex).ErrExtendedSyntax("expected '='", CategoryIncompleteDecl)
-		$$ = &ast.OptionNode{Keyword: $1, Name: $2}
+		$$ = &ast.OptionNode{Keyword: $1.ToKeyword(), Name: $2}
 	}
 	| _OPTION {
 		protolex.(*protoLex).ErrExtendedSyntax("expected option name", CategoryIncompleteDecl)
-		$$ = &ast.OptionNode{Keyword: $1}
+		$$ = &ast.OptionNode{Keyword: $1.ToKeyword()}
 	}
 
 optionName

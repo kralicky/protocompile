@@ -1258,79 +1258,79 @@ protodefault:
 	case 18:
 		protoDollar = protoS[protopt-3 : protopt+1]
 		{
-			protoVAL.syn = &ast.SyntaxNode{Keyword: protoDollar[1].id, Equals: protoDollar[2].b, Syntax: protoDollar[3].sv}
+			protoVAL.syn = &ast.SyntaxNode{Keyword: protoDollar[1].id.ToKeyword(), Equals: protoDollar[2].b, Syntax: protoDollar[3].sv}
 		}
 	case 19:
 		protoDollar = protoS[protopt-3 : protopt+1]
 		{
-			protoVAL.ed = &ast.EditionNode{Keyword: protoDollar[1].id, Equals: protoDollar[2].b, Edition: protoDollar[3].sv}
+			protoVAL.ed = &ast.EditionNode{Keyword: protoDollar[1].id.ToKeyword(), Equals: protoDollar[2].b, Edition: protoDollar[3].sv}
 		}
 	case 20:
 		protoDollar = protoS[protopt-2 : protopt+1]
 		{
-			protoVAL.imprt = &ast.ImportNode{Keyword: protoDollar[1].id, Name: protoDollar[2].sv}
+			protoVAL.imprt = &ast.ImportNode{Keyword: protoDollar[1].id.ToKeyword(), Name: protoDollar[2].sv}
 		}
 	case 21:
 		protoDollar = protoS[protopt-3 : protopt+1]
 		{
-			protoVAL.imprt = &ast.ImportNode{Keyword: protoDollar[1].id, Weak: protoDollar[2].id, Name: protoDollar[3].sv}
+			protoVAL.imprt = &ast.ImportNode{Keyword: protoDollar[1].id.ToKeyword(), Weak: protoDollar[2].id.ToKeyword(), Name: protoDollar[3].sv}
 		}
 	case 22:
 		protoDollar = protoS[protopt-3 : protopt+1]
 		{
-			protoVAL.imprt = &ast.ImportNode{Keyword: protoDollar[1].id, Public: protoDollar[2].id, Name: protoDollar[3].sv}
+			protoVAL.imprt = &ast.ImportNode{Keyword: protoDollar[1].id.ToKeyword(), Public: protoDollar[2].id.ToKeyword(), Name: protoDollar[3].sv}
 		}
 	case 23:
 		protoDollar = protoS[protopt-1 : protopt+1]
 		{
 			protolex.(*protoLex).ErrExtendedSyntax("expecting string literal or \"weak\" or \"public\"", CategoryIncompleteDecl)
-			protoVAL.imprt = &ast.ImportNode{Keyword: protoDollar[1].id}
+			protoVAL.imprt = &ast.ImportNode{Keyword: protoDollar[1].id.ToKeyword()}
 		}
 	case 24:
 		protoDollar = protoS[protopt-2 : protopt+1]
 		{
 			protolex.(*protoLex).ErrExtendedSyntax("expecting string literal", CategoryIncompleteDecl)
-			protoVAL.imprt = &ast.ImportNode{Keyword: protoDollar[1].id, Weak: protoDollar[2].id}
+			protoVAL.imprt = &ast.ImportNode{Keyword: protoDollar[1].id.ToKeyword(), Weak: protoDollar[2].id.ToKeyword()}
 		}
 	case 25:
 		protoDollar = protoS[protopt-2 : protopt+1]
 		{
 			protolex.(*protoLex).ErrExtendedSyntax("expecting string literal", CategoryIncompleteDecl)
-			protoVAL.imprt = &ast.ImportNode{Keyword: protoDollar[1].id, Public: protoDollar[2].id}
+			protoVAL.imprt = &ast.ImportNode{Keyword: protoDollar[1].id.ToKeyword(), Public: protoDollar[2].id.ToKeyword()}
 		}
 	case 26:
 		protoDollar = protoS[protopt-2 : protopt+1]
 		{
-			protoVAL.pkg = &ast.PackageNode{Keyword: protoDollar[1].id, Name: protoDollar[2].idv}
+			protoVAL.pkg = &ast.PackageNode{Keyword: protoDollar[1].id.ToKeyword(), Name: protoDollar[2].idv}
 		}
 	case 27:
 		protoDollar = protoS[protopt-1 : protopt+1]
 		{
 			protolex.(*protoLex).ErrExtendedSyntax("expected package name", CategoryIncompleteDecl)
-			protoVAL.pkg = &ast.PackageNode{Keyword: protoDollar[1].id}
+			protoVAL.pkg = &ast.PackageNode{Keyword: protoDollar[1].id.ToKeyword()}
 		}
 	case 28:
 		protoDollar = protoS[protopt-4 : protopt+1]
 		{
-			protoVAL.opt = &ast.OptionNode{Keyword: protoDollar[1].id, Name: protoDollar[2].optName, Equals: protoDollar[3].b, Val: protoDollar[4].v}
+			protoVAL.opt = &ast.OptionNode{Keyword: protoDollar[1].id.ToKeyword(), Name: protoDollar[2].optName, Equals: protoDollar[3].b, Val: protoDollar[4].v}
 		}
 	case 29:
 		protoDollar = protoS[protopt-3 : protopt+1]
 		{
 			protolex.(*protoLex).ErrExtendedSyntax("expected value", CategoryIncompleteDecl)
-			protoVAL.opt = &ast.OptionNode{Keyword: protoDollar[1].id, Name: protoDollar[2].optName, Equals: protoDollar[3].b}
+			protoVAL.opt = &ast.OptionNode{Keyword: protoDollar[1].id.ToKeyword(), Name: protoDollar[2].optName, Equals: protoDollar[3].b}
 		}
 	case 30:
 		protoDollar = protoS[protopt-2 : protopt+1]
 		{
 			protolex.(*protoLex).ErrExtendedSyntax("expected '='", CategoryIncompleteDecl)
-			protoVAL.opt = &ast.OptionNode{Keyword: protoDollar[1].id, Name: protoDollar[2].optName}
+			protoVAL.opt = &ast.OptionNode{Keyword: protoDollar[1].id.ToKeyword(), Name: protoDollar[2].optName}
 		}
 	case 31:
 		protoDollar = protoS[protopt-1 : protopt+1]
 		{
 			protolex.(*protoLex).ErrExtendedSyntax("expected option name", CategoryIncompleteDecl)
-			protoVAL.opt = &ast.OptionNode{Keyword: protoDollar[1].id}
+			protoVAL.opt = &ast.OptionNode{Keyword: protoDollar[1].id.ToKeyword()}
 		}
 	case 32:
 		protoDollar = protoS[protopt-1 : protopt+1]
