@@ -624,7 +624,7 @@ func runLexerTest(t *testing.T, l *protoLex, expected []testCase) {
 		}
 		var val any
 		switch tok {
-		case _SYNTAX, _OPTION, _INT32, _UINT32, _SERVICE, _RPC, _MESSAGE, _RETURNS, _EXTEND, _OPTIONAL, _REPEATED, _INT64, _UINT64, _TRUE, _FALSE, _BOOL, _STRING:
+		case _SYNTAX, _OPTION, _INT32, _UINT32, _SERVICE, _RPC, _MESSAGE, _RETURNS, _EXTEND, _OPTIONAL, _REPEATED, _INT64, _UINT64, _TRUE, _FALSE, _BOOL, _STRING, _RESERVED, _TO:
 			val = sym.id.Val
 		case _SINGULAR_IDENT:
 			val = sym.id.Val
@@ -690,6 +690,10 @@ func TestLexerProto3(t *testing.T) {
 			string c = 3;
 			repeated string foo =
 			repeated
+
+			reserved
+				5 to 10,
+				11
 		}
 
 	`), handler)
@@ -755,6 +759,13 @@ func TestLexerProto3(t *testing.T) {
 		{t: '=', v: '='},
 		{t: ';', v: ';', virtual: true},
 		{t: _REPEATED, v: "repeated"},
+		{t: ';', v: ';', virtual: true},
+		{t: _RESERVED, v: "reserved"},
+		{t: _INT_LIT, v: uint64(5)},
+		{t: _TO, v: "to"},
+		{t: _INT_LIT, v: uint64(10)},
+		{t: ',', v: ',', virtual: false},
+		{t: _INT_LIT, v: uint64(11)},
 		{t: ';', v: ';', virtual: true},
 		{t: '}', v: '}'},
 		{t: ';', v: ';', virtual: true},

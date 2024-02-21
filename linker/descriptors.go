@@ -163,7 +163,7 @@ type result struct {
 	// to their fully-qualified name. The identifiers are for field names in
 	// message literals (in option values) that are extension fields. These names
 	// are resolved during linking and stored here, to be used to interpret options.
-	optionQualifiedNames map[ast.IdentValueNode]string
+	optionQualifiedNames map[*ast.IdentValueNode]string
 
 	// A map of descriptors to all resolved references to them. The reference
 	// locations contain the start and end position of the relevant identifier
@@ -283,8 +283,7 @@ func (r *result) PopulateSourceCodeInfo(optsIndex sourceinfo.OptionIndex, optsDe
 		r.resolvedReferences[desc] = append(r.resolvedReferences[desc], ast.NewNodeReference(a, node))
 
 		if ref, ok := node.(*ast.FieldReferenceNode); ok {
-			switch name := ref.Name.(type) {
-			case *ast.CompoundIdentNode:
+			if name := ref.GetName().GetCompoundIdent(); name != nil {
 				r.indexCompoundIdentRefs(name, desc)
 			}
 		}
@@ -2060,6 +2059,5 @@ func (r *result) FindExtensionsByMessage(fqn protoreflect.FullName) []protorefle
 
 func (r *result) hasSource() bool {
 	n := r.FileNode()
-	_, ok := n.(*ast.FileNode)
-	return ok
+	return n != nil
 }

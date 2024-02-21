@@ -23,12 +23,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/kralicky/protocompile/internal"
@@ -592,6 +594,8 @@ func requireASTsEqual(t *testing.T, a, b linker.Files, filenames ...string) {
 	for _, filename := range filenames {
 		aRes := a.FindFileByPath(filename)
 		bRes := b.FindFileByPath(filename)
-		require.Equal(t, aRes.(linker.Result).AST(), bRes.(linker.Result).AST())
+		if !cmp.Equal(aRes.(linker.Result).AST(), bRes.(linker.Result).AST(), protocmp.Transform()) {
+			t.Error(cmp.Diff(aRes.(linker.Result).AST(), bRes.(linker.Result).AST(), protocmp.Transform()))
+		}
 	}
 }

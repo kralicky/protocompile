@@ -10,6 +10,7 @@ import (
 	"github.com/kralicky/protocompile/parser"
 	"github.com/kralicky/protocompile/reporter"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 func TestClone(t *testing.T) {
@@ -19,7 +20,7 @@ func TestClone(t *testing.T) {
 	for _, decl := range root.Decls {
 		clone := ast.Clone(decl)
 		// filter NaNs
-		if !cmp.Equal(decl, clone, cmp.Comparer(floatCompare)) {
+		if !cmp.Equal(decl, clone, protocmp.Transform(), cmp.Comparer(floatCompare)) {
 			t.Error(cmp.Diff(decl, clone))
 		}
 	}

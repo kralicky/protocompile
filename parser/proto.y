@@ -17,36 +17,36 @@ import (
 	file         *ast.FileNode
 	syn          *ast.SyntaxNode
 	ed           *ast.EditionNode
-	fileElement  ast.FileElement
-	fileElements []ast.FileElement
+	fileElement  *ast.FileElement
+	fileElements []*ast.FileElement
 	pkg          *ast.PackageNode
 	imprt        *ast.ImportNode
 	msg          *ast.MessageNode
-	msgElement   ast.MessageElement
-	msgElements  []ast.MessageElement
+	msgElement   *ast.MessageElement
+	msgElements  []*ast.MessageElement
 	fld          *ast.FieldNode
 	mapFld       *ast.MapFieldNode
 	mapType      *ast.MapTypeNode
 	grp          *ast.GroupNode
 	oo           *ast.OneofNode
-	ooElement    ast.OneofElement
-	ooElements   []ast.OneofElement
+	ooElement    *ast.OneofElement
+	ooElements   []*ast.OneofElement
 	ext          *ast.ExtensionRangeNode
 	resvd        *ast.ReservedNode
 	en           *ast.EnumNode
-	enElement    ast.EnumElement
-	enElements   []ast.EnumElement
+	enElement    *ast.EnumElement
+	enElements   []*ast.EnumElement
 	env          *ast.EnumValueNode
 	extend       *ast.ExtendNode
-	extElement   ast.ExtendElement
-	extElements  []ast.ExtendElement
+	extElement   *ast.ExtendElement
+	extElements  []*ast.ExtendElement
 	svc          *ast.ServiceNode
-	svcElement   ast.ServiceElement
-	svcElements  []ast.ServiceElement
+	svcElement   *ast.ServiceElement
+	svcElements  []*ast.ServiceElement
 	mtd          *ast.RPCNode
 	mtdMsgType   *ast.RPCTypeNode
-	mtdElement   ast.RPCElement
-	mtdElements  []ast.RPCElement
+	mtdElement   *ast.RPCElement
+	mtdElements  []*ast.RPCElement
 	opt          *ast.OptionNode
 	opts         *compactOptionSlices
 	ref          *ast.FieldReferenceNode
@@ -58,13 +58,13 @@ import (
 	names        *nameSlices
 	cid          *identSlices
 	xid          *identSlices
-	idv          ast.IdentValueNode
+	idv          *ast.IdentValueNode
 	sl           *valueSlices
 	msgLitFlds   *messageFieldList
 	msgLitFld    *ast.MessageFieldNode
-	v            ast.ValueNode
-	il           ast.IntValueNode
-	sv           ast.StringValueNode
+	v            *ast.ValueNode
+	il           *ast.IntValueNode
+	sv           *ast.StringValueNode
 	i            *ast.UintLiteralNode
 	f            *ast.FloatLiteralNode
 	id           *ast.IdentNode
@@ -188,7 +188,7 @@ fileElements
 	}
 	| fileElement {
 		if $1 != nil {
-			$$ = []ast.FileElement{$1}
+			$$ = []*ast.FileElement{$1}
 		} else {
 			$$ = nil
 		}
@@ -197,35 +197,35 @@ fileElements
 fileElement
 	: importDecl nonVirtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsFileElement()
 	}
 	| packageDecl nonVirtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsFileElement()
 	}
 	| optionDecl nonVirtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsFileElement()
 	}
 	| messageDecl virtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsFileElement()
 	}
 	| enumDecl virtualSemicolon{
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsFileElement()
 	}
 	| extensionDecl virtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsFileElement()
 	}
 	| serviceDecl virtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsFileElement()
 	}
 	| _SINGULAR_IDENT {
 		protolex.(*protoLex).ErrExtendedSyntaxAt("unexpected identifier", $1, CategoryIncompleteDecl)
-		$$ = &ast.ErrorNode{$1}
+		$$ = (&ast.ErrorNode{Err: $1}).AsFileElement()
 	}
 	| error {
 		$$ = nil
@@ -233,61 +233,61 @@ fileElement
 
 syntaxDecl
 	: _SYNTAX '=' _STRING_LIT {
-		$$ = &ast.SyntaxNode{$1.ToKeyword(), $2, $3, nil}
+		$$ = &ast.SyntaxNode{Keyword: $1, Equals: $2, Syntax: $3}
 	}
 
 editionDecl
 	: _EDITION '=' _STRING_LIT {
-		$$ = &ast.EditionNode{$1.ToKeyword(), $2, $3, nil}
+		$$ = &ast.EditionNode{Keyword: $1, Equals: $2, Edition: $3}
 	}
 
 importDecl
 	: _IMPORT _STRING_LIT {
-		$$ = &ast.ImportNode{$1.ToKeyword(), nil, nil, $2, nil}
+		$$ = &ast.ImportNode{Keyword: $1, Name: $2}
 	}
 	| _IMPORT _WEAK _STRING_LIT {
-		$$ = &ast.ImportNode{$1.ToKeyword(), nil, $2.ToKeyword(), $3, nil}
+		$$ = &ast.ImportNode{Keyword: $1, Weak: $2, Name: $3}
 	}
 	| _IMPORT _PUBLIC _STRING_LIT {
-		$$ = &ast.ImportNode{$1.ToKeyword(), $2.ToKeyword(), nil, $3, nil}
+		$$ = &ast.ImportNode{Keyword: $1, Public: $2, Name: $3}
 	}
 	| _IMPORT {
 		protolex.(*protoLex).ErrExtendedSyntax("expecting string literal or \"weak\" or \"public\"", CategoryIncompleteDecl)
-		$$ = &ast.ImportNode{$1.ToKeyword(), nil, nil, nil, nil}
+		$$ = &ast.ImportNode{Keyword: $1}
 	}
 	| _IMPORT _WEAK {
 		protolex.(*protoLex).ErrExtendedSyntax("expecting string literal", CategoryIncompleteDecl)
-		$$ = &ast.ImportNode{$1.ToKeyword(), nil, $2.ToKeyword(), nil, nil}
+		$$ = &ast.ImportNode{Keyword: $1, Weak: $2}
 	}
 	| _IMPORT _PUBLIC {
 		protolex.(*protoLex).ErrExtendedSyntax("expecting string literal", CategoryIncompleteDecl)
-		$$ = &ast.ImportNode{$1.ToKeyword(), $2.ToKeyword(), nil, nil, nil}
+		$$ = &ast.ImportNode{Keyword: $1, Public: $2}
 	}
 
 packageDecl
 	: _PACKAGE anyIdentifier {
-		$$ = &ast.PackageNode{$1.ToKeyword(), $2, nil}
+		$$ = &ast.PackageNode{Keyword: $1, Name: $2}
 	}
 	| _PACKAGE {
 		protolex.(*protoLex).ErrExtendedSyntax("expected package name", CategoryIncompleteDecl)
-		$$ = &ast.PackageNode{$1.ToKeyword(), nil, nil}
+		$$ = &ast.PackageNode{Keyword: $1}
 	}
 
 optionDecl
 	: _OPTION optionName '=' optionValue {
-		$$ = &ast.OptionNode{$1.ToKeyword(), $2, $3, $4, nil}
+		$$ = &ast.OptionNode{Keyword: $1, Name: $2, Equals: $3, Val: $4}
 	}
 	| _OPTION optionName '=' {
 		protolex.(*protoLex).ErrExtendedSyntax("expected value", CategoryIncompleteDecl)
-		$$ = &ast.OptionNode{$1.ToKeyword(), $2, $3, nil, nil}
+		$$ = &ast.OptionNode{Keyword: $1, Name: $2, Equals: $3}
 	}
 	| _OPTION optionName {
 		protolex.(*protoLex).ErrExtendedSyntax("expected '='", CategoryIncompleteDecl)
-		$$ = &ast.OptionNode{$1.ToKeyword(), $2, nil, nil, nil}
+		$$ = &ast.OptionNode{Keyword: $1, Name: $2}
 	}
 	| _OPTION {
 		protolex.(*protoLex).ErrExtendedSyntax("expected option name", CategoryIncompleteDecl)
-		$$ = &ast.OptionNode{$1.ToKeyword(), nil, nil, nil, nil}
+		$$ = &ast.OptionNode{Keyword: $1}
 	}
 
 optionName
@@ -305,60 +305,60 @@ optionValue
 compactOptionValue
 	: scalarValue
 	| messageLiteral virtualSemicolon {
-		$1.(*ast.MessageLiteralNode).Semicolon = $2
+		$1.GetMessageLiteral().Semicolon = $2
 		$$ = $1
 	}
 
 scalarValue
 	: _STRING_LIT {
-		$$ = $1
+		$$ = $1.AsValueNode()
 	}
 	| numLit
 	| specialFloatLit
 	| singularIdent {
-		$$ = $1
+		$$ = $1.AsValueNode()
 	}
 
 numLit
 	: _FLOAT_LIT {
-		$$ = $1
+		$$ = $1.AsValueNode()
 	}
 	| '-' _FLOAT_LIT {
-		$$ = &ast.SignedFloatLiteralNode{$1, $2}
+		$$ = (&ast.SignedFloatLiteralNode{Sign: $1, Float: $2.AsFloatValueNode()}).AsValueNode()
 	}
 	| _INT_LIT {
-		$$ = $1
+		$$ = $1.AsValueNode()
 	}
 	| '-' _INT_LIT {
 		if $2.Val > math.MaxInt64 + 1 {
 			// can't represent as int so treat as float literal
-			$$ = &ast.SignedFloatLiteralNode{$1, $2}
+			$$ = (&ast.SignedFloatLiteralNode{Sign: $1, Float: $2.AsFloatValueNode()}).AsValueNode()
 		} else {
-			$$ = &ast.NegativeIntLiteralNode{$1, $2}
+			$$ = (&ast.NegativeIntLiteralNode{Minus: $1, Uint: $2}).AsValueNode()
 		}
 	}
 
 specialFloatLit
 	: '-' _INF {
 		f := ast.NewSpecialFloatLiteralNode($2.ToKeyword())
-		$$ = &ast.SignedFloatLiteralNode{$1, f}
+		$$ = (&ast.SignedFloatLiteralNode{Sign: $1, Float: f.AsFloatValueNode()}).AsValueNode()
 	}
 	| '-' _NAN {
 		f := ast.NewSpecialFloatLiteralNode($2.ToKeyword())
-		$$ = &ast.SignedFloatLiteralNode{$1, f}
+		$$ = (&ast.SignedFloatLiteralNode{Sign: $1, Float: f.AsFloatValueNode()}).AsValueNode()
 	}
 
 messageLiteral
 	: messageLiteralOpen messageTextFormat messageLiteralClose {
 		if $2 == nil {
-			$$ = &ast.MessageLiteralNode{$1, nil, nil, $3, nil}
+			$$ = (&ast.MessageLiteralNode{Open: $1, Close: $3}).AsValueNode()
 		} else {
 			fields, delimiters := $2.toNodes()
-			$$ = &ast.MessageLiteralNode{$1, fields, delimiters, $3, nil}
+			$$ = (&ast.MessageLiteralNode{Open: $1, Elements: fields, Seps: delimiters, Close: $3}).AsValueNode()
 		}
 	}
 	| messageLiteralOpen messageLiteralClose {
-		$$ = &ast.MessageLiteralNode{$1, nil, nil, $2, nil}
+		$$ = (&ast.MessageLiteralNode{Open: $1, Close: $2}).AsValueNode()
 	}
 
 messageTextFormat
@@ -410,19 +410,19 @@ messageLiteralFieldEntry
 messageLiteralField
 	: messageLiteralFieldName ':' fieldValue {
 		if $1 != nil && $2 != nil {
-			$$ = &ast.MessageFieldNode{$1, $2, $3, nil}
+			$$ = &ast.MessageFieldNode{Name: $1, Sep: $2, Val: $3}
 		} else {
 			$$ = nil
 		}
 	}
 	| messageLiteralFieldName ':' virtualSemicolon {
 		protolex.(*protoLex).ErrExtendedSyntax("expected value", CategoryIncompleteDecl)
-		n := &ast.MessageFieldNode{$1, $2, nil, $3}
+		n := &ast.MessageFieldNode{Name: $1, Sep: $2, Semicolon: $3}
 		$$ = n
 	}
 	| messageLiteralFieldName messageValue {
 		if $1 != nil && $2 != nil {
-			$$ = &ast.MessageFieldNode{$1, nil, $2, nil}
+			$$ = &ast.MessageFieldNode{Name: $1, Val: $2}
 		} else {
 			$$ = nil
 		}
@@ -436,23 +436,23 @@ singularIdent
 
 anyIdentifier
 	: identKeywordName {
-		$$ = $1
+		$$ = $1.AsIdentValueNode()
 	}
 	| _SINGULAR_IDENT {
-		$$ = $1
+		$$ = $1.AsIdentValueNode()
 	}
 	| _QUALIFIED_IDENT
 	| _FULLY_QUALIFIED_IDENT
 
 messageLiteralFieldName
 	: singularIdent {
-		$$ = &ast.FieldReferenceNode{Name: $1}
+		$$ = &ast.FieldReferenceNode{Name: $1.AsIdentValueNode()}
 	}
 	| '[' _QUALIFIED_IDENT virtualComma ']' virtualSemicolon {
 		$$ = &ast.FieldReferenceNode{Open: $1, Name: $2, Comma: $3, Close: $4, Semicolon: $5}
 	}
 	| '[' _QUALIFIED_IDENT '/' anyIdentifier virtualComma ']' virtualSemicolon {
-		$$ = &ast.FieldReferenceNode{Open: $1, URLPrefix: $2, Slash: $3, Name: $4, Comma: $5, Close: $6, Semicolon: $7}
+		$$ = &ast.FieldReferenceNode{Open: $1, UrlPrefix: $2, Slash: $3, Name: $4, Comma: $5, Close: $6, Semicolon: $7}
 	}
 	| '[' error ']' ';' {
 		$$ = nil
@@ -461,40 +461,40 @@ messageLiteralFieldName
 fieldValue
 	: fieldScalarValue
 	| messageLiteral virtualSemicolon {
-		$1.(*ast.MessageLiteralNode).Semicolon = $2
+		$1.GetMessageLiteral().Semicolon = $2
 		$$ = $1
 	}
 	| listLiteral virtualSemicolon {
-		$1.(*ast.ArrayLiteralNode).Semicolon = $2
+		$1.GetArrayLiteral().Semicolon = $2
 		$$ = $1
 	}
 
 fieldScalarValue
 	: _STRING_LIT {
-		$$ = $1
+		$$ = $1.AsValueNode()
 	}
 	| numLit
 	| '-' _INF {
 		kw := $2.ToKeyword()
 		f := ast.NewSpecialFloatLiteralNode(kw)
-		$$ = &ast.SignedFloatLiteralNode{$1, f}
+		$$ = (&ast.SignedFloatLiteralNode{Sign: $1, Float: f.AsFloatValueNode()}).AsValueNode()
 	}
 	| '-' _NAN {
 		kw := $2.ToKeyword()
 		f := ast.NewSpecialFloatLiteralNode(kw)
-		$$ = &ast.SignedFloatLiteralNode{$1, f}
+		$$ = (&ast.SignedFloatLiteralNode{Sign: $1, Float: f.AsFloatValueNode()}).AsValueNode()
 	}
 	| singularIdent {
-		$$ = $1
+		$$ = $1.AsValueNode()
 	}
 
 messageValue
 	: messageLiteral virtualSemicolon {
-		$1.(*ast.MessageLiteralNode).Semicolon = $2
+		$1.GetMessageLiteral().Semicolon = $2
 		$$ = $1
 	}
 	| listOfMessagesLiteral virtualSemicolon {
-		$1.(*ast.ArrayLiteralNode).Semicolon = $2
+		$1.GetArrayLiteral().Semicolon = $2
 		$$ = $1
 	}
 
@@ -503,21 +503,21 @@ listLiteral
 		if $3 != nil {
 			$2.commas = append($2.commas, $3)
 		}
-		$$ = &ast.ArrayLiteralNode{$1, $2.vals, $2.commas, $4, nil}
+		$$ = (&ast.ArrayLiteralNode{OpenBracket: $1, Elements: $2.vals, Commas: $2.commas, CloseBracket: $4}).AsValueNode()
 	}
 	| '[' virtualComma ']' {
-		$$ = &ast.ArrayLiteralNode{$1, nil, []*ast.RuneNode{$2}, $3, nil}
+		$$ = (&ast.ArrayLiteralNode{OpenBracket: $1, Commas: []*ast.RuneNode{$2}, CloseBracket: $3}).AsValueNode()
 	}
 	| '[' ']' {
-		$$ = &ast.ArrayLiteralNode{$1, nil, nil, $2, nil}
+		$$ = (&ast.ArrayLiteralNode{OpenBracket: $1, CloseBracket: $2}).AsValueNode()
 	}
 	| '[' error ']' {
-		$$ = &ast.ArrayLiteralNode{$1, nil, nil, $3, nil}
+		$$ = (&ast.ArrayLiteralNode{OpenBracket: $1, CloseBracket: $3}).AsValueNode()
 	}
 
 listElements
 	: listElement {
-		$$ = &valueSlices{vals: []ast.ValueNode{$1}}
+		$$ = &valueSlices{vals: []*ast.ValueNode{$1}}
 	}
 	| listElements ',' listElement {
 		$1.vals = append($1.vals, $3)
@@ -528,7 +528,7 @@ listElements
 listElement
 	: fieldScalarValue
 	| messageLiteral virtualSemicolon {
-		$1.(*ast.MessageLiteralNode).Semicolon = $2
+		$1.GetMessageLiteral().Semicolon = $2
 		$$ = $1
 	}
 
@@ -537,25 +537,25 @@ listOfMessagesLiteral
 		if $3 != nil {
 			$2.commas = append($2.commas, $3)
 		}
-		$$ = &ast.ArrayLiteralNode{$1, $2.vals, $2.commas, $4, nil}
+		$$ = (&ast.ArrayLiteralNode{OpenBracket: $1, Elements: $2.vals, Commas: $2.commas, CloseBracket: $4}).AsValueNode()
 	}
 	| '[' virtualComma ']' {
-		$$ = &ast.ArrayLiteralNode{$1, nil, []*ast.RuneNode{$2}, $3, nil}
+		$$ = (&ast.ArrayLiteralNode{OpenBracket: $1, Commas: []*ast.RuneNode{$2}, CloseBracket: $3}).AsValueNode()
 	}
 	| '[' ']' {
-		$$ = &ast.ArrayLiteralNode{$1, nil, nil, $2, nil}
+		$$ = (&ast.ArrayLiteralNode{OpenBracket: $1, CloseBracket: $2}).AsValueNode()
 	}
 	| '[' error ']' {
-		$$ = &ast.ArrayLiteralNode{$1, nil, nil, $3, nil}
+		$$ = (&ast.ArrayLiteralNode{OpenBracket: $1, CloseBracket: $3}).AsValueNode()
 	}
 
 messageLiterals
 	: messageLiteral virtualSemicolon {
-		$1.(*ast.MessageLiteralNode).Semicolon = $2
-		$$ = &valueSlices{vals: []ast.ValueNode{$1}}
+		$1.GetMessageLiteral().Semicolon = $2
+		$$ = &valueSlices{vals: []*ast.ValueNode{$1}}
 	}
 	| messageLiterals ',' messageLiteral virtualSemicolon {
-		$3.(*ast.MessageLiteralNode).Semicolon = $4
+		$3.GetMessageLiteral().Semicolon = $4
 		$1.vals = append($1.vals, $3)
 		$1.commas = append($1.commas, $2)
 		$$ = $1
@@ -564,40 +564,40 @@ messageLiterals
 
 msgElementTypeIdent
 	: msgElementKeywordName {
-		$$ = $1
+		$$ = $1.AsIdentValueNode()
 	}
 	| _SINGULAR_IDENT {
-		$$ = $1
+		$$ = $1.AsIdentValueNode()
 	}
 	| _QUALIFIED_IDENT
 	| _FULLY_QUALIFIED_IDENT
 
 oneofElementTypeIdent
 	: oneofElementKeywordName {
-		$$ = $1
+		$$ = $1.AsIdentValueNode()
 	}
 	| _SINGULAR_IDENT {
-		$$ = $1
+		$$ = $1.AsIdentValueNode()
 	}
 	| _QUALIFIED_IDENT
 	| _FULLY_QUALIFIED_IDENT
 
 notGroupElementTypeIdent
 	: notGroupElementKeywordName {
-		$$ = $1
+		$$ = $1.AsIdentValueNode()
 	}
 	| _SINGULAR_IDENT {
-		$$ = $1
+		$$ = $1.AsIdentValueNode()
 	}
 	| _QUALIFIED_IDENT
 	| _FULLY_QUALIFIED_IDENT
 
 mtdElementTypeIdent
 	: mtdElementKeywordName {
-		$$ = $1
+		$$ = $1.AsIdentValueNode()
 	}
 	| _SINGULAR_IDENT {
-		$$ = $1
+		$$ = $1.AsIdentValueNode()
 	}
 	| _QUALIFIED_IDENT
 	| _FULLY_QUALIFIED_IDENT
@@ -622,11 +622,11 @@ compactOptions
 		if r := $2.options[len($2.options)-1].Semicolon; r != nil && !r.Virtual {
 			protolex.(*protoLex).ErrExtendedSyntax("unexpected trailing '"+string(r.Rune)+"'", CategoryExtraTokens)
 		}
-		$$ = &ast.CompactOptionsNode{$1, $2.options, $3, nil}
+		$$ = &ast.CompactOptionsNode{OpenBracket: $1, Options: $2.options, CloseBracket: $3}
 	}
 	| '[' ']' {
 		protolex.(*protoLex).ErrExtendedSyntax("compact options list cannot be empty", CategoryEmptyDecl)
-		$$ = &ast.CompactOptionsNode{$1, nil, $2, nil}
+		$$ = &ast.CompactOptionsNode{OpenBracket: $1, CloseBracket: $2}
 	}
 
 compactOptionDecls
@@ -643,15 +643,15 @@ compactOptionDecls
 
 compactOption
 	: optionName '=' compactOptionValue {
-		$$ = &ast.OptionNode{nil, $1, $2, $3, nil}
+		$$ = &ast.OptionNode{Name: $1, Equals: $2, Val: $3}
 	}
 	| optionName '=' {
 		protolex.(*protoLex).ErrExtendedSyntax("expected value", CategoryIncompleteDecl)
-		$$ = &ast.OptionNode{nil, $1, $2, nil, nil}
+		$$ = &ast.OptionNode{Name: $1, Equals: $2}
 	}
 	| optionName {
 		protolex.(*protoLex).ErrExtendedSyntax("expected '='", CategoryIncompleteDecl)
-		$$ = &ast.OptionNode{nil, $1, nil, nil, nil}
+		$$ = &ast.OptionNode{Name: $1}
 	}
 	| {
 		protolex.(*protoLex).ErrExtendedSyntax("expected option name", CategoryIncompleteDecl)
@@ -660,16 +660,16 @@ compactOption
 
 groupDecl
 	: fieldCardinality _GROUP singularIdent '=' _INT_LIT '{' messageBody '}' {
-		$$ = &ast.GroupNode{$1.ToKeyword(), $2.ToKeyword(), $3, $4, $5, nil, $6, $7, $8, nil}
+		$$ = &ast.GroupNode{Label: $1.ToKeyword(), Keyword: $2.ToKeyword(), Name: $3, Equals: $4, Tag: $5, OpenBrace: $6, Decls: $7, CloseBrace: $8}
 	}
 	| fieldCardinality _GROUP singularIdent '=' _INT_LIT compactOptions virtualSemicolon '{' messageBody '}' {
 		$6.Semicolon = $7
-		$$ = &ast.GroupNode{$1.ToKeyword(), $2.ToKeyword(), $3, $4, $5, $6, $8, $9, $10, nil}
+		$$ = &ast.GroupNode{Label: $1.ToKeyword(), Keyword: $2.ToKeyword(), Name: $3, Equals: $4, Tag: $5, Options: $6, OpenBrace: $8, Decls: $9, CloseBrace: $10}
 	}
 
 oneofDecl
 	: _ONEOF singularIdent '{' oneofBody '}' {
-		$$ = &ast.OneofNode{$1.ToKeyword(), $2, $3, $4, $5, nil}
+		$$ = &ast.OneofNode{Keyword: $1.ToKeyword(), Name: $2, OpenBrace: $3, Decls: $4, CloseBrace: $5}
 	}
 
 oneofBody
@@ -688,7 +688,7 @@ oneofElements
 	}
 	| oneofElement {
 		if $1 != nil {
-			$$ = []ast.OneofElement{$1}
+			$$ = []*ast.OneofElement{$1}
 		} else {
 			$$ = nil
 		}
@@ -697,15 +697,15 @@ oneofElements
 oneofElement
 	: optionDecl nonVirtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsOneofElement()
 	}
 	| oneofFieldDecl nonVirtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsOneofElement()
 	}
 	| oneofGroupDecl virtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsOneofElement()
 	}
 	| error {
 		$$ = nil
@@ -713,34 +713,34 @@ oneofElement
 
 oneofFieldDecl
 	: oneofElementTypeIdent singularIdent '=' _INT_LIT {
-		$$ = &ast.FieldNode{nil, $1, $2, $3, $4, nil, nil}
+		$$ = &ast.FieldNode{FieldType: $1, Name: $2, Equals: $3, Tag: $4}
 	}
 	| oneofElementTypeIdent singularIdent '=' _INT_LIT compactOptions {
-		$$ = &ast.FieldNode{nil, $1, $2, $3, $4, $5, nil}
+		$$ = &ast.FieldNode{FieldType: $1, Name: $2, Equals: $3, Tag: $4, Options: $5}
 	}
 
 oneofGroupDecl
 	: _GROUP singularIdent '=' _INT_LIT '{' messageBody '}' {
-		$$ = &ast.GroupNode{nil, $1.ToKeyword(), $2, $3, $4, nil, $5, $6, $7, nil}
+		$$ = &ast.GroupNode{Keyword: $1.ToKeyword(), Name: $2, Equals: $3, Tag: $4, OpenBrace: $5, Decls: $6, CloseBrace: $7}
 	}
 	| _GROUP singularIdent '=' _INT_LIT compactOptions virtualSemicolon '{' messageBody '}' {
 		$5.Semicolon = $6
-		$$ = &ast.GroupNode{nil, $1.ToKeyword(), $2, $3, $4, $5, $7, $8, $9, nil}
+		$$ = &ast.GroupNode{Keyword: $1.ToKeyword(), Name: $2, Equals: $3, Tag: $4, Options: $5, OpenBrace: $7, Decls: $8, CloseBrace: $9}
 	}
 
 mapFieldDecl
 	: mapType virtualSemicolon singularIdent '=' _INT_LIT {
 		$1.Semicolon = $2
-		$$ = &ast.MapFieldNode{$1, $3, $4, $5, nil, nil}
+		$$ = &ast.MapFieldNode{MapType: $1, Name: $3, Equals: $4, Tag: $5}
 	}
 	| mapType virtualSemicolon singularIdent '=' _INT_LIT compactOptions {
 		$1.Semicolon = $2
-		$$ = &ast.MapFieldNode{$1, $3, $4, $5, $6, nil}
+		$$ = &ast.MapFieldNode{MapType: $1, Name: $3, Equals: $4, Tag: $5, Options: $6}
 	}
 
 mapType
 	: _MAP '<' mapKeyType ',' anyIdentifier '>' {
-		$$ = &ast.MapTypeNode{$1.ToKeyword(), $2, $3, $4, $5, $6, nil}
+		$$ = &ast.MapTypeNode{Keyword: $1.ToKeyword(), OpenAngle: $2, KeyType: $3, Comma: $4, ValueType: $5, CloseAngle: $6}
 	}
 
 mapKeyType
@@ -762,13 +762,13 @@ extensionRangeDecl
 		if $3 != nil {
 			$2.commas = append($2.commas, $3)
 		}
-		$$ = &ast.ExtensionRangeNode{$1.ToKeyword(), $2.ranges, $2.commas, nil, nil}
+		$$ = &ast.ExtensionRangeNode{Keyword: $1.ToKeyword(), Ranges: $2.ranges, Commas: $2.commas}
 	}
 	| _EXTENSIONS tagRanges optionalTrailingComma compactOptions {
 		if $3 != nil {
 			$2.commas = append($2.commas, $3)
 		}
-		$$ = &ast.ExtensionRangeNode{$1.ToKeyword(), $2.ranges, $2.commas, $4, nil}
+		$$ = &ast.ExtensionRangeNode{Keyword: $1.ToKeyword(), Ranges: $2.ranges, Commas: $2.commas, Options: $4}
 	}
 
 tagRanges
@@ -783,13 +783,13 @@ tagRanges
 
 tagRange
 	: _INT_LIT {
-		$$ = &ast.RangeNode{$1, nil, nil, nil}
+		$$ = &ast.RangeNode{StartVal: $1.AsIntValueNode()}
 	}
 	| _INT_LIT _TO _INT_LIT {
-		$$ = &ast.RangeNode{$1, $2.ToKeyword(), $3, nil}
+		$$ = &ast.RangeNode{StartVal: $1.AsIntValueNode(), To: $2.ToKeyword(), EndVal: $3.AsIntValueNode()}
 	}
 	| _INT_LIT _TO _MAX {
-		$$ = &ast.RangeNode{$1, $2.ToKeyword(), nil, $3.ToKeyword()}
+		$$ = &ast.RangeNode{StartVal: $1.AsIntValueNode(), To: $2.ToKeyword(), Max: $3}
 	}
 
 enumValueRanges
@@ -804,21 +804,21 @@ enumValueRanges
 
 enumValueRange
 	: enumValueNumber {
-		$$ = &ast.RangeNode{$1, nil, nil, nil}
+		$$ = &ast.RangeNode{StartVal: $1}
 	}
 	| enumValueNumber _TO enumValueNumber {
-		$$ = &ast.RangeNode{$1, $2.ToKeyword(), $3, nil}
+		$$ = &ast.RangeNode{StartVal: $1, To: $2.ToKeyword(), EndVal: $3}
 	}
 	| enumValueNumber _TO _MAX {
-		$$ = &ast.RangeNode{$1, $2.ToKeyword(), nil, $3.ToKeyword()}
+		$$ = &ast.RangeNode{StartVal: $1, To: $2.ToKeyword(), Max: $3}
 	}
 
 enumValueNumber
 	: _INT_LIT {
-		$$ = $1
+		$$ = $1.AsIntValueNode()
 	}
 	| '-' _INT_LIT {
-		$$ = &ast.NegativeIntLiteralNode{$1, $2}
+		$$ = (&ast.NegativeIntLiteralNode{Minus: $1, Uint: $2}).AsIntValueNode()
 	}
 
 msgReserved
@@ -852,7 +852,7 @@ reservedNames
 
 fieldNameStrings
 	: _STRING_LIT {
-		$$ = &nameSlices{names: []ast.StringValueNode{$1}}
+		$$ = &nameSlices{names: []*ast.StringValueNode{$1}}
 	}
 	| fieldNameStrings ',' _STRING_LIT {
 		$1.names = append($1.names, $3)
@@ -872,7 +872,7 @@ fieldNameIdents
 
 enumDecl
 	: _ENUM singularIdent '{' enumBody '}' {
-		$$ = &ast.EnumNode{$1.ToKeyword(), $2, $3, $4, $5, nil}
+		$$ = &ast.EnumNode{Keyword: $1.ToKeyword(), Name: $2, OpenBrace: $3, Decls: $4, CloseBrace: $5}
 	}
 
 enumBody
@@ -891,7 +891,7 @@ enumElements
 	}
 	| enumElement {
 		if $1 != nil {
-			$$ = []ast.EnumElement{$1}
+			$$ = []*ast.EnumElement{$1}
 		} else {
 			$$ = nil
 		}
@@ -900,15 +900,15 @@ enumElements
 enumElement
 	: optionDecl nonVirtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsEnumElement()
 	}
 	| enumValueDecl nonVirtualSemicolonOrInvalidComma {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsEnumElement()
 	}
 	| enumReserved nonVirtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsEnumElement()
 	}
 	| error {
 		$$ = nil
@@ -916,15 +916,15 @@ enumElement
 
 enumValueDecl
 	: enumValueName '=' enumValueNumber  {
-		$$ = &ast.EnumValueNode{$1, $2, $3, nil, nil}
+		$$ = &ast.EnumValueNode{Name: $1, Equals: $2, Number: $3}
 	}
 	| enumValueName '=' enumValueNumber compactOptions {
-		$$ = &ast.EnumValueNode{$1, $2, $3, $4, nil}
+		$$ = &ast.EnumValueNode{Name: $1, Equals: $2, Number: $3, Options: $4}
 	}
 
 messageDecl
 	: _MESSAGE singularIdent '{' messageBody '}' {
-		$$ = &ast.MessageNode{$1.ToKeyword(), $2, $3, $4, $5, nil}
+		$$ = &ast.MessageNode{Keyword: $1.ToKeyword(), Name: $2, OpenBrace: $3, Decls: $4, CloseBrace: $5}
 	}
 
 messageBody
@@ -943,7 +943,7 @@ messageElements
 	}
 	| messageElement {
 		if $1 != nil {
-			$$ = []ast.MessageElement{$1}
+			$$ = []*ast.MessageElement{$1}
 		} else {
 			$$ = nil
 		}
@@ -952,101 +952,101 @@ messageElements
 messageElement
 	: messageFieldDecl nonVirtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsMessageElement()
 	}
 	| enumDecl virtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsMessageElement()
 	}
 	| messageDecl virtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsMessageElement()
 	}
 	| extensionDecl virtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsMessageElement()
 	}
 	| extensionRangeDecl nonVirtualSemicolon{
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsMessageElement()
 	}
 	| groupDecl virtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsMessageElement()
 	}
 	| optionDecl nonVirtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsMessageElement()
 	}
 	| oneofDecl virtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsMessageElement()
 	}
 	| mapFieldDecl nonVirtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsMessageElement()
 	}
 	| msgReserved nonVirtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsMessageElement()
 	}
 	| nonVirtualSemicolon {
-		$$ = &ast.EmptyDeclNode{$1}
+		$$ = (&ast.EmptyDeclNode{Semicolon: $1}).AsMessageElement()
 	}
 
 messageFieldDecl
 	: fieldCardinality notGroupElementTypeIdent singularIdent '=' _INT_LIT {
-		$$ = &ast.FieldNode{$1.ToKeyword(), $2, $3, $4, $5, nil, nil}
+		$$ = &ast.FieldNode{Label: $1.ToKeyword(), FieldType: $2, Name: $3, Equals: $4, Tag: $5}
 	}
 	| fieldCardinality notGroupElementTypeIdent singularIdent '=' _INT_LIT compactOptions {
-		$$ = &ast.FieldNode{$1.ToKeyword(), $2, $3, $4, $5, $6, nil}
+		$$ = &ast.FieldNode{Label: $1.ToKeyword(), FieldType: $2, Name: $3, Equals: $4, Tag: $5, Options: $6}
 	}
 	| msgElementTypeIdent singularIdent '=' _INT_LIT {
-		$$ = &ast.FieldNode{nil, $1, $2, $3, $4, nil, nil}
+		$$ = &ast.FieldNode{FieldType: $1, Name: $2, Equals: $3, Tag: $4}
 	}
 	| msgElementTypeIdent singularIdent '=' _INT_LIT compactOptions {
-		$$ = &ast.FieldNode{nil, $1, $2, $3, $4, $5, nil}
+		$$ = &ast.FieldNode{FieldType: $1, Name: $2, Equals: $3, Tag: $4, Options: $5}
 	}
 	| fieldCardinality notGroupElementTypeIdent singularIdent '=' {
 		protolex.(*protoLex).ErrExtendedSyntax("missing field number after '='", CategoryIncompleteDecl)
-		$$ = &ast.FieldNode{$1.ToKeyword(), $2, $3, $4, nil, nil, nil}
+		$$ = &ast.FieldNode{Label: $1.ToKeyword(), FieldType: $2, Name: $3}
 	}
 	| fieldCardinality notGroupElementTypeIdent singularIdent {
 		protolex.(*protoLex).ErrExtendedSyntax("missing '=' after field name", CategoryIncompleteDecl)
-		$$ = &ast.FieldNode{$1.ToKeyword(), $2, $3, nil, nil, nil, nil}
+		$$ = &ast.FieldNode{Label: $1.ToKeyword(), FieldType: $2, Name: $3}
 	}
 	| fieldCardinality notGroupElementTypeIdent {
 		protolex.(*protoLex).ErrExtendedSyntax("missing field name", CategoryIncompleteDecl)
-		$$ = &ast.FieldNode{$1.ToKeyword(), $2, nil, nil, nil, nil, nil}
+		$$ = &ast.FieldNode{Label: $1.ToKeyword(), FieldType: $2}
 	}
 	| msgElementTypeIdent singularIdent '=' {
 		protolex.(*protoLex).ErrExtendedSyntax("missing field number after '='", CategoryIncompleteDecl)
-		$$ = &ast.FieldNode{nil, $1, $2, $3, nil, nil, nil}
+		$$ = &ast.FieldNode{FieldType: $1, Name: $2}
 	}
 	| msgElementTypeIdent singularIdent {
 		protolex.(*protoLex).ErrExtendedSyntax("missing '=' after field name", CategoryIncompleteDecl)
-		$$ = &ast.FieldNode{nil, $1, $2, nil, nil, nil, nil}
+		$$ = &ast.FieldNode{FieldType: $1, Name: $2}
 	}
 	| msgElementTypeIdent {
 		protolex.(*protoLex).ErrExtendedSyntax("missing field name", CategoryIncompleteDecl)
-		$$ = &ast.FieldNode{nil, $1, nil, nil, nil, nil, nil}
+		$$ = &ast.FieldNode{FieldType: $1}
 	}
 	| fieldCardinality {
 		protolex.(*protoLex).ErrExtendedSyntax("missing field type", CategoryIncompleteDecl)
-		$$ = &ast.FieldNode{$1.ToKeyword(), nil, nil, nil, nil, nil, nil}
+		$$ = &ast.FieldNode{Label: $1.ToKeyword()}
 	}
 
 extensionDecl
 	: _EXTEND anyIdentifier '{' extensionBody '}' {
-		$$ = &ast.ExtendNode{$1.ToKeyword(), $2, $3, $4, $5, nil}
+		$$ = &ast.ExtendNode{Keyword: $1.ToKeyword(), Extendee: $2, OpenBrace: $3, Decls: $4, CloseBrace: $5}
 	}
 	| _EXTEND anyIdentifier {
 		protolex.(*protoLex).ErrExtendedSyntax("expected '{'", CategoryIncompleteDecl)
-		$$ = &ast.ExtendNode{$1.ToKeyword(), $2, nil, nil, nil, nil}
+		$$ = &ast.ExtendNode{Keyword: $1.ToKeyword(), Extendee: $2}
 	}
 	| _EXTEND {
 		protolex.(*protoLex).ErrExtendedSyntax("expected message name", CategoryIncompleteDecl)
-		$$ = &ast.ExtendNode{$1.ToKeyword(), nil, nil, nil, nil, nil}
+		$$ = &ast.ExtendNode{Keyword: $1.ToKeyword()}
 	}
 
 extensionBody
@@ -1065,7 +1065,7 @@ extensionElements
 	}
 	| extensionElement {
 		if $1 != nil {
-			$$ = []ast.ExtendElement{$1}
+			$$ = []*ast.ExtendElement{$1}
 		} else {
 			$$ = nil
 		}
@@ -1074,11 +1074,11 @@ extensionElements
 extensionElement
 	: messageFieldDecl nonVirtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsExtendElement()
 	}
 	| groupDecl virtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsExtendElement()
 	}
 	| mapFieldDecl ';' {
 		$1.Semicolon = $2
@@ -1116,7 +1116,7 @@ extensionElement
 
 serviceDecl
 	: _SERVICE singularIdent '{' serviceBody '}' {
-		$$ = &ast.ServiceNode{$1.ToKeyword(), $2, $3, $4, $5, nil}
+		$$ = &ast.ServiceNode{Keyword: $1.ToKeyword(), Name: $2, OpenBrace: $3, Decls: $4, CloseBrace: $5}
 	}
 
 serviceBody
@@ -1135,7 +1135,7 @@ serviceElements
 	}
 	| serviceElement {
 		if $1 != nil {
-			$$ = []ast.ServiceElement{$1}
+			$$ = []*ast.ServiceElement{$1}
 		} else {
 			$$ = nil
 		}
@@ -1147,15 +1147,15 @@ serviceElements
 serviceElement
 	: optionDecl nonVirtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsServiceElement()
 	}
 	| methodDecl nonVirtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsServiceElement()
 	}
 	| methodWithBodyDecl ';' {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsServiceElement()
 	}
 	| error {
 		$$ = nil
@@ -1163,28 +1163,20 @@ serviceElement
 
 methodDecl
 	: _RPC singularIdent methodMessageType _RETURNS methodMessageType {
-		$$ = &ast.RPCNode{$1.ToKeyword(), $2, $3, $4.ToKeyword(), $5, nil, nil, nil, nil}
+		$$ = &ast.RPCNode{Keyword: $1.ToKeyword(), Name: $2, Input: $3, Returns: $4.ToKeyword(), Output: $5}
 	}
 
 methodWithBodyDecl
   : _RPC singularIdent methodMessageType _RETURNS methodMessageType '{' methodBody '}' {
-		$$ = &ast.RPCNode{$1.ToKeyword(), $2, $3, $4.ToKeyword(), $5, $6, $7, $8, nil}
+		$$ = &ast.RPCNode{Keyword: $1.ToKeyword(), Name: $2, Input: $3, Returns: $4.ToKeyword(), Output: $5, OpenBrace: $6, Decls: $7, CloseBrace: $8}
 	}
 
 methodMessageType
 	: '(' _STREAM mtdElementTypeIdent ')' {
-		if $3 == nil {
-			$$ = &ast.RPCTypeNode{$1, $2.ToKeyword(), nil, $4}
-		} else {
-			$$ = &ast.RPCTypeNode{$1, $2.ToKeyword(), $3, $4}
-		}
+		$$ = &ast.RPCTypeNode{OpenParen: $1, Stream: $2.ToKeyword(), MessageType: $3, CloseParen: $4}
 	}
 	| '(' mtdElementTypeIdent ')' {
-		if $2 == nil {
-			$$ = &ast.RPCTypeNode{$1, nil, nil, $3}
-		} else {
-			$$ = &ast.RPCTypeNode{$1, nil, $2, $3}
-		}
+		$$ = &ast.RPCTypeNode{OpenParen: $1, MessageType: $2, CloseParen: $3}
 	}
 
 methodBody
@@ -1203,7 +1195,7 @@ methodElements
 	}
 	| methodElement {
 		if $1 != nil {
-			$$ = []ast.RPCElement{$1}
+			$$ = []*ast.RPCElement{$1}
 		} else {
 			$$ = nil
 		}
@@ -1212,7 +1204,7 @@ methodElements
 methodElement
 	: optionDecl nonVirtualSemicolon {
 		$1.Semicolon = $2
-		$$ = $1
+		$$ = $1.AsRPCElement()
 	}
 	| error {
 		$$ = nil

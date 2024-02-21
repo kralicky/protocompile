@@ -860,7 +860,7 @@ func findImportSpan(res parser.Result, dep UnresolvedPath) ast.SourceSpan {
 		return ast.UnknownSpan(res.FileNode().Name())
 	}
 	for _, decl := range root.Decls {
-		if imp, ok := decl.(*ast.ImportNode); ok {
+		if imp := decl.GetImport(); imp != nil {
 			if imp.IsIncomplete() {
 				continue
 			}

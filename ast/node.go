@@ -14,7 +14,11 @@
 
 package ast
 
-import "reflect"
+import (
+	"reflect"
+
+	"google.golang.org/protobuf/proto"
+)
 
 // Node is the interface implemented by all nodes in the AST. It
 // provides information about the span of this AST node in terms
@@ -22,6 +26,8 @@ import "reflect"
 // about all prior comments (attached as leading comments) and
 // optional subsequent comments (attached as trailing comments).
 type Node interface {
+	proto.Message
+
 	Start() Token
 	End() Token
 }
@@ -32,7 +38,12 @@ type Node interface {
 // the following lexed token.
 type TerminalNodeInterface interface {
 	Node
-	Token() Token
+	GetToken() Token
+}
+
+type NamedNode interface {
+	Node
+	GetName() *IdentNode
 }
 
 var (
@@ -40,28 +51,26 @@ var (
 	_ TerminalNodeInterface = (*UintLiteralNode)(nil)
 	_ TerminalNodeInterface = (*FloatLiteralNode)(nil)
 	_ TerminalNodeInterface = (*IdentNode)(nil)
-	_ TerminalNodeInterface = (*SpecialFloatLiteralNode)(nil)
-	_ TerminalNodeInterface = (*KeywordNode)(nil)
 	_ TerminalNodeInterface = (*RuneNode)(nil)
 )
 
-// TerminalNode contains bookkeeping shared by all TerminalNode
-// implementations. It is embedded in all such node types in this
-// package. It provides the implementation of the TerminalNodeInterface
-// interface.
-type TerminalNode Token
+func (n *StringLiteralNode) Start() Token { return n.GetToken() }
+func (n *StringLiteralNode) End() Token   { return n.GetToken() }
 
-func (n TerminalNode) Start() Token {
-	return Token(n)
-}
+func (n *UintLiteralNode) Start() Token { return n.GetToken() }
+func (n *UintLiteralNode) End() Token   { return n.GetToken() }
 
-func (n TerminalNode) End() Token {
-	return Token(n)
-}
+func (n *FloatLiteralNode) Start() Token { return n.GetToken() }
+func (n *FloatLiteralNode) End() Token   { return n.GetToken() }
 
-func (n TerminalNode) Token() Token {
-	return Token(n)
-}
+func (n *IdentNode) Start() Token { return n.GetToken() }
+func (n *IdentNode) End() Token   { return n.GetToken() }
+
+func (n *SpecialFloatLiteralNode) Start() Token { return n.Keyword.GetToken() }
+func (n *SpecialFloatLiteralNode) End() Token   { return n.Keyword.GetToken() }
+
+func (n *RuneNode) Start() Token { return n.GetToken() }
+func (n *RuneNode) End() Token   { return n.GetToken() }
 
 func IsCompositeNode(n Node) bool {
 	_, ok := n.(TerminalNodeInterface)
@@ -80,30 +89,6 @@ func IsVirtualNode(n Node) bool {
 
 func IsNil(n Node) bool {
 	return n == nil || reflect.ValueOf(n).IsNil()
-}
-
-// RuneNode represents a single rune in protobuf source. Runes
-// are typically collected into items, but some runes stand on
-// their own, such as punctuation/symbols like commas, semicolons,
-// equals signs, open and close symbols (braces, brackets, angles,
-// and parentheses), and periods/dots.
-// TODO: make this more compact; if runes don't have attributed comments
-// then we don't need a Token to represent them and only need an offset
-// into the file's contents.
-type RuneNode struct {
-	TerminalNode
-	Rune rune
-
-	// Virtual is true if this rune is not actually present in the source file,
-	// but is instead injected by the lexer to satisfy certain grammar rules.
-	Virtual bool
-}
-
-// EmptyDeclNode represents an empty declaration in protobuf source.
-// These amount to extra semicolons, with no actual content preceding
-// the semicolon.
-type EmptyDeclNode struct {
-	Semicolon *RuneNode
 }
 
 func (e *EmptyDeclNode) Start() Token { return e.Semicolon.Start() }
@@ -128,17 +113,7 @@ func (e *EmptyDeclNode) enumElement()    {}
 func (e *EmptyDeclNode) serviceElement() {}
 func (e *EmptyDeclNode) methodElement()  {}
 
-type ErrorNode struct {
-	E Node
-}
-
-func (e *ErrorNode) Start() Token { return e.E.Start() }
-func (e *ErrorNode) End() Token   { return e.E.End() }
-
-func NewErrorNode(node Node) *ErrorNode {
-	return &ErrorNode{
-		E: node,
-	}
-}
+func (e *ErrorNode) Start() Token { return e.Err.Start() }
+func (e *ErrorNode) End() Token   { return e.Err.End() }
 
 func (e *ErrorNode) fileElement() {}

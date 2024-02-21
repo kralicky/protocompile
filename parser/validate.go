@@ -94,7 +94,7 @@ func validateImports(res *result, handler *reporter.Handler) error {
 	}
 	imports := make(map[string]ast.SourcePos)
 	for _, decl := range fileNode.Decls {
-		imp, ok := decl.(*ast.ImportNode)
+		imp, ok := decl.Unwrap().(*ast.ImportNode)
 		if !ok || imp.IsIncomplete() {
 			continue
 		}
@@ -228,13 +228,13 @@ func validateMessage(res *result, syntax syntaxType, name protoreflect.FullName,
 	for _, fld := range md.Field {
 		fn := res.FieldNode(fld)
 		if _, ok := rsvdNames[fld.GetName()]; ok {
-			fieldNameNodeInfo := res.file.NodeInfo(fn.FieldName())
+			fieldNameNodeInfo := res.file.NodeInfo(fn.GetName())
 			if err := handler.HandleErrorf(fieldNameNodeInfo, "%s: field %s is using a reserved name", scope, fld.GetName()); err != nil {
 				return err
 			}
 		}
 		if existing := fieldTags[fld.GetNumber()]; existing != "" {
-			fieldTagNodeInfo := res.file.NodeInfo(fn.FieldTag())
+			fieldTagNodeInfo := res.file.NodeInfo(fn.GetTag())
 			if err := handler.HandleErrorf(fieldTagNodeInfo, "%s: fields %s and %s both have the same tag %d", scope, existing, fld.GetName(), fld.GetNumber()); err != nil {
 				return err
 			}
@@ -243,7 +243,7 @@ func validateMessage(res *result, syntax syntaxType, name protoreflect.FullName,
 		// check reserved ranges
 		r := sort.Search(len(rsvd), func(index int) bool { return rsvd[index].end > fld.GetNumber() })
 		if r < len(rsvd) && rsvd[r].start <= fld.GetNumber() {
-			fieldTagNodeInfo := res.file.NodeInfo(fn.FieldTag())
+			fieldTagNodeInfo := res.file.NodeInfo(fn.GetTag())
 			if err := handler.HandleErrorf(fieldTagNodeInfo, "%s: field %s is using tag %d which is in reserved range %d to %d", scope, fld.GetName(), fld.GetNumber(), rsvd[r].start, rsvd[r].end-1); err != nil {
 				return err
 			}
@@ -251,7 +251,7 @@ func validateMessage(res *result, syntax syntaxType, name protoreflect.FullName,
 		// and check extension ranges
 		e := sort.Search(len(exts), func(index int) bool { return exts[index].end > fld.GetNumber() })
 		if e < len(exts) && exts[e].start <= fld.GetNumber() {
-			fieldTagNodeInfo := res.file.NodeInfo(fn.FieldTag())
+			fieldTagNodeInfo := res.file.NodeInfo(fn.GetTag())
 			if err := handler.HandleErrorf(fieldTagNodeInfo, "%s: field %s is using tag %d which is in extension range %d to %d", scope, fld.GetName(), fld.GetNumber(), exts[e].start, exts[e].end-1); err != nil {
 				return err
 			}
@@ -283,9 +283,9 @@ func isIdentifier(s string) bool {
 	return true
 }
 
-func findMessageReservedNameNode(msgNode ast.MessageDeclNode, name string) ast.Node {
-	var decls []ast.MessageElement
-	switch msgNode := msgNode.(type) {
+func findMessageReservedNameNode(msgNode *ast.MessageDeclNode, name string) ast.Node {
+	var decls []*ast.MessageElement
+	switch msgNode := msgNode.Unwrap().(type) {
 	case *ast.MessageNode:
 		decls = msgNode.Decls
 	case *ast.GroupNode:
@@ -296,13 +296,16 @@ func findMessageReservedNameNode(msgNode ast.MessageDeclNode, name string) ast.N
 	return findReservedNameNode(msgNode, decls, name)
 }
 
-func findReservedNameNode[T ast.Node](parent ast.Node, decls []T, name string) ast.Node {
+func findReservedNameNode[T interface {
+	ast.Node
+	GetReserved() *ast.ReservedNode
+}](parent ast.Node, decls []T, name string) ast.Node {
 	for _, decl := range decls {
 		// NB: We have to convert to empty interface first, before we can do a type
 		// assertion because type assertions on type parameters aren't allowed. (The
 		// compiler cannot yet know whether T is an interface type or not.)
-		rsvd, ok := any(decl).(*ast.ReservedNode)
-		if !ok {
+		rsvd := decl.GetReserved()
+		if rsvd == nil {
 			continue
 		}
 		for _, rsvdName := range rsvd.Names {
@@ -351,7 +354,7 @@ func validateEnum(res *result, syntax syntaxType, name protoreflect.FullName, ed
 		}
 		if !valid {
 			optNode := res.OptionNode(allowAliasOpt)
-			optNodeInfo := res.file.NodeInfo(optNode.GetValue())
+			optNodeInfo := res.file.NodeInfo(optNode.GetVal())
 			if err := handler.HandleErrorf(optNodeInfo, "%s: expecting bool value for allow_alias option", scope); err != nil {
 				return err
 			}
@@ -386,7 +389,7 @@ func validateEnum(res *result, syntax syntaxType, name protoreflect.FullName, ed
 	}
 	if allowAlias && !hasAlias {
 		optNode := res.OptionNode(allowAliasOpt)
-		optNodeInfo := res.file.NodeInfo(optNode.GetValue())
+		optNodeInfo := res.file.NodeInfo(optNode.GetVal())
 		handler.HandleWarningf(optNodeInfo, "%s: allow_alias is true but no values are aliases", scope)
 	}
 
@@ -442,7 +445,7 @@ func validateEnum(res *result, syntax syntaxType, name protoreflect.FullName, ed
 }
 
 func findEnumReservedNameNode(enumNode ast.Node, name string) ast.Node {
-	var decls []ast.EnumElement
+	var decls []*ast.EnumElement
 	if enumNode, ok := enumNode.(*ast.EnumNode); ok {
 		decls = enumNode.Decls
 		// if not the right type, we leave decls empty
@@ -466,14 +469,14 @@ func validateField(res *result, syntax syntaxType, name protoreflect.FullName, f
 				return err
 			}
 		} else if fld.Label != nil && fld.GetLabel() == descriptorpb.FieldDescriptorProto_LABEL_REQUIRED {
-			fieldLabelNodeInfo := res.file.NodeInfo(node.FieldLabel())
+			fieldLabelNodeInfo := res.file.NodeInfo(node.GetLabel())
 			if err := handler.HandleErrorf(fieldLabelNodeInfo, "%s: label 'required' is not allowed in proto3 or editions", scope); err != nil {
 				return err
 			}
 		}
 		if syntax == syntaxEditions {
 			if fld.Label != nil && fld.GetLabel() == descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL {
-				fieldLabelNodeInfo := res.file.NodeInfo(node.FieldLabel())
+				fieldLabelNodeInfo := res.file.NodeInfo(node.GetLabel())
 				if err := handler.HandleErrorf(fieldLabelNodeInfo, "%s: label 'optional' is not allowed in editions; use option features.field_presence instead", scope); err != nil {
 					return err
 				}
@@ -500,13 +503,13 @@ func validateField(res *result, syntax syntaxType, name protoreflect.FullName, f
 		}
 	} else {
 		if fld.Label == nil && fld.OneofIndex == nil {
-			fieldNameNodeInfo := res.file.NodeInfo(node.FieldName())
+			fieldNameNodeInfo := res.file.NodeInfo(node.GetLabel())
 			if err := handler.HandleErrorf(fieldNameNodeInfo, "%s: field has no label; proto2 requires explicit 'optional' label", scope); err != nil {
 				return err
 			}
 		}
 		if fld.GetExtendee() != "" && fld.Label != nil && fld.GetLabel() == descriptorpb.FieldDescriptorProto_LABEL_REQUIRED {
-			fieldLabelNodeInfo := res.file.NodeInfo(node.FieldLabel())
+			fieldLabelNodeInfo := res.file.NodeInfo(node.GetLabel())
 			if err := handler.HandleErrorf(fieldLabelNodeInfo, "%s: extension fields cannot be 'required'", scope); err != nil {
 				return err
 			}
@@ -519,7 +522,7 @@ func validateField(res *result, syntax syntaxType, name protoreflect.FullName, f
 type tagRange struct {
 	start int32
 	end   int32
-	node  ast.RangeDeclNode
+	node  *ast.RangeNode
 }
 
 type tagRanges []tagRange

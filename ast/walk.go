@@ -9,6 +9,8 @@ type Visitor interface {
 }
 
 func Walk(v Visitor, node Node) {
+	node = Unwrap(node)
+
 	v.Before(node)
 	defer v.After(node)
 
@@ -106,8 +108,8 @@ func Walk(v Visitor, node Node) {
 		if n.Open != nil {
 			Walk(v, n.Open)
 		}
-		if !IsNil(n.URLPrefix) {
-			Walk(v, n.URLPrefix)
+		if !IsNil(n.UrlPrefix) {
+			Walk(v, n.UrlPrefix)
 		}
 		if n.Slash != nil {
 			Walk(v, n.Slash)
@@ -222,8 +224,8 @@ func Walk(v Visitor, node Node) {
 		if n.Label != nil {
 			Walk(v, n.Label)
 		}
-		if !IsNil(n.FldType) {
-			Walk(v, n.FldType)
+		if !IsNil(n.FieldType) {
+			Walk(v, n.FieldType)
 		}
 		if n.Name != nil {
 			Walk(v, n.Name)
@@ -498,18 +500,18 @@ func Walk(v Visitor, node Node) {
 		if n.Semicolon != nil {
 			Walk(v, n.Semicolon)
 		}
+	case *SpecialFloatLiteralNode:
+		Walk(v, n.Keyword)
 	case *IdentNode,
 		*StringLiteralNode,
 		*UintLiteralNode,
 		*FloatLiteralNode,
-		*KeywordNode,
-		*SpecialFloatLiteralNode, // Note: SpecialFloatLiteralNode embeds KeywordNode
 		*RuneNode,
 		*EmptyDeclNode:
 		// terminal node
 	case *ErrorNode:
-		if !IsNil(n.E) {
-			Walk(v, n.E)
+		if !IsNil(n.Err) {
+			Walk(v, n.Err)
 		}
 	default:
 		panic(fmt.Sprintf("unexpected type of node: %T", n))

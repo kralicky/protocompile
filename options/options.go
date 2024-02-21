@@ -72,14 +72,14 @@ type interpreter struct {
 
 type file interface {
 	parser.Result
-	ResolveMessageLiteralExtensionName(ast.IdentValueNode) string
+	ResolveMessageLiteralExtensionName(*ast.IdentValueNode) string
 }
 
 type noResolveFile struct {
 	parser.Result
 }
 
-func (n noResolveFile) ResolveMessageLiteralExtensionName(ast.IdentValueNode) string {
+func (n noResolveFile) ResolveMessageLiteralExtensionName(*ast.IdentValueNode) string {
 	return ""
 }
 
@@ -374,7 +374,7 @@ func (interp *interpreter) interpretFieldPseudoOptions(fqn string, fld *descript
 		opt := uo[index]
 		optNode := interp.file.OptionNode(opt)
 		if opt.StringValue == nil {
-			return interp.HandleTypeMismatchErrorf(nil, optNode.GetValue(), "%s: expecting string value for json_name option", scope)
+			return interp.HandleTypeMismatchErrorf(nil, optNode.GetVal(), "%s: expecting string value for json_name option", scope)
 		}
 		jsonName := string(opt.StringValue)
 		// Extensions don't support custom json_name values.
@@ -383,16 +383,15 @@ func (interp *interpreter) interpretFieldPseudoOptions(fqn string, fld *descript
 			return interp.HandleOptionForbiddenErrorf(nil, optNode.GetName(), "%s: option json_name is not allowed on extensions", scope)
 		}
 		// attribute source code info
-		if on, ok := optNode.(*ast.OptionNode); ok {
-			interp.index[on] = &sourceinfo.OptionSourceInfo{Path: []int32{-1, internal.FieldJSONNameTag}}
-		}
+		interp.index[optNode] = &sourceinfo.OptionSourceInfo{Path: []int32{-1, internal.FieldJSONNameTag}}
+
 		uo = internal.RemoveOption(uo, index)
 		if strings.HasPrefix(jsonName, "[") && strings.HasSuffix(jsonName, "]") {
-			return interp.HandleOptionValueErrorf(nil, optNode.GetValue(), "%s: expecting string value for json_name option", scope)
+			return interp.HandleOptionValueErrorf(nil, optNode.GetVal(), "%s: expecting string value for json_name option", scope)
 		}
 		name := string(opt.StringValue)
 		if strings.HasPrefix(name, "[") && strings.HasSuffix(name, "]") {
-			return interp.HandleOptionValueErrorf(nil, optNode.GetValue(), "%s: option json_name value cannot start with '[' and end with ']'; that is reserved for representing extensions", scope)
+			return interp.HandleOptionValueErrorf(nil, optNode.GetVal(), "%s: option json_name value cannot start with '[' and end with ']'; that is reserved for representing extensions", scope)
 		}
 		interp.descriptorIndex.OptionsToFieldDescriptors[opt] = resolveDescriptor[protoreflect.FieldDescriptor](interp.resolver, fqn)
 		fld.JsonName = proto.String(jsonName)
@@ -408,12 +407,10 @@ func (interp *interpreter) interpretFieldPseudoOptions(fqn string, fld *descript
 		interp.descriptorIndex.FieldReferenceNodesToFieldDescriptors[nm] = fldDesc
 		// attribute source code info
 		optNode := interp.file.OptionNode(uo[index])
-		if on, ok := optNode.(*ast.OptionNode); ok {
-			interp.index[on] = &sourceinfo.OptionSourceInfo{Path: []int32{-1, internal.FieldDefaultTag}}
+		interp.index[optNode] = &sourceinfo.OptionSourceInfo{Path: []int32{-1, internal.FieldDefaultTag}}
 
-			if fldDesc.Kind() == protoreflect.EnumKind {
-				interp.indexEnumValueRef(fldDesc, on.Val)
-			}
+		if fldDesc.Kind() == protoreflect.EnumKind {
+			interp.indexEnumValueRef(fldDesc, optNode.Val)
 		}
 		uo = internal.RemoveOption(uo, index)
 	}
@@ -442,7 +439,7 @@ func (interp *interpreter) processDefaultOption(scope string, fqn string, fld *d
 		Option:      opt,
 	}
 
-	val := optNode.GetValue()
+	val := optNode.GetVal()
 	var v interface{}
 	if val.Value() == nil {
 		// no value in the AST, so we dig the value out of the uninterpreted option proto
@@ -486,8 +483,8 @@ func (interp *interpreter) processDefaultOption(scope string, fqn string, fld *d
 	return found, nil
 }
 
-func (interp *interpreter) defaultValue(mc *internal.MessageContext, fld *descriptorpb.FieldDescriptorProto, val ast.ValueNode) (interface{}, error) {
-	if _, ok := val.(*ast.MessageLiteralNode); ok {
+func (interp *interpreter) defaultValue(mc *internal.MessageContext, fld *descriptorpb.FieldDescriptorProto, val *ast.ValueNode) (interface{}, error) {
+	if msgLit := val.GetMessageLiteral(); msgLit != nil {
 		return -1, interp.HandleOptionForbiddenErrorf(mc, val, "default value cannot be a message")
 	}
 	if fld.GetType() == descriptorpb.FieldDescriptorProto_TYPE_ENUM {
@@ -948,10 +945,8 @@ func (interp *interpreter) interpretOptions(
 		if !uo.Name[0].GetIsExtension() && uo.Name[0].GetNamePart() == featuresFieldName {
 			featuresInfo = append(featuresInfo, res)
 		}
-		if optn, ok := node.(*ast.OptionNode); ok {
-			si := res.toSourceInfo()
-			interp.index[optn] = si
-		}
+		si := res.toSourceInfo()
+		interp.index[node] = si
 	}
 
 	if err := interp.validateFeatures(targetType, msg, featuresInfo); err != nil && !interp.lenient {
@@ -1055,7 +1050,7 @@ func (interp *interpreter) validateFeatures(
 
 func (interp *interpreter) positionOfFeature(featuresInfo []*interpretedOption, fieldNumbers ...protoreflect.FieldNumber) ast.Node {
 	if interp.file.AST() == nil {
-		return ast.NewNoSourceNode(interp.file.FileDescriptorProto().GetName())
+		return &ast.NoSourceNode{Filename: interp.file.FileDescriptorProto().GetName()}
 	}
 	for _, info := range featuresInfo {
 		matched, remainingNumbers, node := matchInterpretedOption(info, fieldNumbers)
@@ -1069,7 +1064,7 @@ func (interp *interpreter) positionOfFeature(featuresInfo []*interpretedOption, 
 			return node
 		}
 	}
-	return ast.NewNoSourceNode(interp.file.FileDescriptorProto().GetName())
+	return &ast.NoSourceNode{Filename: interp.file.FileDescriptorProto().GetName()}
 }
 
 func matchInterpretedOption(info *interpretedOption, path []protoreflect.FieldNumber) (bool, []protoreflect.FieldNumber, ast.Node) {
@@ -1338,7 +1333,7 @@ func (interp *interpreter) interpretField(mc *internal.MessageContext, msg proto
 	}
 
 	optNode := interp.file.OptionNode(opt)
-	optValNode := optNode.GetValue()
+	optValNode := optNode.GetVal()
 	var val interpretedFieldValue
 	var index int
 	var err error
@@ -1402,10 +1397,10 @@ func (interp *interpreter) interpretField(mc *internal.MessageContext, msg proto
 	}, err
 }
 
-func (interp *interpreter) indexEnumValueRef(fld protoreflect.FieldDescriptor, optValNode ast.ValueNode) {
+func (interp *interpreter) indexEnumValueRef(fld protoreflect.FieldDescriptor, optValNode *ast.ValueNode) {
 	enumDesc := fld.Enum()
-	switch v := optValNode.(type) {
-	case ast.IdentValueNode:
+	switch v := optValNode.Unwrap().(type) {
+	case *ast.IdentNode:
 		interp.descriptorIndex.EnumValueIdentNodesToEnumValueDescriptors[v] = enumDesc.Values().ByName(protoreflect.Name(v.AsIdentifier()))
 	}
 }
@@ -1423,9 +1418,9 @@ func (interp *interpreter) indexInterpretedFieldsRecursive(interpretedField *int
 // setOptionField sets the value for field fld in the given message msg to the value represented
 // by AST node val. The given name is the AST node that corresponds to the name of fld. On success,
 // it returns additional metadata about the field that was set.
-func (interp *interpreter) setOptionField(mc *internal.MessageContext, msg protoreflect.Message, fld protoreflect.FieldDescriptor, name ast.Node, val ast.ValueNode, insideMsgLiteral bool) (interpretedFieldValue, int, error) {
+func (interp *interpreter) setOptionField(mc *internal.MessageContext, msg protoreflect.Message, fld protoreflect.FieldDescriptor, name ast.Node, val *ast.ValueNode, insideMsgLiteral bool) (interpretedFieldValue, int, error) {
 	v := val.Value()
-	if sl, ok := v.([]ast.ValueNode); ok {
+	if sl, ok := v.([]*ast.ValueNode); ok {
 		// handle slices a little differently than the others
 		if fld.Cardinality() != protoreflect.Repeated {
 			return interpretedFieldValue{}, 0, interp.HandleOptionForbiddenErrorf(mc, val, "value is an array but field is not repeated")
@@ -1784,7 +1779,7 @@ func valueKind(val interface{}) string {
 		return "string"
 	case []*ast.MessageFieldNode:
 		return "message"
-	case []ast.ValueNode:
+	case []*ast.ValueNode:
 		return "array"
 	default:
 		return fmt.Sprintf("%T", val)
@@ -1813,7 +1808,7 @@ func optionValueKind(opt *descriptorpb.UninterpretedOption) string {
 
 // fieldValue computes a compile-time value (constant or list or message literal) for the given
 // AST node val. The value in val must be assignable to the field fld.
-func (interp *interpreter) fieldValue(mc *internal.MessageContext, msg protoreflect.Message, fld protoreflect.FieldDescriptor, val ast.ValueNode, insideMsgLiteral bool) (interpretedFieldValue, error) {
+func (interp *interpreter) fieldValue(mc *internal.MessageContext, msg protoreflect.Message, fld protoreflect.FieldDescriptor, val *ast.ValueNode, insideMsgLiteral bool) (interpretedFieldValue, error) {
 	k := fld.Kind()
 	switch k {
 	case protoreflect.EnumKind:
@@ -1854,7 +1849,7 @@ func (interp *interpreter) fieldValue(mc *internal.MessageContext, msg protorefl
 
 // enumFieldValue resolves the given AST node val as an enum value descriptor. If the given
 // value is not a valid identifier (or number if allowed), an error is returned instead.
-func (interp *interpreter) enumFieldValue(mc *internal.MessageContext, ed protoreflect.EnumDescriptor, val ast.ValueNode, allowNumber bool) (protoreflect.EnumNumber, protoreflect.Name, error) {
+func (interp *interpreter) enumFieldValue(mc *internal.MessageContext, ed protoreflect.EnumDescriptor, val *ast.ValueNode, allowNumber bool) (protoreflect.EnumNumber, protoreflect.Name, error) {
 	v := val.Value()
 	var num protoreflect.EnumNumber
 	switch v := v.(type) {
@@ -1916,7 +1911,7 @@ func (interp *interpreter) enumFieldValueFromProto(mc *internal.MessageContext, 
 
 // scalarFieldValue resolves the given AST node val as a value whose type is assignable to a
 // field with the given fldType.
-func (interp *interpreter) scalarFieldValue(mc *internal.MessageContext, fldType descriptorpb.FieldDescriptorProto_Type, val ast.ValueNode, insideMsgLiteral bool) (interface{}, error) {
+func (interp *interpreter) scalarFieldValue(mc *internal.MessageContext, fldType descriptorpb.FieldDescriptorProto_Type, val *ast.ValueNode, insideMsgLiteral bool) (interface{}, error) {
 	v := val.Value()
 	switch fldType {
 	case descriptorpb.FieldDescriptorProto_TYPE_BOOL:
@@ -2217,13 +2212,13 @@ func (interp *interpreter) messageLiteralValue(mc *internal.MessageContext, fiel
 		}
 		if fieldNode.Name.IsAnyTypeReference() && !fieldNode.IsIncomplete() {
 			if fmd.FullName() != "google.protobuf.Any" {
-				return interpretedFieldValue{}, interp.HandleOptionForbiddenErrorf(mc, fieldNode.Name.URLPrefix, "type references are only allowed for google.protobuf.Any, but this type is %s", fmd.FullName())
+				return interpretedFieldValue{}, interp.HandleOptionForbiddenErrorf(mc, fieldNode.Name.UrlPrefix, "type references are only allowed for google.protobuf.Any, but this type is %s", fmd.FullName())
 			}
 			if foundAnyNode {
-				return interpretedFieldValue{}, interp.HandleOptionForbiddenErrorf(mc, fieldNode.Name.URLPrefix, "multiple any type references are not allowed")
+				return interpretedFieldValue{}, interp.HandleOptionForbiddenErrorf(mc, fieldNode.Name.UrlPrefix, "multiple any type references are not allowed")
 			}
 			foundAnyNode = true
-			urlPrefix := fieldNode.Name.URLPrefix.AsIdentifier()
+			urlPrefix := fieldNode.Name.UrlPrefix.AsIdentifier()
 			msgName := fieldNode.Name.Name.AsIdentifier()
 			fullURL := fmt.Sprintf("%s/%s", urlPrefix, msgName)
 			// TODO: Support other URLs dynamically -- the caller of protocompile
@@ -2233,7 +2228,7 @@ func (interp *interpreter) messageLiteralValue(mc *internal.MessageContext, fiel
 			// "type.googleprod.com" as hosts/prefixes and using the compiled
 			// file's transitive closure to find the named message.
 			if urlPrefix != "type.googleapis.com" && urlPrefix != "type.googleprod.com" {
-				return interpretedFieldValue{}, interp.HandleOptionNotFoundErrorf(mc, fieldNode.Name.URLPrefix, "could not resolve type reference %s", fullURL)
+				return interpretedFieldValue{}, interp.HandleOptionNotFoundErrorf(mc, fieldNode.Name.UrlPrefix, "could not resolve type reference %s", fullURL)
 			}
 			anyFields, ok := fieldNode.Val.Value().([]*ast.MessageFieldNode)
 			if !ok {
@@ -2241,7 +2236,7 @@ func (interp *interpreter) messageLiteralValue(mc *internal.MessageContext, fiel
 			}
 			anyMd := resolveDescriptor[protoreflect.MessageDescriptor](interp.resolver, string(msgName))
 			if anyMd == nil {
-				return interpretedFieldValue{}, interp.HandleOptionNotFoundErrorf(mc, fieldNode.Name.URLPrefix, "could not resolve type reference %s", fullURL)
+				return interpretedFieldValue{}, interp.HandleOptionNotFoundErrorf(mc, fieldNode.Name.UrlPrefix, "could not resolve type reference %s", fullURL)
 			}
 			// parse the message value
 			msgVal, err := interp.messageLiteralValue(mc, anyFields, dynamicpb.NewMessage(anyMd))

@@ -89,7 +89,7 @@ func leavesAsSlice(file *ast.FileNode) []ast.Token {
 	var tokens []ast.Token
 	ast.Inspect(file, func(n ast.Node) bool {
 		if ast.IsTerminalNode(n) {
-			tok, comment := file.GetItem(n.(ast.TerminalNodeInterface).Token().AsItem())
+			tok, comment := file.GetItem(n.(ast.TerminalNodeInterface).GetToken().AsItem())
 			if comment.IsValid() {
 				return true
 			}

@@ -1,0 +1,755 @@
+syntax = "proto3";
+
+package ast;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "github.com/kralicky/protocompile/ast";
+
+// Token represents a single lexed token.
+enum Token {
+  Unknown = 0;
+
+  // TokenError indicates an invalid token. It is returned from query
+  // functions when no valid token satisfies the request.
+  Error = -1;
+
+  reserved 1 to max;
+}
+
+// FileInfo contains information about the contents of a source file, including
+// details about comments and items. A lexer accumulates these details as it
+// scans the file contents. This allows efficient representation of things like
+// source positions.
+message FileInfo {
+  message CommentInfo {
+    // the index of the item, in the file's items slice, that represents this
+    // comment
+    int32 index = 1;
+    // the index of the token to which this comment is attributed.
+    int32 attributedToIndex = 2;
+    // if > 0, the comment is attributed to the token in attributedToIndex for
+    // display and interaction purposes, but only because the token it should be
+    // attributed to is a virtual token - this has implications when formatting
+    // extended syntax virtual tokens.
+    int32 virtualIndex = 3;
+  }
+  message ItemSpan {
+    // the offset into the file of the first character of an item.
+    int32 offset = 1;
+    // the length of the item
+    int32 length = 2;
+  }
+  // The name of the source file.
+  string name = 1;
+  // The raw contents of the source file.
+  bytes data = 2;
+  // The offsets for each line in the file. The value is the zero-based byte
+  // offset for a given line. The line is given by its index. So the value at
+  // index 0 is the offset for the first line (which is always zero). The
+  // value at index 1 is the offset at which the second line begins. Etc.
+  repeated int32 lines = 3;
+  // The info for every comment in the file. This is empty if the file has no
+  // comments. The first entry corresponds to the first comment in the file,
+  // and so on.
+  repeated CommentInfo comments = 4;
+  // The info for every lexed item in the file. The last item in the slice
+  // corresponds to the EOF, so every file (even an empty one) should have at
+  // least one entry. This includes all terminal symbols (tokens) in the AST
+  // as well as all comments.
+  repeated ItemSpan itemList = 5;
+  // Document version, if provided by the resolver. The value is not used for
+  // any purpose other than to allow the caller to attach version information
+  // to the file for use in external tooling.
+  int32 version = 6;
+
+  // zero-length-token counts, used for validation.
+  int32 zeroLengthTokenCount            = 7;
+  int32 zeroLengthTokenConsecutiveCount = 8;
+}
+
+message FileElement {
+  oneof val {
+    ImportNode  import  = 1;
+    PackageNode package = 2;
+    OptionNode  option  = 3;
+    MessageNode message = 4;
+    EnumNode    enum    = 5;
+    ExtendNode  extend  = 6;
+    ServiceNode service = 7;
+    ErrorNode   err     = 8;
+  }
+}
+
+// SyntaxNode represents a syntax declaration, which if present must be
+// the first non-comment content. Example:
+//
+//	syntax = "proto2";
+//
+// Files that don't have a syntax node are assumed to use proto2 syntax.
+message SyntaxNode {
+  IdentNode       keyword   = 1;
+  RuneNode        equals    = 2;
+  StringValueNode syntax    = 3;
+  RuneNode        semicolon = 4;
+}
+
+// IdentNode represents a simple, unqualified identifier. These are used to name
+// elements declared in a protobuf file or to refer to elements. Example:
+//
+//	foobar
+message IdentNode {
+  Token  token     = 1;
+  string val       = 2;
+  bool   isKeyword = 3;
+}
+
+// EmptyDeclNode represents an empty declaration in protobuf source.
+// These amount to extra semicolons, with no actual content preceding
+// the semicolon.
+message EmptyDeclNode {
+  RuneNode semicolon = 1;
+}
+
+// CompoundIdentNode represents a qualified identifier. A qualified identifier
+// has at least one dot and possibly multiple identifier names (all separated by
+// dots). If the identifier has a leading dot, then it is a *fully* qualified
+// identifier. Example:
+//
+//	.com.foobar.Baz
+message CompoundIdentNode {
+  repeated IdentNode components = 1;
+  repeated RuneNode  dots       = 2;
+}
+
+// EditionNode represents an edition declaration, which if present must be
+// the first non-comment content. Example:
+//
+//	edition = "2023";
+//
+// Files may include either an edition node or a syntax node, but not both.
+// If neither are present, the file is assumed to use proto2 syntax.
+message EditionNode {
+  IdentNode       keyword   = 1;
+  RuneNode        equals    = 2;
+  StringValueNode edition   = 3;
+  RuneNode        semicolon = 4;
+}
+
+// ImportNode represents an import statement. Example:
+//
+//	import "google/protobuf/empty.proto";
+message ImportNode {
+  IdentNode       keyword   = 1;
+  IdentNode       public    = 2;
+  IdentNode       weak      = 3;
+  StringValueNode name      = 4;
+  RuneNode        semicolon = 5;
+}
+
+// PackageNode represents a package declaration. Example:
+//
+//	package foobar.com;
+message PackageNode {
+  IdentNode      keyword   = 1;
+  IdentValueNode name      = 2;
+  RuneNode       semicolon = 3;
+}
+
+// UintLiteralNode represents a simple integer literal with no sign character.
+message UintLiteralNode {
+  Token token = 1;
+  // Val is the numeric value indicated by the literal
+  uint64 val = 2;
+  // Raw is the original string representation of the literal
+  string raw = 3;
+}
+
+// OptionNode represents the declaration of a single option for an element.
+// It is used both for normal option declarations (start with "option" keyword
+// and end with semicolon) and for compact options found in fields, enum values,
+// and extension ranges. Example:
+//
+//	option (custom.option) = "foo";
+message OptionNode {
+  IdentNode      keyword   = 1; // absent for compact options
+  OptionNameNode name      = 2;
+  RuneNode       equals    = 3;
+  ValueNode      val       = 4;
+  RuneNode       semicolon = 5; // for compact options, this is actually a comma
+}
+
+// NegativeIntLiteralNode represents an integer literal with a negative (-) sign.
+message NegativeIntLiteralNode {
+  RuneNode        minus = 1;
+  UintLiteralNode uint  = 2;
+}
+
+// FloatLiteralNode represents a floating point numeric literal.
+message FloatLiteralNode {
+  Token token = 1;
+  // Val is the numeric value indicated by the literal
+  double val = 2;
+  // Raw is the original string representation of the literal
+  string raw = 3;
+}
+
+// RuneNode represents a single rune in protobuf source. Runes
+// are typically collected into items, but some runes stand on
+// their own, such as punctuation/symbols like commas, semicolons,
+// equals signs, open and close symbols (braces, brackets, angles,
+// and parentheses), and periods/dots.
+// TODO: make this more compact; if runes don't have attributed comments
+// then we don't need a Token to represent them and only need an offset
+// into the file's contents.
+message RuneNode {
+  Token token = 1;
+  int32 rune  = 2;
+
+  // Virtual is true if this rune is not actually present in the source file,
+  // but is instead injected by the lexer to satisfy certain grammar rules.
+  bool virtual = 3;
+}
+
+// StringValueNode is an AST node that represents a string literal.
+// Such a node can be a single literal (*StringLiteralNode) or a
+// concatenation of multiple literals (*CompoundStringLiteralNode).
+message StringValueNode {
+  oneof val {
+    StringLiteralNode         stringLiteral         = 1;
+    CompoundStringLiteralNode compoundStringLiteral = 2;
+  }
+}
+
+message ErrorNode {
+  IdentNode err = 1;
+}
+
+// StringLiteralNode represents a simple string literal. Example:
+//
+//	"proto2"
+message StringLiteralNode {
+  Token token = 1;
+  // Val is the actual string value that the literal indicates.
+  string val = 2;
+}
+
+// CompoundStringLiteralNode represents a compound string literal, which is
+// the concatenaton of adjacent string literals. Example:
+//
+//	"this "  "is"   " all one "   "string"
+message CompoundStringLiteralNode {
+  repeated StringValueNode elements = 1;
+}
+
+// IdentValueNode is an AST node that represents an identifier.
+message IdentValueNode {
+  oneof val {
+    IdentNode         ident         = 1;
+    CompoundIdentNode compoundIdent = 2;
+  }
+}
+
+// OptionNameNode represents an option name or even a traversal through message
+// types to name a nested option field. Example:
+//
+//	(foo.bar).baz.(bob)
+message OptionNameNode {
+  repeated FieldReferenceNode parts = 1;
+  // Dots represent the separating '.' characters between name parts. The
+  // length of this slice must be exactly len(Parts)-1, each item in Parts
+  // having a corresponding item in this slice *except the last* (since a
+  // trailing dot is not allowed).
+  //
+  // These do *not* include dots that are inside of an extension name. For
+  // example: (foo.bar).baz.(bob) has three parts:
+  //    1. (foo.bar)  - an extension name
+  //    2. baz        - a regular field in foo.bar
+  //    3. (bob)      - an extension field in baz
+  // Note that the dot in foo.bar will thus not be present in Dots but is
+  // instead in Parts[0].
+  repeated RuneNode dots = 2;
+}
+
+// FieldReferenceNode is a reference to a field name. It can indicate a regular
+// field (simple unqualified name), an extension field (possibly-qualified name
+// that is enclosed either in brackets or parentheses), or an "any" type
+// reference (a type URL in the form "server.host/fully.qualified.Name" that is
+// enclosed in brackets).
+//
+// Extension names are used in options to refer to custom options (which are
+// actually extensions), in which case the name is enclosed in parentheses "("
+// and ")". They can also be used to refer to extension fields of options.
+//
+// Extension names are also used in message literals to set extension fields,
+// in which case the name is enclosed in square brackets "[" and "]".
+//
+// "Any" type references can only be used in message literals, and are not
+// allowed in option names. They are always enclosed in square brackets. An
+// "any" type reference is distinguished from an extension name by the presence
+// of a slash, which must be present in an "any" type reference and must be
+// absent in an extension name.
+//
+// Examples:
+//
+//	foobar
+//	(foo.bar)
+//	[foo.bar]
+//	[type.googleapis.com/foo.bar]
+message FieldReferenceNode {
+  RuneNode       open      = 1; // only present for extension names and "any" type references
+  IdentValueNode urlPrefix = 2; // only present for "any" type references
+  RuneNode       slash     = 3; // only present for "any" type references
+  IdentValueNode name      = 4;
+  RuneNode       comma     = 5; // only present for extension names and "any" type references
+  RuneNode       close     = 6; // only present for extension names and "any" type references
+  RuneNode       semicolon = 7; // only present for extension names and "any" type references
+}
+
+// ValueNode is an AST node that represents a literal value.
+//
+// It also includes references (e.g. IdentifierValueNode), which can be
+// used as values in some contexts, such as describing the default value
+// for a field, which can refer to an enum value.
+//
+// This also allows NoSourceNode to be used in place of a real value node
+// for some usages.
+message ValueNode {
+  oneof val {
+    IdentNode                 ident                 = 1;
+    CompoundIdentNode         compoundIdent         = 2;
+    StringLiteralNode         stringLiteral         = 3;
+    CompoundStringLiteralNode compoundStringLiteral = 4;
+    UintLiteralNode           uintLiteral           = 5;
+    NegativeIntLiteralNode    negativeIntLiteral    = 6;
+    FloatLiteralNode          floatLiteral          = 7;
+    SpecialFloatLiteralNode   specialFloatLiteral   = 8;
+    SignedFloatLiteralNode    signedFloatLiteral    = 9;
+    ArrayLiteralNode          arrayLiteral          = 10;
+    MessageLiteralNode        messageLiteral        = 11;
+  }
+}
+
+// SpecialFloatLiteralNode represents a special floating point numeric literal
+// for "inf" and "nan" values.
+message SpecialFloatLiteralNode {
+  IdentNode keyword = 1;
+  double    val     = 2;
+}
+
+// SignedFloatLiteralNode represents a signed floating point number.
+message SignedFloatLiteralNode {
+  RuneNode       sign  = 1;
+  FloatValueNode float = 2;
+}
+
+// ArrayLiteralNode represents an array literal, which is only allowed inside of
+// a MessageLiteralNode, to indicate values for a repeated field. Example:
+//
+//	["foo", "bar", "baz"]
+message ArrayLiteralNode {
+  RuneNode           openBracket  = 1;
+  repeated ValueNode elements     = 2;
+  repeated RuneNode  commas       = 3;
+  RuneNode           closeBracket = 4;
+  RuneNode           semicolon    = 5;
+}
+
+// MessageLiteralNode represents a message literal, which is compatible with the
+// protobuf text format and can be used for custom options with message types.
+// Example:
+//
+//	{ foo:1 foo:2 foo:3 bar:<name:"abc" id:123> }
+message MessageLiteralNode {
+  RuneNode                  open     = 1; // should be '{' or '<'
+  repeated MessageFieldNode elements = 2;
+  // Separator characters between elements, which can be either ','
+  // or ';' if present. This slice must be exactly len(Elements) in
+  // length, with each item in Elements having one corresponding item
+  // in Seps. Separators in message literals are optional, so a given
+  // item in this slice may be nil to indicate absence of a separator.
+  repeated RuneNode seps      = 3;
+  RuneNode          close     = 4; // should be '}' or '>', depending on Open
+  RuneNode          semicolon = 5;
+}
+
+// FloatValueNode is an AST node that represents a numeric literal with
+// a floating point, in scientific notation, or too large to fit in an
+// int64 or uint64.
+message FloatValueNode {
+  oneof val {
+    FloatLiteralNode        floatLiteral        = 1;
+    SpecialFloatLiteralNode specialFloatLiteral = 2;
+    UintLiteralNode         uintLiteral         = 3;
+  }
+}
+
+// MessageFieldNode represents a single field (name and value) inside of a
+// message literal. Example:
+//
+//	foo:"bar"
+message MessageFieldNode {
+  FieldReferenceNode name = 1;
+  // Sep represents the ':' separator between the name and value. If
+  // the value is a message or list literal (and thus starts with '<',
+  // '{', or '['), then the separator may be omitted and this field may
+  // be nil.
+  RuneNode  sep       = 2;
+  ValueNode val       = 3;
+  RuneNode  semicolon = 4;
+}
+
+// CompactOptionsNode represents a compact options declaration, as used with
+// fields, enum values, and extension ranges. Example:
+//
+//	[deprecated = true, json_name = "foo_bar"]
+message CompactOptionsNode {
+  RuneNode            openBracket  = 1;
+  repeated OptionNode options      = 2;
+  RuneNode            closeBracket = 3;
+  RuneNode            semicolon    = 4;
+}
+
+// MessageDeclNode is a node in the AST that defines a message type. This
+// includes normal message fields as well as implicit messages:
+//   - *MessageNode
+//   - *GroupNode (the group is a field and inline message type)
+//   - *MapFieldNode (map fields implicitly define a MapEntry message type)
+message MessageDeclNode {
+  oneof val {
+    MessageNode  message  = 1;
+    GroupNode    group    = 2;
+    MapFieldNode mapField = 3;
+  }
+}
+
+// MessageNode represents a message declaration. Example:
+//
+//	message Foo {
+//	  string name = 1;
+//	  repeated string labels = 2;
+//	  bytes extra = 3;
+//	}
+message MessageNode {
+  IdentNode               keyword    = 1;
+  IdentNode               name       = 2;
+  RuneNode                openBrace  = 3;
+  repeated MessageElement decls      = 4;
+  RuneNode                closeBrace = 5;
+  RuneNode                semicolon  = 6;
+}
+
+// MessageElement is an interface implemented by all AST nodes that can
+// appear in a message body.
+message MessageElement {
+  oneof val {
+    OptionNode         option         = 1;
+    FieldNode          field          = 2;
+    MapFieldNode       mapField       = 3;
+    OneofNode          oneof          = 4;
+    GroupNode          group          = 5;
+    MessageNode        message        = 6;
+    EnumNode           enum           = 7;
+    ExtendNode         extend         = 8;
+    ExtensionRangeNode extensionRange = 9;
+    ReservedNode       reserved       = 10;
+    EmptyDeclNode      empty          = 11;
+  }
+}
+
+// ExtendElement is an interface implemented by all AST nodes that can
+// appear in an extend body.
+message ExtendElement {
+  oneof val {
+    FieldNode     field = 1;
+    GroupNode     group = 2;
+    EmptyDeclNode empty = 3;
+  }
+}
+
+// FieldNode represents a normal field declaration (not groups or maps). It
+// can represent extension fields as well as non-extension fields (both inside
+// of messages and inside of one-ofs). Example:
+//
+//	optional string foo = 1;
+message FieldNode {
+  IdentNode          label     = 1;
+  IdentValueNode     fieldType = 2;
+  IdentNode          name      = 3;
+  RuneNode           equals    = 4;
+  UintLiteralNode    tag       = 5;
+  CompactOptionsNode options   = 6;
+  RuneNode           semicolon = 7;
+}
+
+// MapFieldNode represents a map field declaration. Example:
+//
+//	map<string,string> replacements = 3 [deprecated = true];
+message MapFieldNode {
+  MapTypeNode        mapType   = 1;
+  IdentNode          name      = 2;
+  RuneNode           equals    = 3;
+  UintLiteralNode    tag       = 4;
+  CompactOptionsNode options   = 5;
+  RuneNode           semicolon = 6;
+}
+
+// OneofNode represents a one-of declaration. Example:
+//
+//	oneof query {
+//	  string by_name = 2;
+//	  Type by_type = 3;
+//	  Address by_address = 4;
+//	  Labels by_label = 5;
+//	}
+message OneofNode {
+  IdentNode             keyword    = 1;
+  IdentNode             name       = 2;
+  RuneNode              openBrace  = 3;
+  repeated OneofElement decls      = 4;
+  RuneNode              closeBrace = 5;
+  RuneNode              semicolon  = 6;
+}
+
+// GroupNode represents a group declaration, which doubles as a field and inline
+// message declaration. It can represent extension fields as well as
+// non-extension fields (both inside of messages and inside of one-ofs).
+// Example:
+//
+//	optional group Key = 4 {
+//	  optional uint64 id = 1;
+//	  optional string name = 2;
+//	}
+message GroupNode {
+  IdentNode               label      = 1;
+  IdentNode               keyword    = 2;
+  IdentNode               name       = 3;
+  RuneNode                equals     = 4;
+  UintLiteralNode         tag        = 5;
+  CompactOptionsNode      options    = 6;
+  RuneNode                openBrace  = 7;
+  repeated MessageElement decls      = 8;
+  RuneNode                closeBrace = 9;
+  RuneNode                semicolon  = 10;
+}
+
+// EnumNode represents an enum declaration. Example:
+//
+//	enum Foo { BAR = 0; BAZ = 1 }
+message EnumNode {
+  IdentNode            keyword    = 1;
+  IdentNode            name       = 2;
+  RuneNode             openBrace  = 3;
+  repeated EnumElement decls      = 4;
+  RuneNode             closeBrace = 5;
+  RuneNode             semicolon  = 6;
+}
+
+// ExtendNode represents a declaration of extension fields. Example:
+//
+//	extend google.protobuf.FieldOptions {
+//	  bool redacted = 33333;
+//	}
+message ExtendNode {
+  IdentNode              keyword    = 1;
+  IdentValueNode         extendee   = 2;
+  RuneNode               openBrace  = 3;
+  repeated ExtendElement decls      = 4;
+  RuneNode               closeBrace = 5;
+  RuneNode               semicolon  = 6;
+}
+
+// ExtensionRangeNode represents an extension range declaration in an extendable
+// message. Example:
+//
+//	extensions 100 to max;
+message ExtensionRangeNode {
+  IdentNode          keyword = 1;
+  repeated RangeNode ranges  = 2;
+  // Commas represent the separating ',' characters between ranges. The
+  // length of this slice must be exactly len(Ranges)-1, each item in Ranges
+  // having a corresponding item in this slice *except the last* (since a
+  // trailing comma is not allowed).
+  repeated RuneNode  commas    = 3;
+  CompactOptionsNode options   = 4;
+  RuneNode           semicolon = 5;
+}
+
+// ReservedNode represents reserved declaration, which can be used to reserve
+// either names or numbers. Examples:
+//
+//	reserved 1, 10-12, 15;
+//	reserved "foo", "bar", "baz";
+//	reserved foo, bar, baz;
+message ReservedNode {
+  IdentNode keyword = 1;
+  // If non-empty, this node represents reserved ranges, and Names and Identifiers
+  // will be empty.
+  repeated RangeNode ranges = 2;
+  // If non-empty, this node represents reserved names as string literals, and
+  // Ranges and Identifiers will be empty. String literals are used for reserved
+  // names in proto2 and proto3 syntax.
+  repeated StringValueNode names = 3;
+  // If non-empty, this node represents reserved names as identifiers, and Ranges
+  // and Names will be empty. Identifiers are used for reserved names in editions.
+  repeated IdentNode identifiers = 4;
+  // Commas represent the separating ',' characters between options. The
+  // length of this slice must be exactly len(Ranges)-1 or len(Names)-1, depending
+  // on whether this node represents reserved ranges or reserved names. Each item
+  // in Ranges or Names has a corresponding item in this slice *except the last*
+  // (since a trailing comma is not allowed).
+  repeated RuneNode commas    = 5;
+  RuneNode          semicolon = 6;
+}
+
+// MapTypeNode represents the type declaration for a map field. It defines
+// both the key and value types for the map. Example:
+//
+//	map<string, Values>
+message MapTypeNode {
+  IdentNode      keyword    = 1;
+  RuneNode       openAngle  = 2;
+  IdentNode      keyType    = 3;
+  RuneNode       comma      = 4;
+  IdentValueNode valueType  = 5;
+  RuneNode       closeAngle = 6;
+  RuneNode       semicolon  = 7;
+}
+
+message OneofElement {
+  oneof val {
+    OptionNode option = 1;
+    FieldNode  field  = 2;
+    GroupNode  group  = 3;
+  }
+}
+
+// EnumElement is an interface implemented by all AST nodes that can
+// appear in the body of an enum declaration.
+message EnumElement {
+  oneof val {
+    OptionNode    option    = 1;
+    EnumValueNode enumValue = 2;
+    ReservedNode  reserved  = 3;
+  }
+}
+
+message EnumValueNode {
+  IdentNode          name      = 1;
+  RuneNode           equals    = 2;
+  IntValueNode       number    = 3;
+  CompactOptionsNode options   = 4;
+  RuneNode           semicolon = 5;
+}
+
+// RangeNode represents a range expression, used in both extension ranges and
+// reserved ranges. Example:
+//
+//	1000 to max
+message RangeNode {
+  IntValueNode startVal = 1;
+  // if To is non-nil, then exactly one of EndVal or Max must also be non-nil
+  IdentNode to = 2;
+  // EndVal and Max are mutually exclusive
+  IntValueNode endVal = 3;
+  IdentNode    max    = 4;
+}
+
+// IntValueNode is an AST node that represents an integer literal. If
+// an integer literal is too large for an int64 (or uint64 for
+// positive literals), it is represented instead by a FloatValueNode.
+message IntValueNode {
+  oneof val {
+    UintLiteralNode        uintLiteral        = 1;
+    NegativeIntLiteralNode negativeIntLiteral = 2;
+  }
+}
+
+// ServiceNode represents a service declaration. Example:
+//
+//	service Foo {
+//	  rpc Bar (Baz) returns (Bob);
+//	  rpc Frobnitz (stream Parts) returns (Gyzmeaux);
+//	}
+message ServiceNode {
+  IdentNode               keyword    = 1;
+  IdentNode               name       = 2;
+  RuneNode                openBrace  = 3;
+  repeated ServiceElement decls      = 4;
+  RuneNode                closeBrace = 5;
+  RuneNode                semicolon  = 6;
+}
+
+message ServiceElement {
+  oneof val {
+    OptionNode option = 1;
+    RPCNode    rpc    = 2;
+  }
+}
+
+// RPCNode represents an RPC declaration. Example:
+//
+//	rpc Foo (Bar) returns (Baz);
+message RPCNode {
+  IdentNode           keyword    = 1;
+  IdentNode           name       = 2;
+  RPCTypeNode         input      = 3;
+  IdentNode           returns    = 4;
+  RPCTypeNode         output     = 5;
+  RuneNode            openBrace  = 6;
+  repeated RPCElement decls      = 7;
+  RuneNode            closeBrace = 8;
+  RuneNode            semicolon  = 9;
+}
+
+// RPCTypeNode represents the declaration of a request or response type for an
+// RPC. Example:
+//
+//	(stream foo.Bar)
+message RPCTypeNode {
+  RuneNode       openParen   = 1;
+  IdentNode      stream      = 2;
+  IdentValueNode messageType = 3;
+  RuneNode       closeParen  = 4;
+  RuneNode       semicolon   = 5;
+}
+
+// RPCElement is an interface implemented by all AST nodes that can
+// appear in the body of an rpc declaration (aka method).
+message RPCElement {
+  oneof val {
+    OptionNode option = 1;
+  }
+}
+
+// SyntheticMapField is not an actual node in the AST but a synthetic node
+// that implements FieldDeclNode. These are used to represent the implicit
+// field declarations of the "key" and "value" fields in a map entry.
+message SyntheticMapField {
+  IdentNode       name      = 1;
+  IdentValueNode  fieldType = 2;
+  UintLiteralNode tag       = 3;
+}
+
+// FieldDeclNode is a node in the AST that defines a field. This includes
+// normal message fields as well as extensions. There are multiple types
+// of AST nodes that declare fields:
+//   - *FieldNode
+//   - *GroupNode
+//   - *MapFieldNode
+//   - *SyntheticMapField
+message FieldDeclNode {
+  oneof val {
+    FieldNode         field             = 1;
+    MapFieldNode      mapField          = 2;
+    SyntheticMapField syntheticMapField = 3;
+    GroupNode         group             = 4;
+  }
+}
+
+// NoSourceNode is a placeholder AST node that implements numerous
+// interfaces in this package. It can be used to represent an AST
+// element for a file whose source is not available.
+message NoSourceNode {
+  string filename = 1;
+}

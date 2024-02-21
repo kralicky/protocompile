@@ -14,40 +14,25 @@
 
 package ast
 
-// MessageDeclNode is a node in the AST that defines a message type. This
-// includes normal message fields as well as implicit messages:
-//   - *MessageNode
-//   - *GroupNode (the group is a field and inline message type)
-//   - *MapFieldNode (map fields implicitly define a MapEntry message type)
-//
-// This also allows NoSourceNode to be used in place of one of the above
-// for some usages.
-type MessageDeclNode interface {
-	Node
-	MessageName() Node
+func (n *MessageDeclNode) Start() Token {
+	if u := n.Unwrap(); u != nil {
+		return u.Start()
+	}
+	return TokenUnknown
 }
 
-var (
-	_ MessageDeclNode = (*MessageNode)(nil)
-	_ MessageDeclNode = (*GroupNode)(nil)
-	_ MessageDeclNode = (*MapFieldNode)(nil)
-	_ MessageDeclNode = NoSourceNode{}
-)
+func (n *MessageDeclNode) End() Token {
+	if u := n.Unwrap(); u != nil {
+		return u.End()
+	}
+	return TokenUnknown
+}
 
-// MessageNode represents a message declaration. Example:
-//
-//	message Foo {
-//	  string name = 1;
-//	  repeated string labels = 2;
-//	  bytes extra = 3;
-//	}
-type MessageNode struct {
-	Keyword    *KeywordNode
-	Name       *IdentNode
-	OpenBrace  *RuneNode
-	Decls      []MessageElement
-	CloseBrace *RuneNode
-	Semicolon  *RuneNode
+func (n *MessageDeclNode) GetName() *IdentNode {
+	if u := n.Unwrap(); u != nil {
+		return u.GetName()
+	}
+	return nil
 }
 
 func (m *MessageNode) Start() Token { return startToken(m.Keyword) }
@@ -56,7 +41,7 @@ func (m *MessageNode) End() Token   { return endToken(m.Semicolon, m.CloseBrace)
 func (*MessageNode) fileElement() {}
 func (*MessageNode) msgElement()  {}
 
-func (e *MessageNode) GetElements() []MessageElement {
+func (e *MessageNode) GetElements() []*MessageElement {
 	return e.Decls
 }
 
@@ -64,45 +49,10 @@ func (n *MessageNode) MessageName() Node {
 	return n.Name
 }
 
-// MessageElement is an interface implemented by all AST nodes that can
-// appear in a message body.
-type MessageElement interface {
-	Node
-	msgElement()
-}
-
-var (
-	_ MessageElement = (*OptionNode)(nil)
-	_ MessageElement = (*FieldNode)(nil)
-	_ MessageElement = (*MapFieldNode)(nil)
-	_ MessageElement = (*OneofNode)(nil)
-	_ MessageElement = (*GroupNode)(nil)
-	_ MessageElement = (*MessageNode)(nil)
-	_ MessageElement = (*EnumNode)(nil)
-	_ MessageElement = (*ExtendNode)(nil)
-	_ MessageElement = (*ExtensionRangeNode)(nil)
-	_ MessageElement = (*ReservedNode)(nil)
-	_ MessageElement = (*EmptyDeclNode)(nil)
-)
-
-// ExtendNode represents a declaration of extension fields. Example:
-//
-//	extend google.protobuf.FieldOptions {
-//	  bool redacted = 33333;
-//	}
-type ExtendNode struct {
-	Keyword    *KeywordNode
-	Extendee   IdentValueNode
-	OpenBrace  *RuneNode
-	Decls      []ExtendElement
-	CloseBrace *RuneNode
-	Semicolon  *RuneNode
-}
-
 func (e *ExtendNode) Start() Token { return startToken(e.Keyword) }
 func (e *ExtendNode) End() Token   { return endToken(e.Semicolon, e.CloseBrace) }
 
-func (e *ExtendNode) GetElements() []ExtendElement {
+func (e *ExtendNode) GetElements() []*ExtendElement {
 	return e.Decls
 }
 
@@ -113,15 +63,30 @@ func (e *ExtendNode) IsIncomplete() bool {
 	return IsNil(e.Extendee) || e.OpenBrace == nil || e.CloseBrace == nil
 }
 
-// ExtendElement is an interface implemented by all AST nodes that can
-// appear in the body of an extends declaration.
-type ExtendElement interface {
-	Node
-	extendElement()
+func (n *MessageElement) Start() Token {
+	if u := n.Unwrap(); u != nil {
+		return u.Start()
+	}
+	return TokenUnknown
 }
 
-var (
-	_ ExtendElement = (*FieldNode)(nil)
-	_ ExtendElement = (*GroupNode)(nil)
-	_ ExtendElement = (*EmptyDeclNode)(nil)
-)
+func (n *MessageElement) End() Token {
+	if u := n.Unwrap(); u != nil {
+		return u.End()
+	}
+	return TokenUnknown
+}
+
+func (n *ExtendElement) Start() Token {
+	if u := n.Unwrap(); u != nil {
+		return u.Start()
+	}
+	return TokenUnknown
+}
+
+func (n *ExtendElement) End() Token {
+	if u := n.Unwrap(); u != nil {
+		return u.End()
+	}
+	return TokenUnknown
+}

@@ -22,8 +22,8 @@ import (
 )
 
 type hasOptionNode interface {
-	OptionNode(part *descriptorpb.UninterpretedOption) ast.OptionDeclNode
-	FileNode() ast.FileDeclNode // needed in order to query for NodeInfo
+	OptionNode(part *descriptorpb.UninterpretedOption) *ast.OptionNode
+	FileNode() *ast.FileNode // needed in order to query for NodeInfo
 }
 
 func FindFirstOption(res hasOptionNode, handler *reporter.Handler, scope string, opts []*descriptorpb.UninterpretedOption, name string) (int, error) {

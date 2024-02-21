@@ -9,27 +9,35 @@ import (
 
 func TestInspect(t *testing.T) {
 	tree := &MessageNode{
-		Decls: []MessageElement{
-			&OptionNode{
-				Name: &OptionNameNode{
-					Parts: []*FieldReferenceNode{
-						{
-							Name: &CompoundIdentNode{
-								Components: []*IdentNode{
-									{
-										TerminalNode: 1,
-									},
-									{
-										TerminalNode: 2,
-									},
-									{
-										TerminalNode: 3,
+		Decls: []*MessageElement{
+			{
+				Val: &MessageElement_Option{
+					Option: &OptionNode{
+						Name: &OptionNameNode{
+							Parts: []*FieldReferenceNode{
+								{
+									Name: &IdentValueNode{
+										Val: &IdentValueNode_CompoundIdent{
+											CompoundIdent: &CompoundIdentNode{
+												Components: []*IdentNode{
+													{
+														Token: 1,
+													},
+													{
+														Token: 2,
+													},
+													{
+														Token: 3,
+													},
+												},
+											},
+										},
 									},
 								},
+								{
+									Open: &RuneNode{Rune: 'x'},
+								},
 							},
-						},
-						{
-							Open: &RuneNode{Rune: 'x'},
 						},
 					},
 				},
@@ -45,23 +53,23 @@ func TestInspect(t *testing.T) {
 
 	expectedPaths := [][]Node{
 		{tree},
-		{tree, tree.Decls[0]},
-		{tree, tree.Decls[0], tree.Decls[0].(*OptionNode).Name},
-		{tree, tree.Decls[0], tree.Decls[0].(*OptionNode).Name, tree.Decls[0].(*OptionNode).Name.Parts[0]},
-		{tree, tree.Decls[0], tree.Decls[0].(*OptionNode).Name, tree.Decls[0].(*OptionNode).Name.Parts[0], tree.Decls[0].(*OptionNode).Name.Parts[0].Name},
-		{tree, tree.Decls[0], tree.Decls[0].(*OptionNode).Name, tree.Decls[0].(*OptionNode).Name.Parts[0], tree.Decls[0].(*OptionNode).Name.Parts[0].Name, tree.Decls[0].(*OptionNode).Name.Parts[0].Name.(*CompoundIdentNode).Components[0]},
-		{tree, tree.Decls[0], tree.Decls[0].(*OptionNode).Name, tree.Decls[0].(*OptionNode).Name.Parts[0], tree.Decls[0].(*OptionNode).Name.Parts[0].Name, tree.Decls[0].(*OptionNode).Name.Parts[0].Name.(*CompoundIdentNode).Components[1]},
-		{tree, tree.Decls[0], tree.Decls[0].(*OptionNode).Name, tree.Decls[0].(*OptionNode).Name.Parts[0], tree.Decls[0].(*OptionNode).Name.Parts[0].Name, tree.Decls[0].(*OptionNode).Name.Parts[0].Name.(*CompoundIdentNode).Components[2]},
-		{tree, tree.Decls[0], tree.Decls[0].(*OptionNode).Name, tree.Decls[0].(*OptionNode).Name.Parts[1]},
-		{tree, tree.Decls[0], tree.Decls[0].(*OptionNode).Name, tree.Decls[0].(*OptionNode).Name.Parts[1], tree.Decls[0].(*OptionNode).Name.Parts[1].Open},
+		{tree, tree.Decls[0].Unwrap()},
+		{tree, tree.Decls[0].Unwrap(), tree.Decls[0].GetOption().Name},
+		{tree, tree.Decls[0].Unwrap(), tree.Decls[0].GetOption().Name, tree.Decls[0].GetOption().Name.Parts[0]},
+		{tree, tree.Decls[0].Unwrap(), tree.Decls[0].GetOption().Name, tree.Decls[0].GetOption().Name.Parts[0], tree.Decls[0].GetOption().Name.Parts[0].Name.Unwrap()},
+		{tree, tree.Decls[0].Unwrap(), tree.Decls[0].GetOption().Name, tree.Decls[0].GetOption().Name.Parts[0], tree.Decls[0].GetOption().Name.Parts[0].Name.Unwrap(), tree.Decls[0].GetOption().Name.Parts[0].Name.GetCompoundIdent().Components[0]},
+		{tree, tree.Decls[0].Unwrap(), tree.Decls[0].GetOption().Name, tree.Decls[0].GetOption().Name.Parts[0], tree.Decls[0].GetOption().Name.Parts[0].Name.Unwrap(), tree.Decls[0].GetOption().Name.Parts[0].Name.GetCompoundIdent().Components[1]},
+		{tree, tree.Decls[0].Unwrap(), tree.Decls[0].GetOption().Name, tree.Decls[0].GetOption().Name.Parts[0], tree.Decls[0].GetOption().Name.Parts[0].Name.Unwrap(), tree.Decls[0].GetOption().Name.Parts[0].Name.GetCompoundIdent().Components[2]},
+		{tree, tree.Decls[0].Unwrap(), tree.Decls[0].GetOption().Name, tree.Decls[0].GetOption().Name.Parts[1]},
+		{tree, tree.Decls[0].Unwrap(), tree.Decls[0].GetOption().Name, tree.Decls[0].GetOption().Name.Parts[1], tree.Decls[0].GetOption().Name.Parts[1].Open},
 	}
 	assert.Equal(t, expectedPaths, paths)
 }
 
 func TestZipWalk(t *testing.T) {
 	// Test case 1: a and b have the same length
-	a := []Node{&IdentNode{TerminalNode: 1}, &IdentNode{TerminalNode: 3}, &IdentNode{TerminalNode: 5}}
-	b := []Node{&RuneNode{TerminalNode: 2}, &RuneNode{TerminalNode: 4}, &RuneNode{TerminalNode: 6}}
+	a := []Node{&IdentNode{Token: 1}, &IdentNode{Token: 3}, &IdentNode{Token: 5}}
+	b := []Node{&RuneNode{Token: 2}, &RuneNode{Token: 4}, &RuneNode{Token: 6}}
 	visitedNodes := make([]Node, 0)
 	visitor := testVisitFn(func(n Node) {
 		visitedNodes = append(visitedNodes, n)
@@ -71,16 +79,16 @@ func TestZipWalk(t *testing.T) {
 	assertVisitedNodes(t, visitedNodes, expectedVisitedNodes)
 
 	// Test case 2: a is longer than b
-	a = []Node{&IdentNode{TerminalNode: 1}, &IdentNode{TerminalNode: 3}, &IdentNode{TerminalNode: 5}}
-	b = []Node{&RuneNode{TerminalNode: 2}, &RuneNode{TerminalNode: 4}}
+	a = []Node{&IdentNode{Token: 1}, &IdentNode{Token: 3}, &IdentNode{Token: 5}}
+	b = []Node{&RuneNode{Token: 2}, &RuneNode{Token: 4}}
 	visitedNodes = make([]Node, 0)
 	zipWalk(visitor, a, b)
 	expectedVisitedNodes = []Node{a[0], b[0], a[1], b[1], a[2]}
 	assertVisitedNodes(t, visitedNodes, expectedVisitedNodes)
 
 	// Test case 3: b is longer than a
-	a = []Node{&IdentNode{TerminalNode: 1}, &IdentNode{TerminalNode: 3}}
-	b = []Node{&RuneNode{TerminalNode: 2}, &RuneNode{TerminalNode: 4}, &RuneNode{TerminalNode: 6}}
+	a = []Node{&IdentNode{Token: 1}, &IdentNode{Token: 3}}
+	b = []Node{&RuneNode{Token: 2}, &RuneNode{Token: 4}, &RuneNode{Token: 6}}
 	visitedNodes = make([]Node, 0)
 	zipWalk(visitor, a, b)
 	expectedVisitedNodes = []Node{a[0], b[0], a[1], b[1], b[2]}

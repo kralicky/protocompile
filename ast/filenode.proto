@@ -1,0 +1,29 @@
+syntax = "proto2";
+
+package ast;
+
+import "github.com/kralicky/protocompile/ast/ast.proto";
+
+// FileNode is the root of the AST hierarchy. It represents an entire
+// protobuf source file.
+message FileNode {
+  map<string, string> pragmas = 1;
+  // A map of implementation-specific key-value pairs parsed from comments on
+  // the syntax or edition declaration. These work like the //go: comments in
+  // Go source files.
+  optional SyntaxNode syntax = 2;
+  // A file has either a Syntax or Edition node, never both.
+  // If both are nil, neither declaration is present and the
+  // file is assumed to use "proto2" syntax.
+  optional EditionNode edition = 3;
+  repeated FileElement decls   = 4;
+
+  // This synthetic node allows access to final comments and whitespace
+  optional RuneNode EOF = 5;
+
+  extensions 7;
+}
+
+extend FileNode {
+  optional FileInfo fileInfo = 7;
+}

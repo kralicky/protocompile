@@ -18,32 +18,14 @@ import (
 	"cmp"
 	"slices"
 	"strings"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // Identifier is a possibly-qualified name. This is used to distinguish
 // ValueNode values that are references/identifiers vs. those that are
 // string literals.
-type Identifier string
-
-// IdentValueNode is an AST node that represents an identifier.
-type IdentValueNode interface {
-	ValueNode
-	AsIdentifier() Identifier
-}
-
-var (
-	_ IdentValueNode = (*IdentNode)(nil)
-	_ IdentValueNode = (*CompoundIdentNode)(nil)
-)
-
-// IdentNode represents a simple, unqualified identifier. These are used to name
-// elements declared in a protobuf file or to refer to elements. Example:
-//
-//	foobar
-type IdentNode struct {
-	TerminalNode
-	Val string
-}
+type Identifier = protoreflect.Name
 
 func (n *IdentNode) Value() interface{} {
 	return n.AsIdentifier()
@@ -51,49 +33,41 @@ func (n *IdentNode) Value() interface{} {
 
 func (n *IdentNode) AsIdentifier() Identifier {
 	if n == nil {
-		// extended syntax: fields with missing names
 		return Identifier("")
 	}
 	return Identifier(n.Val)
 }
 
-// ToKeyword is used to convert identifiers to keywords. Since keywords are not
-// reserved in the protobuf language, they are initially lexed as identifiers
-// and then converted to keywords based on context.
-func (n *IdentNode) ToKeyword() *KeywordNode {
-	return (*KeywordNode)(n)
-}
-
-// CompoundIdentNode represents a qualified identifier. A qualified identifier
-// has at least one dot and possibly multiple identifier names (all separated by
-// dots). If the identifier has a leading dot, then it is a *fully* qualified
-// identifier. Example:
-//
-//	.com.foobar.Baz
-type CompoundIdentNode struct {
-	Components []*IdentNode
-	Dots       []*RuneNode
+func (n *IdentNode) AsIdentValue() *IdentValueNode {
+	if n == nil {
+		return nil
+	}
+	return &IdentValueNode{
+		Val: &IdentValueNode_Ident{
+			Ident: n,
+		},
+	}
 }
 
 func (n *CompoundIdentNode) Start() Token {
-	if len(n.Components) > 0 {
-		if len(n.Dots) > 0 {
+	if len(n.GetComponents()) > 0 {
+		if len(n.GetDots()) > 0 {
 			return min(n.Components[0].Start(), n.Dots[0].Start())
 		}
 		return n.Components[0].Start()
-	} else if len(n.Dots) > 0 {
+	} else if len(n.GetDots()) > 0 {
 		return n.Dots[0].Start()
 	}
 	return TokenError
 }
 
 func (n *CompoundIdentNode) End() Token {
-	if len(n.Components) > 0 {
-		if len(n.Dots) > 0 {
+	if len(n.GetComponents()) > 0 {
+		if len(n.GetDots()) > 0 {
 			return max(n.Components[len(n.Components)-1].End(), n.Dots[len(n.Dots)-1].End())
 		}
 		return n.Components[len(n.Components)-1].End()
-	} else if len(n.Dots) > 0 {
+	} else if len(n.GetDots()) > 0 {
 		return n.Dots[len(n.Dots)-1].End()
 	}
 	return TokenError
@@ -105,11 +79,11 @@ func (n *CompoundIdentNode) Value() interface{} {
 
 func (n *CompoundIdentNode) AsIdentifier() Identifier {
 	b := strings.Builder{}
-	nodes := make([]Node, 0, len(n.Components)+len(n.Dots))
-	for _, comp := range n.Components {
+	nodes := make([]Node, 0, len(n.GetComponents())+len(n.GetDots()))
+	for _, comp := range n.GetComponents() {
 		nodes = append(nodes, comp)
 	}
-	for _, dot := range n.Dots {
+	for _, dot := range n.GetDots() {
 		nodes = append(nodes, dot)
 	}
 	slices.SortFunc(nodes, func(i, j Node) int {
@@ -130,7 +104,7 @@ func (n *CompoundIdentNode) LeadingDot() (dot *RuneNode, ok bool) {
 		if len(n.Components) == 0 {
 			return n.Dots[0], true
 		}
-		if n.Dots[0].Token() < n.Components[0].Token() {
+		if n.Dots[0].GetToken() < n.Components[0].GetToken() {
 			return n.Dots[0], true
 		}
 		return nil, false
@@ -139,11 +113,11 @@ func (n *CompoundIdentNode) LeadingDot() (dot *RuneNode, ok bool) {
 }
 
 func (n *CompoundIdentNode) OrderedNodes() []Node {
-	nodes := make([]Node, 0, len(n.Components)+len(n.Dots))
-	for _, comp := range n.Components {
+	nodes := make([]Node, 0, len(n.GetComponents())+len(n.GetDots()))
+	for _, comp := range n.GetComponents() {
 		nodes = append(nodes, comp)
 	}
-	for _, dot := range n.Dots {
+	for _, dot := range n.GetDots() {
 		nodes = append(nodes, dot)
 	}
 	slices.SortFunc(nodes, func(i, j Node) int {
@@ -152,9 +126,28 @@ func (n *CompoundIdentNode) OrderedNodes() []Node {
 	return nodes
 }
 
-// KeywordNode is an AST node that represents a keyword. Keywords are
-// like identifiers, but they have special meaning in particular contexts.
-// Example:
-//
-//	message
-type KeywordNode IdentNode
+func (n *IdentValueNode) AsIdentifier() Identifier {
+	if u := n.Unwrap(); u != nil {
+		return u.AsIdentifier()
+	}
+	return Identifier("")
+}
+
+func (n *IdentValueNode) Start() Token {
+	if u := n.Unwrap(); u != nil {
+		return u.Start()
+	}
+	return TokenUnknown
+}
+
+func (n *IdentValueNode) End() Token {
+	if u := n.Unwrap(); u != nil {
+		return u.End()
+	}
+	return TokenUnknown
+}
+
+func (n *IdentNode) ToKeyword() *IdentNode {
+	n.IsKeyword = true
+	return n
+}

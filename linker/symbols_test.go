@@ -432,7 +432,7 @@ func (ts *tempSymtab) parseAndLinkNamed(t *testing.T, name, contents string, han
 
 	var depFiles Files
 	for _, decl := range parseResult.AST().Decls {
-		if imp, ok := decl.(*ast.ImportNode); ok {
+		if imp := decl.GetImport(); imp != nil {
 			f, ok := ts.fds[imp.Name.AsString()]
 			require.True(t, ok)
 			depFiles = append(depFiles, f)

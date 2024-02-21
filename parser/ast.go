@@ -33,7 +33,7 @@ type compactOptionSlices struct {
 
 type nameSlices struct {
 	// only names or idents will be set, never both
-	names  []ast.StringValueNode
+	names  []*ast.StringValueNode
 	idents []*ast.IdentNode
 	commas []*ast.RuneNode
 }
@@ -44,7 +44,7 @@ type rangeSlices struct {
 }
 
 type valueSlices struct {
-	vals   []ast.ValueNode
+	vals   []*ast.ValueNode
 	commas []*ast.RuneNode
 }
 

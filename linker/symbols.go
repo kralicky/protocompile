@@ -661,7 +661,7 @@ func (s *Symbols) importResultWithExtensions(pkg *packageSymbols, r *result, han
 		}
 		file := r.FileNode()
 		node := r.FieldNode(fd.FieldDescriptorProto())
-		info := file.NodeInfo(node.FieldTag())
+		info := file.NodeInfo(node.GetTag())
 		extendee := fd.ContainingMessage()
 		return s.AddExtension(packageFor(extendee), extendee.FullName(), fd.Number(), info, handler)
 	})
@@ -778,32 +778,28 @@ func (ps *packageSymbols) checkResultLocked(r *result, handler *reporter.Handler
 }
 
 func packageNameSpan(r *result) ast.SourceSpan {
-	if node, ok := r.FileNode().(*ast.FileNode); ok {
-		for _, decl := range node.Decls {
-			if pkgNode, ok := decl.(*ast.PackageNode); ok && !pkgNode.IsIncomplete() {
-				return r.FileNode().NodeInfo(pkgNode.Name)
-			}
+	if r == nil {
+		return ast.UnknownSpan(unknownFilePath)
+	}
+	for _, decl := range r.FileNode().GetDecls() {
+		if pkgNode := decl.GetPackage(); pkgNode != nil && !pkgNode.IsIncomplete() {
+			return r.FileNode().NodeInfo(pkgNode.Name)
 		}
 	}
+
 	return ast.UnknownSpan(r.Path())
 }
 
-func nameSpan(file ast.FileDeclNode, n ast.Node) ast.SourceSpan {
+func nameSpan(file *ast.FileNode, n ast.Node) ast.SourceSpan {
+	if file == nil {
+		return ast.UnknownSpan(unknownFilePath)
+	}
+	if n == nil {
+		return ast.UnknownSpan(file.Name())
+	}
 	// TODO: maybe ast package needs a NamedNode interface to simplify this?
 	switch n := n.(type) {
-	case ast.FieldDeclNode:
-		return file.NodeInfo(n.FieldName())
-	case ast.MessageDeclNode:
-		return file.NodeInfo(n.MessageName())
-	case ast.OneofDeclNode:
-		return file.NodeInfo(n.OneofName())
-	case ast.EnumValueDeclNode:
-		return file.NodeInfo(n.GetName())
-	case *ast.EnumNode:
-		return file.NodeInfo(n.Name)
-	case *ast.ServiceNode:
-		return file.NodeInfo(n.Name)
-	case ast.RPCDeclNode:
+	case interface{ GetName() *ast.IdentNode }:
 		return file.NodeInfo(n.GetName())
 	default:
 		return file.NodeInfo(n)

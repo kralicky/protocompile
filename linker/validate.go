@@ -80,12 +80,12 @@ func (r *result) validateExtension(fld protoreflect.FieldDescriptor, handler *re
 		// themselves (no scalar extensions)
 		if fld.Kind() != protoreflect.MessageKind {
 			file := r.FileNode()
-			info := file.NodeInfo(r.FieldNode(fd.proto).FieldType())
+			info := file.NodeInfo(r.FieldNode(fd.proto).GetFieldType())
 			return handler.HandleErrorf(info, "messages with message-set wire format cannot contain scalar extensions, only messages")
 		}
 		if fld.Cardinality() == protoreflect.Repeated {
 			file := r.FileNode()
-			info := file.NodeInfo(r.FieldNode(fd.proto).FieldLabel())
+			info := file.NodeInfo(r.FieldNode(fd.proto).GetLabel())
 			return handler.HandleErrorf(info, "messages with message-set wire format cannot contain repeated extensions, only optional")
 		}
 	} else if fld.Number() > internal.MaxNormalTag {
@@ -93,7 +93,7 @@ func (r *result) validateExtension(fld protoreflect.FieldDescriptor, handler *re
 		// now that things are linked, we can check if the extendee is messageset wire format
 		// and, if not, enforce tighter limit.
 		file := r.FileNode()
-		info := file.NodeInfo(r.FieldNode(fd.proto).FieldTag())
+		info := file.NodeInfo(r.FieldNode(fd.proto).GetTag())
 		return handler.HandleErrorf(info, "tag number %d is higher than max allowed tag number (%d)", fld.Number(), internal.MaxNormalTag)
 	}
 
@@ -112,7 +112,7 @@ func (r *result) validatePacked(fld protoreflect.FieldDescriptor, handler *repor
 	}
 	if fd.proto.GetLabel() != descriptorpb.FieldDescriptorProto_LABEL_REPEATED {
 		file := r.FileNode()
-		info := file.NodeInfo(r.FieldNode(fd.proto).FieldLabel())
+		info := file.NodeInfo(r.FieldNode(fd.proto).GetLabel())
 		err := handler.HandleErrorf(info, "packed option is only allowed on repeated fields")
 		if err != nil {
 			return err
@@ -122,7 +122,7 @@ func (r *result) validatePacked(fld protoreflect.FieldDescriptor, handler *repor
 	case descriptorpb.FieldDescriptorProto_TYPE_STRING, descriptorpb.FieldDescriptorProto_TYPE_BYTES,
 		descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, descriptorpb.FieldDescriptorProto_TYPE_GROUP:
 		file := r.FileNode()
-		info := file.NodeInfo(r.FieldNode(fd.proto).FieldType())
+		info := file.NodeInfo(r.FieldNode(fd.proto).GetLabel())
 		return handler.HandleErrorf(info, "packed option is only allowed on numeric, boolean, and enum fields")
 	}
 	return nil

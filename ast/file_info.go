@@ -22,74 +22,14 @@ import (
 	"strings"
 )
 
-// FileInfo contains information about the contents of a source file, including
-// details about comments and items. A lexer accumulates these details as it
-// scans the file contents. This allows efficient representation of things like
-// source positions.
-type FileInfo struct {
-	// The name of the source file.
-	name string
-	// The raw contents of the source file.
-	data []byte
-	// The offsets for each line in the file. The value is the zero-based byte
-	// offset for a given line. The line is given by its index. So the value at
-	// index 0 is the offset for the first line (which is always zero). The
-	// value at index 1 is the offset at which the second line begins. Etc.
-	lines []int
-	// The info for every comment in the file. This is empty if the file has no
-	// comments. The first entry corresponds to the first comment in the file,
-	// and so on.
-	comments []commentInfo
-	// The info for every lexed item in the file. The last item in the slice
-	// corresponds to the EOF, so every file (even an empty one) should have at
-	// least one entry. This includes all terminal symbols (tokens) in the AST
-	// as well as all comments.
-	items []itemSpan
-	// Document version, if provided by the resolver. The value is not used for
-	// any purpose other than to allow the caller to attach version information
-	// to the file for use in external tooling.
-	version int32
-	// zero-length-token counts, used for validation.
-	zltTotalCount       int
-	zltConsecutiveCount int
-}
-
-type commentInfo struct {
-	// the index of the item, in the file's items slice, that represents this
-	// comment
-	index int
-	// the index of the token to which this comment is attributed.
-	attributedToIndex int
-	// if > 0, the comment is attributed to the token in attributedToIndex for
-	// display and interaction purposes, but only because the token it should be
-	// attributed to is a virtual token - this has implications when formatting
-	// extended syntax virtual tokens.
-	virtualIndex int
-}
-
-type itemSpan struct {
-	// the offset into the file of the first character of an item.
-	offset int
-	// the length of the item
-	length int
-}
-
 // NewFileInfo creates a new instance for the given file.
 func NewFileInfo(filename string, contents []byte, version int32) *FileInfo {
 	return &FileInfo{
-		name:    filename,
-		data:    contents,
-		lines:   []int{0},
-		version: version,
+		Name:    filename,
+		Data:    contents,
+		Lines:   []int32{0},
+		Version: version,
 	}
-}
-
-func (f *FileInfo) Name() string {
-	return f.name
-}
-
-func (f *FileInfo) Version() int32 {
-	return f.version
 }
 
 // AddLine adds the offset representing the beginning of the "next" line in the file.
@@ -98,18 +38,18 @@ func (f *FileInfo) AddLine(offset int) {
 	if offset < 0 {
 		panic(fmt.Sprintf("invalid offset: %d must not be negative", offset))
 	}
-	if offset > len(f.data) {
-		panic(fmt.Sprintf("invalid offset: %d is greater than file size %d", offset, len(f.data)))
+	if offset > len(f.Data) {
+		panic(fmt.Sprintf("invalid offset: %d is greater than file size %d", offset, len(f.Data)))
 	}
 
-	if len(f.lines) > 0 {
-		lastOffset := f.lines[len(f.lines)-1]
-		if offset <= lastOffset {
+	if len(f.Lines) > 0 {
+		lastOffset := f.Lines[len(f.Lines)-1]
+		if offset <= int(lastOffset) {
 			panic(fmt.Sprintf("invalid offset: %d is not greater than previously observed line offset %d", offset, lastOffset))
 		}
 	}
 
-	f.lines = append(f.lines, offset)
+	f.Lines = append(f.Lines, int32(offset))
 }
 
 // AddToken adds info about a token at the given location to this file. It
@@ -121,28 +61,28 @@ func (f *FileInfo) AddToken(offset, length int) Token {
 	if length < 0 {
 		panic(fmt.Sprintf("invalid length: %d must not be negative", length))
 	}
-	if offset+length > len(f.data) {
-		panic(fmt.Sprintf("invalid offset+length: %d is greater than file size %d", offset+length, len(f.data)))
+	if offset+length > len(f.Data) {
+		panic(fmt.Sprintf("invalid offset+length: %d is greater than file size %d", offset+length, len(f.Data)))
 	}
 
-	tokenID := len(f.items)
-	if len(f.items) > 0 {
-		lastToken := f.items[tokenID-1]
-		lastEnd := lastToken.offset + lastToken.length - 1
-		if offset <= lastEnd {
+	tokenID := len(f.ItemList)
+	if len(f.ItemList) > 0 {
+		lastToken := f.ItemList[tokenID-1]
+		lastEnd := lastToken.Offset + lastToken.Length - 1
+		if offset <= int(lastEnd) {
 			panic(fmt.Sprintf("invalid offset: %d is not greater than previously observed token end %d", offset, lastEnd))
 		}
 	}
 
 	// run some sanity checks, bugs in the lexer can cause memory to grow
 	// forever until oom-killed, which is not an ideal user experience
-	if len(f.items)-f.zltTotalCount > len(f.data)+1 {
+	if len(f.ItemList)-int(f.ZeroLengthTokenCount) > len(f.Data)+1 {
 		// if we have more non-zero-length tokens than bytes in the file, something
 		// has gone horribly wrong
 		f.abort(`
 FATAL: More tokens have been created than could possibly exist in the file.
 Stopping execution to prevent unbounded memory growth.`[1:])
-	} else if f.zltConsecutiveCount > 10 {
+	} else if f.ZeroLengthTokenConsecutiveCount > 10 {
 		// too many consecutive zero-length tokens is definitely a bug; at most,
 		// there could be two or three in sequence under certain circumstances.
 		f.abort(`
@@ -150,19 +90,19 @@ FATAL: More than 10 consecutive zero-length tokens have been created.
 Stopping execution to prevent unbounded memory growth.`[1:])
 	}
 
-	f.items = append(f.items, itemSpan{offset: offset, length: length})
+	f.ItemList = append(f.ItemList, &FileInfo_ItemSpan{Offset: int32(offset), Length: int32(length)})
 	if length == 0 {
-		f.zltConsecutiveCount++
-		f.zltTotalCount++
+		f.ZeroLengthTokenConsecutiveCount++
+		f.ZeroLengthTokenCount++
 	} else {
-		f.zltConsecutiveCount = 0
+		f.ZeroLengthTokenConsecutiveCount = 0
 	}
 	return Token(tokenID)
 }
 
 func (f *FileInfo) abort(message string) {
 	var tokenList strings.Builder
-	for i := range f.items {
+	for i := range f.ItemList {
 		if i > 0 {
 			tokenList.WriteString("\n")
 		}
@@ -191,7 +131,7 @@ line:col   | text
 -----------+-----------
 %s
 ================================================================================
-`, message, len(f.items), f.name, tokenList.String()))
+`, message, len(f.ItemList), f.Name, tokenList.String()))
 }
 
 // AddComment adds info about a comment to this file. Comments must first be
@@ -201,38 +141,38 @@ line:col   | text
 // of attributedTo, then this is a leading comment. Otherwise, it is a trailing
 // comment.
 func (f *FileInfo) AddComment(comment, attributedTo Token) {
-	if len(f.comments) > 0 {
-		lastComment := f.comments[len(f.comments)-1]
-		if int(comment) <= lastComment.index {
-			panic(fmt.Sprintf("invalid index: %d is not greater than previously observed comment index %d", comment, lastComment.index))
+	if len(f.Comments) > 0 {
+		lastComment := f.Comments[len(f.Comments)-1]
+		if int(comment) <= int(lastComment.Index) {
+			panic(fmt.Sprintf("invalid index: %d is not greater than previously observed comment index %d", comment, lastComment.Index))
 		}
-		if int(attributedTo) < lastComment.attributedToIndex {
-			panic(fmt.Sprintf("invalid attribution: %d is not greater than previously observed comment attribution index %d", attributedTo, lastComment.attributedToIndex))
+		if int(attributedTo) < int(lastComment.AttributedToIndex) {
+			panic(fmt.Sprintf("invalid attribution: %d is not greater than previously observed comment attribution index %d", attributedTo, lastComment.AttributedToIndex))
 		}
 	}
 
-	f.comments = append(f.comments, commentInfo{
-		index:             int(comment),
-		attributedToIndex: int(attributedTo),
-		virtualIndex:      -1,
+	f.Comments = append(f.Comments, &FileInfo_CommentInfo{
+		Index:             int32(comment),
+		AttributedToIndex: int32(attributedTo),
+		VirtualIndex:      -1,
 	})
 }
 
 func (f *FileInfo) AddVirtualComment(comment Token, attributedTo Token, virtualToken Token) {
-	if len(f.comments) > 0 {
-		lastComment := f.comments[len(f.comments)-1]
-		if int(comment) <= lastComment.index {
-			panic(fmt.Sprintf("invalid index: %d is not greater than previously observed comment index %d", comment, lastComment.index))
+	if len(f.Comments) > 0 {
+		lastComment := f.Comments[len(f.Comments)-1]
+		if int(comment) <= int(lastComment.Index) {
+			panic(fmt.Sprintf("invalid index: %d is not greater than previously observed comment index %d", comment, lastComment.Index))
 		}
-		if int(attributedTo) < lastComment.attributedToIndex {
-			panic(fmt.Sprintf("invalid attribution: %d is not greater than previously observed comment attribution index %d", attributedTo, lastComment.attributedToIndex))
+		if int(attributedTo) < int(lastComment.AttributedToIndex) {
+			panic(fmt.Sprintf("invalid attribution: %d is not greater than previously observed comment attribution index %d", attributedTo, lastComment.AttributedToIndex))
 		}
 	}
 
-	f.comments = append(f.comments, commentInfo{
-		index:             int(comment),
-		attributedToIndex: int(attributedTo),
-		virtualIndex:      int(virtualToken),
+	f.Comments = append(f.Comments, &FileInfo_CommentInfo{
+		Index:             int32(comment),
+		AttributedToIndex: int32(attributedTo),
+		VirtualIndex:      int32(virtualToken),
 	})
 }
 
@@ -242,6 +182,9 @@ func (f *FileInfo) AddVirtualComment(comment Token, attributedTo Token, virtualT
 // nodeInfo.IsValid() returns false). If the given n is not out of range but
 // also from a different file than f, then the result is undefined.
 func (f *FileInfo) NodeInfo(n Node) NodeInfo {
+	if IsNil(n) {
+		return NodeInfo{fileInfo: f}
+	}
 	return f.nodeInfo(int(n.Start()), int(n.End()))
 }
 
@@ -251,18 +194,21 @@ func (f *FileInfo) NodeInfo(n Node) NodeInfo {
 // nodeInfo.IsValid() returns false). If the given t is not out of range but
 // also from a different file than f, then the result is undefined.
 func (f *FileInfo) TokenInfo(t Token) NodeInfo {
+	if t <= 0 {
+		return NodeInfo{fileInfo: f}
+	}
 	return f.nodeInfo(int(t), int(t))
 }
 
 func (f *FileInfo) nodeInfo(start, end int) NodeInfo {
-	if start < 0 || start >= len(f.items) {
+	if start < 0 || start >= len(f.ItemList) {
 		return NodeInfo{
 			fileInfo:   f,
 			startIndex: -1,
 			endIndex:   -1,
 		}
 	}
-	if end < 0 || end >= len(f.items) {
+	if end < 0 || end >= len(f.ItemList) {
 		return NodeInfo{fileInfo: f}
 	}
 	return NodeInfo{fileInfo: f, startIndex: start, endIndex: end}
@@ -293,18 +239,18 @@ func (f *FileInfo) ItemInfo(i Item) ItemInfo {
 // given i is not out of range but also from a different file than f, then
 // the result is undefined.
 func (f *FileInfo) GetItem(i Item) (Token, Comment) {
-	if i < 0 || int(i) >= len(f.items) {
+	if i < 0 || int(i) >= len(f.ItemList) {
 		return TokenError, Comment{}
 	}
 	if !f.isComment(i) {
 		return Token(i), Comment{}
 	}
 	// It's a comment, so find its location in f.comments
-	c := sort.Search(len(f.comments), func(c int) bool {
-		return f.comments[c].index >= int(i)
+	c := sort.Search(len(f.Comments), func(c int) bool {
+		return f.Comments[c].Index >= int32(i)
 	})
-	if c < len(f.comments) && f.comments[c].index == int(i) {
-		return TokenError, Comment{fileInfo: f, info: f.comments[c]}
+	if c < len(f.Comments) && f.Comments[c].Index == int32(i) {
+		return TokenError, Comment{fileInfo: f, info: f.Comments[c]}
 	}
 	// f.isComment(i) returned true, but we couldn't find it
 	// in f.comments? Uh oh... that shouldn't be possible.
@@ -312,7 +258,7 @@ func (f *FileInfo) GetItem(i Item) (Token, Comment) {
 }
 
 func (f *FileInfo) isDummyFile() bool {
-	return f == nil || f.lines == nil
+	return f == nil || f.Lines == nil
 }
 
 // Sequence represents a navigable sequence of elements.
@@ -350,28 +296,28 @@ type items struct {
 }
 
 func (i items) First() (Item, bool) {
-	if len(i.fileInfo.items) == 0 {
+	if len(i.fileInfo.ItemList) == 0 {
 		return 0, false
 	}
 	return 0, true
 }
 
 func (i items) Next(item Item) (Item, bool) {
-	if item < 0 || int(item) >= len(i.fileInfo.items)-1 {
+	if item < 0 || int(item) >= len(i.fileInfo.ItemList)-1 {
 		return 0, false
 	}
 	return i.fileInfo.itemForward(item+1, true)
 }
 
 func (i items) Last() (Item, bool) {
-	if len(i.fileInfo.items) == 0 {
+	if len(i.fileInfo.ItemList) == 0 {
 		return 0, false
 	}
-	return Item(len(i.fileInfo.items) - 1), true
+	return Item(len(i.fileInfo.ItemList) - 1), true
 }
 
 func (i items) Previous(item Item) (Item, bool) {
-	if item <= 0 || int(item) >= len(i.fileInfo.items) {
+	if item <= 0 || int(item) >= len(i.fileInfo.ItemList) {
 		return 0, false
 	}
 	return i.fileInfo.itemBackward(item-1, true)
@@ -387,7 +333,7 @@ func (t tokens) First() (Token, bool) {
 }
 
 func (t tokens) Next(tok Token) (Token, bool) {
-	if tok < 0 || int(tok) >= len(t.fileInfo.items)-1 {
+	if tok < 0 || int(tok) >= len(t.fileInfo.ItemList)-1 {
 		return 0, false
 	}
 	i, ok := t.fileInfo.itemForward(Item(tok+1), false)
@@ -395,12 +341,12 @@ func (t tokens) Next(tok Token) (Token, bool) {
 }
 
 func (t tokens) Last() (Token, bool) {
-	i, ok := t.fileInfo.itemBackward(Item(len(t.fileInfo.items))-1, false)
+	i, ok := t.fileInfo.itemBackward(Item(len(t.fileInfo.ItemList))-1, false)
 	return Token(i), ok
 }
 
 func (t tokens) Previous(tok Token) (Token, bool) {
-	if tok <= 0 || int(tok) >= len(t.fileInfo.items) {
+	if tok <= 0 || int(tok) >= len(t.fileInfo.ItemList) {
 		return 0, false
 	}
 	i, ok := t.fileInfo.itemBackward(Item(tok-1), false)
@@ -408,7 +354,7 @@ func (t tokens) Previous(tok Token) (Token, bool) {
 }
 
 func (f *FileInfo) itemForward(i Item, allowComment bool) (Item, bool) {
-	end := Item(len(f.items))
+	end := Item(len(f.ItemList))
 	for i < end {
 		if allowComment || !f.isComment(i) {
 			return i, true
@@ -431,30 +377,30 @@ func (f *FileInfo) itemBackward(i Item, allowComment bool) (Item, bool) {
 // isComment is comment returns true if i refers to a comment.
 // (If it returns false, i refers to a token.)
 func (f *FileInfo) isComment(i Item) bool {
-	item := f.items[i]
-	if item.length < 2 {
+	item := f.ItemList[i]
+	if item.Length < 2 {
 		return false
 	}
 	// see if item text starts with "//" or "/*"
-	if f.data[item.offset] != '/' {
+	if f.Data[item.Offset] != '/' {
 		return false
 	}
-	c := f.data[item.offset+1]
+	c := f.Data[item.Offset+1]
 	return c == '/' || c == '*'
 }
 
 func (f *FileInfo) SourcePos(offset int) SourcePos {
-	lineNumber := sort.Search(len(f.lines), func(n int) bool {
-		return f.lines[n] > offset
+	lineNumber := sort.Search(len(f.Lines), func(n int) bool {
+		return f.Lines[n] > int32(offset)
 	})
 
 	col := offset
 	if lineNumber > 0 {
-		col -= f.lines[lineNumber-1]
+		col -= int(f.Lines[lineNumber-1])
 	}
 
 	return SourcePos{
-		Filename: f.name,
+		Filename: f.Name,
 		Offset:   offset,
 		Line:     lineNumber,
 		// Columns are 1-indexed in this AST
@@ -463,19 +409,19 @@ func (f *FileInfo) SourcePos(offset int) SourcePos {
 }
 
 func (f *FileInfo) TokenAtOffset(offset int) Token {
-	if offset < 0 || offset > len(f.data) || len(f.items) == 0 {
+	if offset < 0 || offset > len(f.Data) || len(f.ItemList) == 0 {
 		return TokenError
 	}
 
 	// search for the token that contains the given offset, or if there is no
 	// such token, the closest token on the same line as the given offset.
 	// If there are no tokens on the same line, then TokenError is returned.
-	targetLine, found := sort.Find(len(f.lines), func(n int) int {
-		lineOffset := f.lines[n]
-		if lineOffset > offset {
+	targetLine, found := sort.Find(len(f.Lines), func(n int) int {
+		lineOffset := f.Lines[n]
+		if lineOffset > int32(offset) {
 			// went past the target line
 			return -1
-		} else if n < len(f.lines)-1 && f.lines[n+1] <= offset {
+		} else if n < len(f.Lines)-1 && f.Lines[n+1] <= int32(offset) {
 			// not yet at the target line
 			return 1
 		}
@@ -484,19 +430,19 @@ func (f *FileInfo) TokenAtOffset(offset int) Token {
 	if !found {
 		return TokenError
 	}
-	offsetMin := f.lines[targetLine]
-	offsetMax := len(f.data)
-	if targetLine < len(f.lines)-1 {
-		offsetMax = f.lines[targetLine+1] - 1
+	offsetMin := f.Lines[targetLine]
+	offsetMax := len(f.Data)
+	if targetLine < len(f.Lines)-1 {
+		offsetMax = int(f.Lines[targetLine+1] - 1)
 	}
-	targetIdx := sort.Search(len(f.items), func(n int) bool {
-		item := f.items[n]
-		return item.offset >= offsetMin &&
-			(item.offset == offset || item.offset+item.length > offset)
+	targetIdx := sort.Search(len(f.ItemList), func(n int) bool {
+		item := f.ItemList[n]
+		return item.Offset >= offsetMin &&
+			(item.Offset == int32(offset) || item.Offset+item.Length > int32(offset))
 	})
-	if targetIdx == len(f.items) {
+	if targetIdx == len(f.ItemList) {
 		// if the cursor is at EOF, then the last token is the target
-		if offset == len(f.data) {
+		if offset == len(f.Data) {
 			targetIdx--
 		} else {
 			return TokenError
@@ -506,22 +452,22 @@ func (f *FileInfo) TokenAtOffset(offset int) Token {
 	// if the target token has a length of 0, or the next token is 1 or more
 	// characters away from the target offset, check to see if the previous token
 	// would be a better match.
-	if f.items[targetIdx].length == 0 || f.items[targetIdx].offset-offset > 0 {
+	if f.ItemList[targetIdx].Length == 0 || f.ItemList[targetIdx].Offset-int32(offset) > 0 {
 		i := targetIdx - 1
-		for i > 0 && f.items[i].length == 0 {
+		for i > 0 && f.ItemList[i].Length == 0 {
 			i--
 		}
 		if i < 0 {
 			return TokenError
 		}
-		if item := f.items[i]; item.offset+item.length == offset {
+		if item := f.ItemList[i]; item.Offset+item.Length == int32(offset) {
 			// only use the previous token if the position is directly after it
 			targetIdx = i
 		}
 	}
 
 	target := Token(targetIdx)
-	if f.items[target].offset > offsetMax {
+	if f.ItemList[target].Offset > int32(offsetMax) {
 		// no tokens on the target line
 		return TokenError
 	}
@@ -529,20 +475,14 @@ func (f *FileInfo) TokenAtOffset(offset int) Token {
 	return target
 }
 
-// Token represents a single lexed token.
-type Token int
-
-// TokenError indicates an invalid token. It is returned from query
-// functions when no valid token satisfies the request.
-const TokenError = Token(-1)
+const (
+	TokenError   = Token_Error
+	TokenUnknown = Token_Unknown
+)
 
 // AsItem returns the Item that corresponds to t.
 func (t Token) AsItem() Item {
 	return Item(t)
-}
-
-func (t Token) AsTerminalNode() TerminalNode {
-	return TerminalNode(t)
 }
 
 // Item represents an item lexed from source. It represents either
@@ -619,10 +559,10 @@ func (n NodeInfo) Start() SourcePos {
 		return SourcePos{}
 	}
 	if n.fileInfo.isDummyFile() || !n.IsValid() {
-		return UnknownPos(n.fileInfo.name)
+		return UnknownPos(n.fileInfo.Name)
 	}
-	tok := n.fileInfo.items[n.startIndex]
-	return n.fileInfo.SourcePos(tok.offset)
+	tok := n.fileInfo.ItemList[n.startIndex]
+	return n.fileInfo.SourcePos(int(tok.Offset))
 }
 
 // End returns the ending position of the element, exclusive. This is the
@@ -635,17 +575,17 @@ func (n NodeInfo) End() SourcePos {
 		return SourcePos{}
 	}
 	if n.fileInfo.isDummyFile() || !n.IsValid() {
-		return UnknownPos(n.fileInfo.name)
+		return UnknownPos(n.fileInfo.Name)
 	}
 
-	tok := n.fileInfo.items[n.endIndex]
+	tok := n.fileInfo.ItemList[n.endIndex]
 	// find offset of last character in the span
-	offset := tok.offset
-	if tok.length > 0 {
-		offset += tok.length - 1
+	offset := tok.Offset
+	if tok.Length > 0 {
+		offset += tok.Length - 1
 	}
-	pos := n.fileInfo.SourcePos(offset)
-	if tok.length > 0 {
+	pos := n.fileInfo.SourcePos(int(offset))
+	if tok.Length > 0 {
 		// We return "open range", so end is the position *after* the
 		// last character in the span. So we adjust
 		pos.Col++
@@ -663,24 +603,24 @@ func (n NodeInfo) LeadingWhitespace() string {
 		return ""
 	}
 
-	tok := n.fileInfo.items[n.startIndex]
-	if tok.length == 0 && n.startIndex < len(n.fileInfo.items)-1 {
+	tok := n.fileInfo.ItemList[n.startIndex]
+	if tok.Length == 0 && n.startIndex < len(n.fileInfo.ItemList)-1 {
 		// leading whitespace is attributed to tokens that follow one or more
 		// zero-length tokens (except eof, since it is always the last token)
 		return ""
 	}
-	var prevEnd int
+	var prevEnd int32
 	if n.startIndex > 0 {
-		var prevTok itemSpan
+		var prevTok *FileInfo_ItemSpan
 		for offset := -1; n.startIndex+offset >= 0; offset-- {
-			prevTok = n.fileInfo.items[n.startIndex+offset]
-			if prevTok.length > 0 {
+			prevTok = n.fileInfo.ItemList[n.startIndex+offset]
+			if prevTok.Length > 0 {
 				break
 			}
 		}
-		prevEnd = prevTok.offset + prevTok.length
+		prevEnd = prevTok.Offset + prevTok.Length
 	}
-	return string(n.fileInfo.data[prevEnd:tok.offset])
+	return string(n.fileInfo.Data[prevEnd:tok.Offset])
 }
 
 // LeadingComments returns all comments in the source that exist between the
@@ -691,20 +631,20 @@ func (n NodeInfo) LeadingComments() Comments {
 		return EmptyComments
 	}
 
-	start := sort.Search(len(n.fileInfo.comments), func(i int) bool {
-		return n.fileInfo.comments[i].attributedToIndex >= n.startIndex
+	start := sort.Search(len(n.fileInfo.Comments), func(i int) bool {
+		return n.fileInfo.Comments[i].AttributedToIndex >= int32(n.startIndex)
 	})
 
-	if start == len(n.fileInfo.comments) || n.fileInfo.comments[start].attributedToIndex != n.startIndex {
+	if start == len(n.fileInfo.Comments) || n.fileInfo.Comments[start].AttributedToIndex != int32(n.startIndex) {
 		// no comments associated with this token
 		return EmptyComments
 	}
 
 	numComments := 0
-	for i := start; i < len(n.fileInfo.comments); i++ {
-		comment := n.fileInfo.comments[i]
-		if comment.attributedToIndex == n.startIndex &&
-			comment.index < n.startIndex {
+	for i := start; i < len(n.fileInfo.Comments); i++ {
+		comment := n.fileInfo.Comments[i]
+		if comment.AttributedToIndex == int32(n.startIndex) &&
+			comment.Index < int32(n.startIndex) {
 			numComments++
 		} else {
 			break
@@ -750,22 +690,22 @@ func (n NodeInfo) TrailingComments() Comments {
 		return EmptyComments
 	}
 
-	start := sort.Search(len(n.fileInfo.comments), func(i int) bool {
-		comment := n.fileInfo.comments[i]
-		return (comment.virtualIndex >= n.endIndex) ||
-			(comment.attributedToIndex >= n.endIndex && comment.index > n.endIndex)
+	start := sort.Search(len(n.fileInfo.Comments), func(i int) bool {
+		comment := n.fileInfo.Comments[i]
+		return (comment.VirtualIndex >= int32(n.endIndex)) ||
+			(comment.AttributedToIndex >= int32(n.endIndex) && comment.Index > int32(n.endIndex))
 	})
 
 	numComments := 0
 	var virtual []int
-	for i := start; i < len(n.fileInfo.comments); i++ {
-		comment := n.fileInfo.comments[i]
-		if comment.attributedToIndex == n.endIndex {
-			if comment.virtualIndex > 0 {
+	for i := start; i < len(n.fileInfo.Comments); i++ {
+		comment := n.fileInfo.Comments[i]
+		if comment.AttributedToIndex == int32(n.endIndex) {
+			if comment.VirtualIndex > 0 {
 				virtual = append(virtual, numComments)
 			}
 			numComments++
-		} else if comment.virtualIndex == n.endIndex {
+		} else if comment.VirtualIndex == int32(n.endIndex) {
 			numComments++
 		} else {
 			break
@@ -789,14 +729,14 @@ func (n NodeInfo) TrailingComments() Comments {
 // items (like an entire declaration), the full text of all items is returned
 // including any interior whitespace and comments.
 func (n NodeInfo) RawText() string {
-	startTok := n.fileInfo.items[n.startIndex]
-	endTok := n.fileInfo.items[n.endIndex]
-	return string(n.fileInfo.data[startTok.offset : endTok.offset+endTok.length])
+	startTok := n.fileInfo.ItemList[n.startIndex]
+	endTok := n.fileInfo.ItemList[n.endIndex]
+	return string(n.fileInfo.Data[startTok.Offset : endTok.Offset+endTok.Length])
 }
 
 type FileInfoInterface interface {
-	Name() string
-	Version() int32
+	GetName() string
+	GetVersion() int32
 	SourcePos(int) SourcePos
 	NodeInfo(Node) NodeInfo
 	TokenInfo(Token) NodeInfo
@@ -872,7 +812,7 @@ func (c Comments) Index(i int) Comment {
 	}
 	return Comment{
 		fileInfo: c.fileInfo,
-		info:     c.fileInfo.comments[c.first+i],
+		info:     c.fileInfo.Comments[c.first+i],
 		virtual:  virtual,
 	}
 }
@@ -887,7 +827,7 @@ func (c Comments) Index(i int) Comment {
 //	// this is a separate comment.
 type Comment struct {
 	fileInfo *FileInfo
-	info     commentInfo
+	info     *FileInfo_CommentInfo
 	virtual  bool
 }
 
@@ -896,25 +836,25 @@ var _ ItemInfo = Comment{}
 // IsValid returns true if this comment is valid. If this comment is
 // a zero-value struct, it is not valid.
 func (c Comment) IsValid() bool {
-	return c.fileInfo != nil && c.info.index >= 0
+	return c.fileInfo != nil && c.info.Index >= 0
 }
 
 // AsItem returns the Item that corresponds to c.
 func (c Comment) AsItem() Item {
-	return Item(c.info.index)
+	return Item(c.info.Index)
 }
 
 func (c Comment) Start() SourcePos {
-	span := c.fileInfo.items[c.AsItem()]
-	return c.fileInfo.SourcePos(span.offset)
+	span := c.fileInfo.ItemList[c.AsItem()]
+	return c.fileInfo.SourcePos(int(span.Offset))
 }
 
 // TODO: for some reason, this returns the position of the last character in the
 // comment, not the character after the last one, as is the case for tokens.
 // Unsure why this is the case, possibly unintentional?
 func (c Comment) End() SourcePos {
-	span := c.fileInfo.items[c.AsItem()]
-	return c.fileInfo.SourcePos(span.offset + span.length - 1)
+	span := c.fileInfo.ItemList[c.AsItem()]
+	return c.fileInfo.SourcePos(int(span.Offset + span.Length - 1))
 }
 
 func (c Comment) IsVirtual() bool {
@@ -922,33 +862,33 @@ func (c Comment) IsVirtual() bool {
 }
 
 func (c Comment) VirtualItem() Item {
-	return Item(c.info.virtualIndex)
+	return Item(c.info.VirtualIndex)
 }
 
 func (c Comment) AttributedTo() Item {
-	return Item(c.info.attributedToIndex)
+	return Item(c.info.AttributedToIndex)
 }
 
 func (c Comment) LeadingWhitespace() string {
 	item := c.AsItem()
-	span := c.fileInfo.items[item]
-	var prevEnd int
+	span := c.fileInfo.ItemList[item]
+	var prevEnd int32
 	if item > 0 {
-		var prevItem itemSpan
+		var prevItem *FileInfo_ItemSpan
 		for offset := -1; int(item)+offset >= 0; offset-- {
-			prevItem = c.fileInfo.items[int(item)+offset]
-			if prevItem.length > 0 {
+			prevItem = c.fileInfo.ItemList[int(item)+offset]
+			if prevItem.Length > 0 {
 				break
 			}
 		}
-		prevEnd = prevItem.offset + prevItem.length
+		prevEnd = prevItem.Offset + prevItem.Length
 	}
-	return string(c.fileInfo.data[prevEnd:span.offset])
+	return string(c.fileInfo.Data[prevEnd:span.Offset])
 }
 
 func (c Comment) RawText() string {
-	span := c.fileInfo.items[c.AsItem()]
-	return string(c.fileInfo.data[span.offset : span.offset+span.length])
+	span := c.fileInfo.ItemList[c.AsItem()]
+	return string(c.fileInfo.Data[span.Offset : span.Offset+span.Length])
 }
 
 func (c Comment) String() string {
@@ -976,10 +916,10 @@ func (f *FileInfo) DebugAnnotated() string {
 	var buf bytes.Buffer
 
 	zltCount := 0
-	for i, item := range f.items {
+	for i, item := range f.ItemList {
 		info := f.ItemInfo(Item(i))
-		start, end := item.offset, item.offset+item.length
-		data := f.data[start:end]
+		start, end := item.Offset, item.Offset+item.Length
+		data := f.Data[start:end]
 		tokenLen := end - start
 		if tokenLen == 0 {
 			zltCount++

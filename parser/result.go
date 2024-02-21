@@ -63,7 +63,7 @@ type result struct {
 
 	nodes              map[proto.Message]ast.Node
 	nodesInverse       map[ast.Node]proto.Message
-	fieldExtendeeNodes map[ast.FieldDeclNode]*ast.ExtendNode
+	fieldExtendeeNodes map[ast.Node]*ast.ExtendNode
 
 	// A position in the source file corresponding to the end of the last import
 	// statement (the point just after the semicolon). This can be used as an
@@ -97,7 +97,7 @@ func ResultFromAST(file *ast.FileNode, validate bool, handler *reporter.Handler)
 		file:               file,
 		nodes:              map[proto.Message]ast.Node{},
 		nodesInverse:       map[ast.Node]proto.Message{},
-		fieldExtendeeNodes: map[ast.FieldDeclNode]*ast.ExtendNode{},
+		fieldExtendeeNodes: map[ast.Node]*ast.ExtendNode{},
 	}
 	r.createFileDescriptor(filename, file, handler)
 	if validate {
@@ -111,7 +111,7 @@ func ResultFromAST(file *ast.FileNode, validate bool, handler *reporter.Handler)
 	var lastSeenImport *ast.ImportNode
 DECLS:
 	for _, decl := range file.Decls {
-		switch decl := decl.(type) {
+		switch decl := decl.Unwrap().(type) {
 		case *ast.PackageNode:
 			if lastSeenImport == nil {
 				// as a backup in case there are no imports
@@ -210,7 +210,7 @@ func (r *result) createFileDescriptor(filename string, file *ast.FileNode, handl
 		if handler.ReporterError() != nil {
 			return
 		}
-		switch decl := decl.(type) {
+		switch decl := decl.Unwrap().(type) {
 		case *ast.EnumNode:
 			fd.EnumType = append(fd.EnumType, r.asEnumDescriptor(decl, syntax, handler))
 		case *ast.ExtendNode:
@@ -316,7 +316,7 @@ func (r *result) asUninterpretedOption(node *ast.OptionNode) *descriptorpb.Unint
 		// the grammar does not allow arrays here, so the only possible case
 		// left should be []*ast.MessageFieldNode, which corresponds to an
 		// *ast.MessageLiteralNode
-		if n, ok := node.Val.(*ast.MessageLiteralNode); ok {
+		if n := node.Val.GetMessageLiteral(); n != nil {
 			var buf bytes.Buffer
 			for i, el := range n.Elements {
 				flattenNode(r.file, el, &buf)
@@ -369,7 +369,7 @@ func (r *result) addExtensions(ext *ast.ExtendNode, flds *[]*descriptorpb.FieldD
 	extendee := string(ext.Extendee.AsIdentifier())
 	count := 0
 	for _, decl := range ext.Decls {
-		switch decl := decl.(type) {
+		switch decl := decl.Unwrap().(type) {
 		case *ast.FieldNode:
 			if decl.IsIncomplete() {
 				continue
@@ -402,7 +402,7 @@ func (r *result) addExtensions(ext *ast.ExtendNode, flds *[]*descriptorpb.FieldD
 	}
 }
 
-func asLabel(lbl *ast.KeywordNode) *descriptorpb.FieldDescriptorProto_Label {
+func asLabel(lbl *ast.IdentNode) *descriptorpb.FieldDescriptorProto_Label {
 	if lbl == nil {
 		return nil
 	}
@@ -423,7 +423,7 @@ func (r *result) asFieldDescriptor(node *ast.FieldNode, maxTag int32, syntax syn
 	if err := r.checkTag(node.Tag, tag, maxTag); err != nil {
 		_ = handler.HandleError(err)
 	}
-	fd := newFieldDescriptor(node.Name.Val, string(node.FldType.AsIdentifier()), int32(tag), asLabel(node.Label))
+	fd := newFieldDescriptor(node.Name.Val, string(node.GetFieldType().AsIdentifier()), int32(tag), asLabel(node.Label))
 	r.putFieldNode(fd, node)
 	if opts := node.Options.GetElements(); len(opts) > 0 {
 		fd.Options = &descriptorpb.FieldOptions{UninterpretedOption: r.asUninterpretedOptions(opts)}
@@ -489,12 +489,11 @@ func (r *result) asGroupDescriptors(group *ast.GroupNode, syntax syntaxType, max
 		Type:     descriptorpb.FieldDescriptorProto_TYPE_GROUP.Enum(),
 		TypeName: proto.String(group.Name.Val),
 	}
-	r.putFieldNode(fd, group)
 	if opts := group.Options.GetElements(); len(opts) > 0 {
 		fd.Options = &descriptorpb.FieldOptions{UninterpretedOption: r.asUninterpretedOptions(opts)}
 	}
 	md := &descriptorpb.DescriptorProto{Name: proto.String(group.Name.Val)}
-	r.putMessageNode(md, group)
+	r.putGroupNode(fd, md, group)
 	// don't bother processing body if we've exceeded depth
 	if r.checkDepth(depth, group, handler) {
 		r.addMessageBody(md, group.Decls, syntax, handler, depth)
@@ -513,21 +512,20 @@ func (r *result) asMapDescriptors(mapField *ast.MapFieldNode, syntax syntaxType,
 		lbl = descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum()
 	}
 	keyFd := newFieldDescriptor("key", mapField.MapType.KeyType.Val, 1, lbl)
-	r.putFieldNode(keyFd, mapField.KeyField())
+	r.putSyntheticFieldNode(keyFd, mapField.KeyField())
 	valFd := newFieldDescriptor("value", string(mapField.MapType.ValueType.AsIdentifier()), 2, lbl)
-	r.putFieldNode(valFd, mapField.ValueField())
+	r.putSyntheticFieldNode(valFd, mapField.ValueField())
 	entryName := internal.InitCap(internal.JSONName(mapField.Name.Val)) + "Entry"
 	fd := newFieldDescriptor(mapField.Name.Val, entryName, int32(tag), descriptorpb.FieldDescriptorProto_LABEL_REPEATED.Enum())
 	if opts := mapField.Options.GetElements(); len(opts) > 0 {
 		fd.Options = &descriptorpb.FieldOptions{UninterpretedOption: r.asUninterpretedOptions(opts)}
 	}
-	r.putFieldNode(fd, mapField)
 	md := &descriptorpb.DescriptorProto{
 		Name:    proto.String(entryName),
 		Options: &descriptorpb.MessageOptions{MapEntry: proto.Bool(true)},
 		Field:   []*descriptorpb.FieldDescriptorProto{keyFd, valFd},
 	}
-	r.putMessageNode(md, mapField)
+	r.putMapFieldNode(fd, md, mapField)
 	return fd, md
 }
 
@@ -589,7 +587,7 @@ func (r *result) asMethodDescriptor(node *ast.RPCNode) *descriptorpb.MethodDescr
 	if node.OpenBrace != nil {
 		md.Options = &descriptorpb.MethodOptions{}
 		for _, decl := range node.Decls {
-			if option, ok := decl.(*ast.OptionNode); ok {
+			if option := decl.GetOption(); option != nil {
 				if option.IsIncomplete() {
 					if option.Name == nil || !ast.ExtendedSyntaxEnabled {
 						continue
@@ -607,7 +605,7 @@ func (r *result) asEnumDescriptor(en *ast.EnumNode, syntax syntaxType, handler *
 	r.putEnumNode(ed, en)
 	rsvdNames := map[string]ast.SourcePos{}
 	for _, decl := range en.Decls {
-		switch decl := decl.(type) {
+		switch decl := decl.Unwrap().(type) {
 		case *ast.OptionNode:
 			if decl.IsIncomplete() {
 				if decl.Name == nil || !ast.ExtendedSyntaxEnabled {
@@ -685,23 +683,22 @@ func (r *result) addReservedNames(names *[]string, node *ast.ReservedNode, synta
 	}
 }
 
-func (r *result) checkDepth(depth int, node ast.MessageDeclNode, handler *reporter.Handler) bool {
+func (r *result) checkDepth(depth int, node ast.Node, handler *reporter.Handler) bool {
 	if depth < 32 {
 		return true
 	}
-	n := ast.Node(node)
-	if grp, ok := n.(*ast.GroupNode); ok {
+	if grp, ok := node.(*ast.GroupNode); ok {
 		// pinpoint the group keyword if the source is a group
-		n = grp.Keyword
+		node = grp.Keyword
 	}
-	_ = handler.HandleErrorf(r.file.NodeInfo(n), "message nesting depth must be less than 32")
+	_ = handler.HandleErrorf(r.file.NodeInfo(node), "message nesting depth must be less than 32")
 	return false
 }
 
-func (r *result) addMessageBody(msgd *descriptorpb.DescriptorProto, decls []ast.MessageElement, syntax syntaxType, handler *reporter.Handler, depth int) {
+func (r *result) addMessageBody(msgd *descriptorpb.DescriptorProto, decls []*ast.MessageElement, syntax syntaxType, handler *reporter.Handler, depth int) {
 	// first process any options
 	for _, decl := range decls {
-		if opt, ok := decl.(*ast.OptionNode); ok {
+		if opt := decl.GetOption(); opt != nil {
 			if opt.IsIncomplete() {
 				if opt.Name == nil || !ast.ExtendedSyntaxEnabled {
 					continue
@@ -733,7 +730,7 @@ func (r *result) addMessageBody(msgd *descriptorpb.DescriptorProto, decls []ast.
 
 	// now we can process the rest
 	for _, decl := range decls {
-		switch decl := decl.(type) {
+		switch decl := decl.Unwrap().(type) {
 		case *ast.EnumNode:
 			msgd.EnumType = append(msgd.EnumType, r.asEnumDescriptor(decl, syntax, handler))
 		case *ast.ExtendNode:
@@ -764,7 +761,7 @@ func (r *result) addMessageBody(msgd *descriptorpb.DescriptorProto, decls []ast.
 			msgd.OneofDecl = append(msgd.OneofDecl, ood)
 			ooFields := 0
 			for _, oodecl := range decl.Decls {
-				switch oodecl := oodecl.(type) {
+				switch oodecl := oodecl.Unwrap().(type) {
 				case *ast.OptionNode:
 					if oodecl.IsIncomplete() {
 						if oodecl.Name == nil || !ast.ExtendedSyntaxEnabled {
@@ -844,7 +841,7 @@ func (r *result) isMessageSetWireFormat(scope string, md *descriptorpb.Descripto
 		return nil, nil
 	default:
 		optNode := r.OptionNode(opt)
-		optNodeInfo := r.file.NodeInfo(optNode.GetValue())
+		optNodeInfo := r.file.NodeInfo(optNode.GetVal())
 		return nil, handler.HandleErrorf(optNodeInfo, "%s: expecting bool value for message_set_wire_format option", scope)
 	}
 }
@@ -889,7 +886,7 @@ func (r *result) asServiceDescriptor(svc *ast.ServiceNode) *descriptorpb.Service
 	sd := &descriptorpb.ServiceDescriptorProto{Name: proto.String(svc.Name.Val)}
 	r.putServiceNode(sd, svc)
 	for _, decl := range svc.Decls {
-		switch decl := decl.(type) {
+		switch decl := decl.Unwrap().(type) {
 		case *ast.OptionNode:
 			if decl.IsIncomplete() {
 				if decl.Name == nil || !ast.ExtendedSyntaxEnabled {
@@ -981,121 +978,98 @@ func (r *result) processProto3OptionalFields(msgd *descriptorpb.DescriptorProto)
 			fd.OneofIndex = proto.Int32(int32(len(msgd.OneofDecl)))
 			ood := &descriptorpb.OneofDescriptorProto{Name: proto.String(ooName)}
 			msgd.OneofDecl = append(msgd.OneofDecl, ood)
-			ooident := r.FieldNode(fd).(*ast.FieldNode) //nolint:errcheck
-			r.putOneofNode(ood, ast.NewSyntheticOneof(ooident))
+			r.putOneofNode(ood, r.FieldNode(fd))
 		}
 	}
 }
 
 func (r *result) Node(m proto.Message) ast.Node {
-	if r.nodes == nil {
-		return ast.NewNoSourceNode(r.proto.GetName())
-	}
 	return r.nodes[m]
 }
 
-func (r *result) FileNode() ast.FileDeclNode {
-	if r.nodes == nil {
-		return ast.NewNoSourceNode(r.proto.GetName())
+func (r *result) FileNode() *ast.FileNode {
+	node, ok := r.nodes[r.proto].(*ast.FileNode)
+	if !ok {
+		return ast.NewEmptyFileNode(r.proto.GetName(), 0)
 	}
-	return r.nodes[r.proto].(ast.FileDeclNode)
+	return node
 }
 
-func (r *result) OptionNode(o *descriptorpb.UninterpretedOption) ast.OptionDeclNode {
-	if r.nodes == nil {
-		return ast.NewNoSourceNode(r.proto.GetName())
-	}
-	return r.nodes[o].(ast.OptionDeclNode)
+func (r *result) OptionNode(o *descriptorpb.UninterpretedOption) *ast.OptionNode {
+	node, _ := r.nodes[o].(*ast.OptionNode)
+	return node
 }
 
 func (r *result) OptionNamePartNode(o *descriptorpb.UninterpretedOption_NamePart) ast.Node {
-	if r.nodes == nil {
-		return ast.NewNoSourceNode(r.proto.GetName())
-	}
 	return r.nodes[o]
 }
 
-func (r *result) MessageNode(m *descriptorpb.DescriptorProto) ast.MessageDeclNode {
-	if r.nodes == nil {
-		return ast.NewNoSourceNode(r.proto.GetName())
+func (r *result) MessageNode(m *descriptorpb.DescriptorProto) *ast.MessageDeclNode {
+	switch n := r.nodes[m].(type) {
+	case *ast.MessageDeclNode:
+		return n
+	case interface{ AsMessageDeclNode() *ast.MessageDeclNode }:
+		return n.AsMessageDeclNode()
 	}
-	// if you get a panic here like "interface is nil, not ast.MessageDeclNode",
-	// it's a race condition
-	return r.nodes[m].(ast.MessageDeclNode)
+	return nil
 }
 
-func (r *result) FieldNode(f *descriptorpb.FieldDescriptorProto) ast.FieldDeclNode {
-	if r.nodes == nil {
-		return ast.NewNoSourceNode(r.proto.GetName())
+func (r *result) FieldNode(f *descriptorpb.FieldDescriptorProto) *ast.FieldDeclNode {
+	switch n := r.nodes[f].(type) {
+	case *ast.FieldDeclNode:
+		return n
+	case interface{ AsFieldDeclNode() *ast.FieldDeclNode }:
+		return n.AsFieldDeclNode()
 	}
-	return r.nodes[f].(ast.FieldDeclNode)
+	return nil
 }
 
-func (r *result) FieldExtendeeNode(f *descriptorpb.FieldDescriptorProto) ast.Node {
-	if r.nodes == nil {
-		return ast.NewNoSourceNode(r.proto.GetName())
-	}
-	return r.fieldExtendeeNodes[r.FieldNode(f)]
+func (r *result) FieldExtendeeNode(f *descriptorpb.FieldDescriptorProto) *ast.ExtendNode {
+	return r.fieldExtendeeNodes[r.FieldNode(f).Unwrap()]
 }
 
 func (r *result) OneofNode(o *descriptorpb.OneofDescriptorProto) ast.Node {
-	if r.nodes == nil {
-		return ast.NewNoSourceNode(r.proto.GetName())
-	}
-	return r.nodes[o]
+	node, _ := r.nodes[o].(*ast.OneofNode)
+	return node
 }
 
-func (r *result) ExtensionRangeNode(e *descriptorpb.DescriptorProto_ExtensionRange) ast.RangeDeclNode {
-	if r.nodes == nil {
-		return ast.NewNoSourceNode(r.proto.GetName())
-	}
-	return r.nodes[e].(ast.RangeDeclNode)
+func (r *result) ExtensionRangeNode(e *descriptorpb.DescriptorProto_ExtensionRange) *ast.RangeNode {
+	node, _ := r.nodes[e].(*ast.RangeNode)
+	return node
 }
 
-func (r *result) MessageReservedRangeNode(rr *descriptorpb.DescriptorProto_ReservedRange) ast.RangeDeclNode {
-	if r.nodes == nil {
-		return ast.NewNoSourceNode(r.proto.GetName())
-	}
-	return r.nodes[rr].(ast.RangeDeclNode)
+func (r *result) MessageReservedRangeNode(rr *descriptorpb.DescriptorProto_ReservedRange) *ast.RangeNode {
+	node, _ := r.nodes[rr].(*ast.RangeNode)
+	return node
 }
 
-func (r *result) EnumNode(e *descriptorpb.EnumDescriptorProto) ast.EnumDeclNode {
-	if r.nodes == nil {
-		return ast.NewNoSourceNode(r.proto.GetName())
-	}
-	return r.nodes[e].(ast.EnumDeclNode)
+func (r *result) EnumNode(e *descriptorpb.EnumDescriptorProto) *ast.EnumNode {
+	node, _ := r.nodes[e].(*ast.EnumNode)
+	return node
 }
 
-func (r *result) EnumValueNode(e *descriptorpb.EnumValueDescriptorProto) ast.EnumValueDeclNode {
-	if r.nodes == nil {
-		return ast.NewNoSourceNode(r.proto.GetName())
-	}
-	return r.nodes[e].(ast.EnumValueDeclNode)
+func (r *result) EnumValueNode(e *descriptorpb.EnumValueDescriptorProto) *ast.EnumValueNode {
+	node, _ := r.nodes[e].(*ast.EnumValueNode)
+	return node
 }
 
-func (r *result) EnumReservedRangeNode(rr *descriptorpb.EnumDescriptorProto_EnumReservedRange) ast.RangeDeclNode {
-	if r.nodes == nil {
-		return ast.NewNoSourceNode(r.proto.GetName())
-	}
-	return r.nodes[rr].(ast.RangeDeclNode)
+func (r *result) EnumReservedRangeNode(rr *descriptorpb.EnumDescriptorProto_EnumReservedRange) *ast.RangeNode {
+	node, _ := r.nodes[rr].(*ast.RangeNode)
+	return node
 }
 
-func (r *result) ServiceNode(s *descriptorpb.ServiceDescriptorProto) ast.ServiceDeclNode {
-	if r.nodes == nil {
-		return ast.NewNoSourceNode(r.proto.GetName())
-	}
-	return r.nodes[s].(ast.ServiceDeclNode)
+func (r *result) ServiceNode(s *descriptorpb.ServiceDescriptorProto) *ast.ServiceNode {
+	node, _ := r.nodes[s].(*ast.ServiceNode)
+	return node
 }
 
-func (r *result) MethodNode(m *descriptorpb.MethodDescriptorProto) ast.RPCDeclNode {
-	if r.nodes == nil {
-		return ast.NewNoSourceNode(r.proto.GetName())
-	}
-	return r.nodes[m].(ast.RPCDeclNode)
+func (r *result) MethodNode(m *descriptorpb.MethodDescriptorProto) *ast.RPCNode {
+	node, _ := r.nodes[m].(*ast.RPCNode)
+	return node
 }
 
 // EnumDescriptor implements Result.
-func (r *result) EnumDescriptor(n ast.EnumDeclNode) *descriptorpb.EnumDescriptorProto {
+func (r *result) EnumDescriptor(n *ast.EnumNode) *descriptorpb.EnumDescriptorProto {
 	if d, ok := r.nodesInverse[n]; ok {
 		if ed, ok := d.(*descriptorpb.EnumDescriptorProto); ok {
 			return ed
@@ -1105,7 +1079,7 @@ func (r *result) EnumDescriptor(n ast.EnumDeclNode) *descriptorpb.EnumDescriptor
 }
 
 // EnumReservedRangeDescriptor implements Result.
-func (r *result) EnumReservedRangeDescriptor(n ast.RangeDeclNode) *descriptorpb.EnumDescriptorProto_EnumReservedRange {
+func (r *result) EnumReservedRangeDescriptor(n *ast.RangeNode) *descriptorpb.EnumDescriptorProto_EnumReservedRange {
 	if d, ok := r.nodesInverse[n]; ok {
 		if erd, ok := d.(*descriptorpb.EnumDescriptorProto_EnumReservedRange); ok {
 			return erd
@@ -1115,7 +1089,7 @@ func (r *result) EnumReservedRangeDescriptor(n ast.RangeDeclNode) *descriptorpb.
 }
 
 // EnumValueDescriptor implements Result.
-func (r *result) EnumValueDescriptor(n ast.EnumValueDeclNode) *descriptorpb.EnumValueDescriptorProto {
+func (r *result) EnumValueDescriptor(n *ast.EnumValueNode) *descriptorpb.EnumValueDescriptorProto {
 	if d, ok := r.nodesInverse[n]; ok {
 		if evd, ok := d.(*descriptorpb.EnumValueDescriptorProto); ok {
 			return evd
@@ -1125,7 +1099,7 @@ func (r *result) EnumValueDescriptor(n ast.EnumValueDeclNode) *descriptorpb.Enum
 }
 
 // ExtensionRangeDescriptor implements Result.
-func (r *result) ExtensionRangeDescriptor(n ast.RangeDeclNode) *descriptorpb.DescriptorProto_ExtensionRange {
+func (r *result) ExtensionRangeDescriptor(n *ast.RangeNode) *descriptorpb.DescriptorProto_ExtensionRange {
 	if d, ok := r.nodesInverse[n]; ok {
 		if erd, ok := d.(*descriptorpb.DescriptorProto_ExtensionRange); ok {
 			return erd
@@ -1135,7 +1109,7 @@ func (r *result) ExtensionRangeDescriptor(n ast.RangeDeclNode) *descriptorpb.Des
 }
 
 // FieldDescriptor implements Result.
-func (r *result) FieldDescriptor(n ast.FieldDeclNode) *descriptorpb.FieldDescriptorProto {
+func (r *result) FieldDescriptor(n *ast.FieldDeclNode) *descriptorpb.FieldDescriptorProto {
 	if d, ok := r.nodesInverse[n]; ok {
 		if fd, ok := d.(*descriptorpb.FieldDescriptorProto); ok {
 			return fd
@@ -1145,7 +1119,7 @@ func (r *result) FieldDescriptor(n ast.FieldDeclNode) *descriptorpb.FieldDescrip
 }
 
 // MessageDescriptor implements Result.
-func (r *result) MessageDescriptor(n ast.MessageDeclNode) *descriptorpb.DescriptorProto {
+func (r *result) MessageDescriptor(n *ast.MessageDeclNode) *descriptorpb.DescriptorProto {
 	if d, ok := r.nodesInverse[n]; ok {
 		if md, ok := d.(*descriptorpb.DescriptorProto); ok {
 			return md
@@ -1155,7 +1129,7 @@ func (r *result) MessageDescriptor(n ast.MessageDeclNode) *descriptorpb.Descript
 }
 
 // MessageReservedRangeDescriptor implements Result.
-func (r *result) MessageReservedRangeDescriptor(n ast.RangeDeclNode) *descriptorpb.DescriptorProto_ReservedRange {
+func (r *result) MessageReservedRangeDescriptor(n *ast.RangeNode) *descriptorpb.DescriptorProto_ReservedRange {
 	if d, ok := r.nodesInverse[n]; ok {
 		if mrd, ok := d.(*descriptorpb.DescriptorProto_ReservedRange); ok {
 			return mrd
@@ -1165,7 +1139,7 @@ func (r *result) MessageReservedRangeDescriptor(n ast.RangeDeclNode) *descriptor
 }
 
 // MethodDescriptor implements Result.
-func (r *result) MethodDescriptor(n ast.RPCDeclNode) *descriptorpb.MethodDescriptorProto {
+func (r *result) MethodDescriptor(n *ast.RPCNode) *descriptorpb.MethodDescriptorProto {
 	if d, ok := r.nodesInverse[n]; ok {
 		if md, ok := d.(*descriptorpb.MethodDescriptorProto); ok {
 			return md
@@ -1185,7 +1159,7 @@ func (r *result) OneofDescriptor(n ast.Node) *descriptorpb.OneofDescriptorProto 
 }
 
 // OptionDescriptor implements Result.
-func (r *result) OptionDescriptor(n ast.OptionDeclNode) *descriptorpb.UninterpretedOption {
+func (r *result) OptionDescriptor(n *ast.OptionNode) *descriptorpb.UninterpretedOption {
 	if d, ok := r.nodesInverse[n]; ok {
 		if od, ok := d.(*descriptorpb.UninterpretedOption); ok {
 			return od
@@ -1205,7 +1179,7 @@ func (r *result) OptionNamePartDescriptor(n ast.Node) *descriptorpb.Uninterprete
 }
 
 // ServiceDescriptor implements Result.
-func (r *result) ServiceDescriptor(n ast.ServiceDeclNode) *descriptorpb.ServiceDescriptorProto {
+func (r *result) ServiceDescriptor(n *ast.ServiceNode) *descriptorpb.ServiceDescriptorProto {
 	if d, ok := r.nodesInverse[n]; ok {
 		if sd, ok := d.(*descriptorpb.ServiceDescriptorProto); ok {
 			return sd
@@ -1236,17 +1210,34 @@ func (r *result) putOptionNamePartNode(o *descriptorpb.UninterpretedOption_NameP
 	r.nodesInverse[n] = o
 }
 
-func (r *result) putMessageNode(m *descriptorpb.DescriptorProto, n ast.MessageDeclNode) {
+func (r *result) putMessageNode(m *descriptorpb.DescriptorProto, n *ast.MessageNode) {
 	r.nodes[m] = n
 	r.nodesInverse[n] = m
 }
 
-func (r *result) putFieldNode(f *descriptorpb.FieldDescriptorProto, n ast.FieldDeclNode) {
+func (r *result) putFieldNode(f *descriptorpb.FieldDescriptorProto, n *ast.FieldNode) {
 	r.nodes[f] = n
 	r.nodesInverse[n] = f
 }
 
-func (r *result) putOneofNode(o *descriptorpb.OneofDescriptorProto, n ast.OneofDeclNode) {
+func (r *result) putMapFieldNode(f *descriptorpb.FieldDescriptorProto, m *descriptorpb.DescriptorProto, n *ast.MapFieldNode) {
+	r.nodes[f] = n
+	r.nodes[m] = n
+	r.nodesInverse[n] = f
+}
+
+func (r *result) putSyntheticFieldNode(f *descriptorpb.FieldDescriptorProto, n *ast.SyntheticMapField) {
+	r.nodes[f] = n
+	r.nodesInverse[n] = f
+}
+
+func (r *result) putGroupNode(f *descriptorpb.FieldDescriptorProto, m *descriptorpb.DescriptorProto, n *ast.GroupNode) {
+	r.nodes[f] = n
+	r.nodes[m] = n
+	r.nodesInverse[n] = f
+}
+
+func (r *result) putOneofNode(o *descriptorpb.OneofDescriptorProto, n ast.Node) {
 	r.nodes[o] = n
 	r.nodesInverse[n] = o
 }

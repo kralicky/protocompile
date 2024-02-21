@@ -20,64 +20,56 @@ import (
 	"strings"
 )
 
-// ValueNode is an AST node that represents a literal value.
+// Value returns a Go representation of the value. For scalars, this
+// will be a string, int64, uint64, float64, or bool. This could also
+// be an Identifier (e.g. IdentValueNodes). It can also be a composite
+// literal:
+//   - For array literals, the type returned will be []ValueNode
+//   - For message literals, the type returned will be []*MessageFieldNode
 //
-// It also includes references (e.g. IdentifierValueNode), which can be
-// used as values in some contexts, such as describing the default value
-// for a field, which can refer to an enum value.
-//
-// This also allows NoSourceNode to be used in place of a real value node
-// for some usages.
-type ValueNode interface {
-	Node
-	// Value returns a Go representation of the value. For scalars, this
-	// will be a string, int64, uint64, float64, or bool. This could also
-	// be an Identifier (e.g. IdentValueNodes). It can also be a composite
-	// literal:
-	//   * For array literals, the type returned will be []ValueNode
-	//   * For message literals, the type returned will be []*MessageFieldNode
-	//
-	// If the ValueNode is a NoSourceNode, indicating that there is no actual
-	// source code (and thus not AST information), then this method always
-	// returns nil.
-	Value() interface{}
+// If the ValueNode is a NoSourceNode, indicating that there is no actual
+// source code (and thus not AST information), then this method always
+// returns nil.
+func (v *ValueNode) Value() any {
+	if u := v.Unwrap(); u != nil {
+		return u.Value()
+	}
+	return nil
 }
 
-var (
-	_ ValueNode = (*IdentNode)(nil)
-	_ ValueNode = (*CompoundIdentNode)(nil)
-	_ ValueNode = (*StringLiteralNode)(nil)
-	_ ValueNode = (*CompoundStringLiteralNode)(nil)
-	_ ValueNode = (*UintLiteralNode)(nil)
-	_ ValueNode = (*NegativeIntLiteralNode)(nil)
-	_ ValueNode = (*FloatLiteralNode)(nil)
-	_ ValueNode = (*SpecialFloatLiteralNode)(nil)
-	_ ValueNode = (*SignedFloatLiteralNode)(nil)
-	_ ValueNode = (*ArrayLiteralNode)(nil)
-	_ ValueNode = (*MessageLiteralNode)(nil)
-	_ ValueNode = NoSourceNode{}
-)
-
-// StringValueNode is an AST node that represents a string literal.
-// Such a node can be a single literal (*StringLiteralNode) or a
-// concatenation of multiple literals (*CompoundStringLiteralNode).
-type StringValueNode interface {
-	ValueNode
-	AsString() string
+func (v *ValueNode) Start() Token {
+	if u := v.Unwrap(); u != nil {
+		return u.Start()
+	}
+	return TokenUnknown
 }
 
-var (
-	_ StringValueNode = (*StringLiteralNode)(nil)
-	_ StringValueNode = (*CompoundStringLiteralNode)(nil)
-)
+func (v *ValueNode) End() Token {
+	if u := v.Unwrap(); u != nil {
+		return u.End()
+	}
+	return TokenUnknown
+}
 
-// StringLiteralNode represents a simple string literal. Example:
-//
-//	"proto2"
-type StringLiteralNode struct {
-	TerminalNode
-	// Val is the actual string value that the literal indicates.
-	Val string
+func (s *StringValueNode) AsString() string {
+	if u := s.Unwrap(); u != nil {
+		return u.AsString()
+	}
+	return ""
+}
+
+func (s *StringValueNode) Start() Token {
+	if u := s.Unwrap(); u != nil {
+		return u.Start()
+	}
+	return TokenUnknown
+}
+
+func (s *StringValueNode) End() Token {
+	if u := s.Unwrap(); u != nil {
+		return u.End()
+	}
+	return TokenUnknown
 }
 
 func (n *StringLiteralNode) Value() interface{} {
@@ -86,14 +78,6 @@ func (n *StringLiteralNode) Value() interface{} {
 
 func (n *StringLiteralNode) AsString() string {
 	return n.Val
-}
-
-// CompoundStringLiteralNode represents a compound string literal, which is
-// the concatenaton of adjacent string literals. Example:
-//
-//	"this "  "is"   " all one "   "string"
-type CompoundStringLiteralNode struct {
-	Elements []StringValueNode
 }
 
 func (n *CompoundStringLiteralNode) Start() Token {
@@ -122,18 +106,44 @@ func (n *CompoundStringLiteralNode) AsString() string {
 	return sb.String()
 }
 
-// IntValueNode is an AST node that represents an integer literal. If
-// an integer literal is too large for an int64 (or uint64 for
-// positive literals), it is represented instead by a FloatValueNode.
-type IntValueNode interface {
-	ValueNode
-	AsInt64() (int64, bool)
-	AsUint64() (uint64, bool)
+func (n *IntValueNode) Start() Token {
+	if u := n.Unwrap(); u != nil {
+		return u.Start()
+	}
+	return TokenUnknown
+}
+
+func (n *IntValueNode) End() Token {
+	if u := n.Unwrap(); u != nil {
+		return u.End()
+	}
+	return TokenUnknown
+}
+
+func (n *IntValueNode) AsInt64() (int64, bool) {
+	if u := n.Unwrap(); u != nil {
+		return u.AsInt64()
+	}
+	return 0, false
+}
+
+func (n *IntValueNode) AsUint64() (uint64, bool) {
+	if u := n.Unwrap(); u != nil {
+		return u.AsUint64()
+	}
+	return 0, false
+}
+
+func (n *IntValueNode) Value() any {
+	if u := n.Unwrap(); u != nil {
+		return u.Value()
+	}
+	return nil
 }
 
 // AsInt32 range checks the given int value and returns its value is
 // in the range or 0, false if it is outside the range.
-func AsInt32(n IntValueNode, min, max int32) (int32, bool) {
+func AsInt32[T interface{ AsInt64() (int64, bool) }](n T, min, max int32) (int32, bool) {
 	i, ok := n.AsInt64()
 	if !ok {
 		return 0, false
@@ -142,20 +152,6 @@ func AsInt32(n IntValueNode, min, max int32) (int32, bool) {
 		return 0, false
 	}
 	return int32(i), true
-}
-
-var (
-	_ IntValueNode = (*UintLiteralNode)(nil)
-	_ IntValueNode = (*NegativeIntLiteralNode)(nil)
-)
-
-// UintLiteralNode represents a simple integer literal with no sign character.
-type UintLiteralNode struct {
-	TerminalNode
-	// Val is the numeric value indicated by the literal
-	Val uint64
-	// Raw is the original string representation of the literal
-	Raw string
 }
 
 func (n *UintLiteralNode) Value() interface{} {
@@ -177,14 +173,8 @@ func (n *UintLiteralNode) AsFloat() float64 {
 	return float64(n.Val)
 }
 
-// NegativeIntLiteralNode represents an integer literal with a negative (-) sign.
-type NegativeIntLiteralNode struct {
-	Minus *RuneNode
-	Uint  *UintLiteralNode
-}
-
 func (n *NegativeIntLiteralNode) Start() Token {
-	return n.Minus.Token()
+	return n.Minus.GetToken()
 }
 
 func (n *NegativeIntLiteralNode) End() Token {
@@ -207,27 +197,25 @@ func (n *NegativeIntLiteralNode) AsUint64() (uint64, bool) {
 	return uint64(i64), true
 }
 
-// FloatValueNode is an AST node that represents a numeric literal with
-// a floating point, in scientific notation, or too large to fit in an
-// int64 or uint64.
-type FloatValueNode interface {
-	ValueNode
-	AsFloat() float64
+func (n *FloatValueNode) AsFloat() float64 {
+	if u := n.Unwrap(); u != nil {
+		return u.AsFloat()
+	}
+	return 0
 }
 
-var (
-	_ FloatValueNode = (*FloatLiteralNode)(nil)
-	_ FloatValueNode = (*SpecialFloatLiteralNode)(nil)
-	_ FloatValueNode = (*UintLiteralNode)(nil)
-)
+func (n *FloatValueNode) Start() Token {
+	if u := n.Unwrap(); u != nil {
+		return u.Start()
+	}
+	return TokenUnknown
+}
 
-// FloatLiteralNode represents a floating point numeric literal.
-type FloatLiteralNode struct {
-	TerminalNode
-	// Val is the numeric value indicated by the literal
-	Val float64
-	// Raw is the original string representation of the literal
-	Raw string
+func (n *FloatValueNode) End() Token {
+	if u := n.Unwrap(); u != nil {
+		return u.End()
+	}
+	return TokenUnknown
 }
 
 func (n *FloatLiteralNode) Value() interface{} {
@@ -238,17 +226,10 @@ func (n *FloatLiteralNode) AsFloat() float64 {
 	return n.Val
 }
 
-// SpecialFloatLiteralNode represents a special floating point numeric literal
-// for "inf" and "nan" values.
-type SpecialFloatLiteralNode struct {
-	*KeywordNode
-	Val float64
-}
-
 // NewSpecialFloatLiteralNode returns a new *SpecialFloatLiteralNode for the
 // given keyword. The given keyword should be "inf", "infinity", or "nan"
 // in any case.
-func NewSpecialFloatLiteralNode(name *KeywordNode) *SpecialFloatLiteralNode {
+func NewSpecialFloatLiteralNode(name *IdentNode) *SpecialFloatLiteralNode {
 	var f float64
 	switch strings.ToLower(name.Val) {
 	case "inf", "infinity":
@@ -259,8 +240,8 @@ func NewSpecialFloatLiteralNode(name *KeywordNode) *SpecialFloatLiteralNode {
 		panic(fmt.Sprintf("invalid special float literal: %q", name.Val))
 	}
 	return &SpecialFloatLiteralNode{
-		KeywordNode: name,
-		Val:         f,
+		Keyword: name,
+		Val:     f,
 	}
 }
 
@@ -270,12 +251,6 @@ func (n *SpecialFloatLiteralNode) Value() interface{} {
 
 func (n *SpecialFloatLiteralNode) AsFloat() float64 {
 	return n.Val
-}
-
-// SignedFloatLiteralNode represents a signed floating point number.
-type SignedFloatLiteralNode struct {
-	Sign  *RuneNode
-	Float FloatValueNode
 }
 
 func (n *SignedFloatLiteralNode) Start() Token {
@@ -300,20 +275,8 @@ func (n *SignedFloatLiteralNode) AsFloat() float64 {
 	return val
 }
 
-// ArrayLiteralNode represents an array literal, which is only allowed inside of
-// a MessageLiteralNode, to indicate values for a repeated field. Example:
-//
-//	["foo", "bar", "baz"]
-type ArrayLiteralNode struct {
-	OpenBracket  *RuneNode
-	Elements     []ValueNode
-	Commas       []*RuneNode
-	CloseBracket *RuneNode
-	Semicolon    *RuneNode
-}
-
 func (n *ArrayLiteralNode) Start() Token {
-	return n.OpenBracket.Token()
+	return n.OpenBracket.GetToken()
 }
 
 func (n *ArrayLiteralNode) End() Token {
@@ -324,53 +287,16 @@ func (n *ArrayLiteralNode) Value() interface{} {
 	return n.Elements
 }
 
-// MessageLiteralNode represents a message literal, which is compatible with the
-// protobuf text format and can be used for custom options with message types.
-// Example:
-//
-//	{ foo:1 foo:2 foo:3 bar:<name:"abc" id:123> }
-type MessageLiteralNode struct {
-	Open     *RuneNode // should be '{' or '<'
-	Elements []*MessageFieldNode
-	// Separator characters between elements, which can be either ','
-	// or ';' if present. This slice must be exactly len(Elements) in
-	// length, with each item in Elements having one corresponding item
-	// in Seps. Separators in message literals are optional, so a given
-	// item in this slice may be nil to indicate absence of a separator.
-	Seps      []*RuneNode
-	Close     *RuneNode // should be '}' or '>', depending on Open
-	Semicolon *RuneNode
-}
-
 func (n *MessageLiteralNode) Start() Token {
-	return n.Open.Token()
+	return n.Open.GetToken()
 }
 
 func (n *MessageLiteralNode) End() Token {
 	return endToken(n.Semicolon, n.Close)
 }
 
-func (n *MessageLiteralNode) GetElements() []*MessageFieldNode {
-	return n.Elements
-}
-
 func (n *MessageLiteralNode) Value() interface{} {
 	return n.Elements
-}
-
-// MessageFieldNode represents a single field (name and value) inside of a
-// message literal. Example:
-//
-//	foo:"bar"
-type MessageFieldNode struct {
-	Name *FieldReferenceNode
-	// Sep represents the ':' separator between the name and value. If
-	// the value is a message or list literal (and thus starts with '<',
-	// '{', or '['), then the separator may be omitted and this field may
-	// be nil.
-	Sep       *RuneNode
-	Val       ValueNode
-	Semicolon *RuneNode
 }
 
 func (n *MessageFieldNode) Start() Token {
@@ -382,12 +308,12 @@ func (n *MessageFieldNode) End() Token {
 }
 
 func (n *MessageFieldNode) IsIncomplete() bool {
-	if IsNil(n.Val) {
+	if n.Val == nil {
 		return true
 	}
 	if n.Sep == nil {
-		switch n.Val.(type) {
-		case *MessageLiteralNode, *ArrayLiteralNode:
+		switch n.Val.GetVal().(type) {
+		case *ValueNode_MessageLiteral, *ValueNode_ArrayLiteral:
 			return false
 		default:
 			return true

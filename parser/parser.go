@@ -128,7 +128,7 @@ type Result interface {
 
 	// FileNode returns the root of the AST. If this result has no AST then a
 	// placeholder node is returned.
-	FileNode() ast.FileDeclNode
+	FileNode() *ast.FileNode
 	// Node returns the AST node from which the given message was created. This
 	// can return nil, such as if the given message is not part of the
 	// FileDescriptorProto hierarchy. If this result has no AST, this returns a
@@ -138,7 +138,7 @@ type Result interface {
 	// option. This can return nil, such as if the given option is not part of
 	// the FileDescriptorProto hierarchy. If this result has no AST, this
 	// returns a placeholder node.
-	OptionNode(*descriptorpb.UninterpretedOption) ast.OptionDeclNode
+	OptionNode(*descriptorpb.UninterpretedOption) *ast.OptionNode
 	// OptionNamePartNode returns the AST node corresponding to the given name
 	// part for an uninterpreted option. This can return nil, such as if the
 	// given name part is not part of the FileDescriptorProto hierarchy. If this
@@ -148,15 +148,15 @@ type Result interface {
 	// can return nil, such as if the given message is not part of the
 	// FileDescriptorProto hierarchy. If this result has no AST, this returns a
 	// placeholder node.
-	MessageNode(*descriptorpb.DescriptorProto) ast.MessageDeclNode
+	MessageNode(*descriptorpb.DescriptorProto) *ast.MessageDeclNode
 	// FieldNode returns the AST node corresponding to the given field. This can
 	// return nil, such as if the given field is not part of the
 	// FileDescriptorProto hierarchy. If this result has no AST, this returns a
 	// placeholder node.
-	FieldNode(*descriptorpb.FieldDescriptorProto) ast.FieldDeclNode
+	FieldNode(*descriptorpb.FieldDescriptorProto) *ast.FieldDeclNode
 	// FieldExtendeeNode returns the containing *ExtendNode for fields that are
 	// defined inside of "extend" blocks.
-	FieldExtendeeNode(*descriptorpb.FieldDescriptorProto) ast.Node
+	FieldExtendeeNode(*descriptorpb.FieldDescriptorProto) *ast.ExtendNode
 	// OneofNode returns the AST node corresponding to the given oneof. This can
 	// return nil, such as if the given oneof is not part of the
 	// FileDescriptorProto hierarchy. If this result has no AST, this returns a
@@ -166,50 +166,50 @@ type Result interface {
 	// extension range. This can return nil, such as if the given range is not
 	// part of the FileDescriptorProto hierarchy. If this result has no AST,
 	// this returns a placeholder node.
-	ExtensionRangeNode(*descriptorpb.DescriptorProto_ExtensionRange) ast.RangeDeclNode
+	ExtensionRangeNode(*descriptorpb.DescriptorProto_ExtensionRange) *ast.RangeNode
 	// MessageReservedRangeNode returns the AST node corresponding to the given
 	// reserved range. This can return nil, such as if the given range is not
 	// part of the FileDescriptorProto hierarchy. If this result has no AST,
 	// this returns a placeholder node.
-	MessageReservedRangeNode(*descriptorpb.DescriptorProto_ReservedRange) ast.RangeDeclNode
+	MessageReservedRangeNode(*descriptorpb.DescriptorProto_ReservedRange) *ast.RangeNode
 	// EnumNode returns the AST node corresponding to the given enum. This can
 	// return nil, such as if the given enum is not part of the
 	// FileDescriptorProto hierarchy. If this result has no AST, this returns a
 	// placeholder node.
-	EnumNode(*descriptorpb.EnumDescriptorProto) ast.EnumDeclNode
+	EnumNode(*descriptorpb.EnumDescriptorProto) *ast.EnumNode
 	// EnumValueNode returns the AST node corresponding to the given enum. This
 	// can return nil, such as if the given enum value is not part of the
 	// FileDescriptorProto hierarchy. If this result has no AST, this returns a
 	// placeholder node.
-	EnumValueNode(*descriptorpb.EnumValueDescriptorProto) ast.EnumValueDeclNode
+	EnumValueNode(*descriptorpb.EnumValueDescriptorProto) *ast.EnumValueNode
 	// EnumReservedRangeNode returns the AST node corresponding to the given
 	// reserved range. This can return nil, such as if the given range is not
 	// part of the FileDescriptorProto hierarchy. If this result has no AST,
 	// this returns a placeholder node.
-	EnumReservedRangeNode(*descriptorpb.EnumDescriptorProto_EnumReservedRange) ast.RangeDeclNode
+	EnumReservedRangeNode(*descriptorpb.EnumDescriptorProto_EnumReservedRange) *ast.RangeNode
 	// ServiceNode returns the AST node corresponding to the given service. This
 	// can return nil, such as if the given service is not part of the
 	// FileDescriptorProto hierarchy. If this result has no AST, this returns a
 	// placeholder node.
-	ServiceNode(*descriptorpb.ServiceDescriptorProto) ast.ServiceDeclNode
+	ServiceNode(*descriptorpb.ServiceDescriptorProto) *ast.ServiceNode
 	// MethodNode returns the AST node corresponding to the given method. This
 	// can return nil, such as if the given method is not part of the
 	// FileDescriptorProto hierarchy. If this result has no AST, this returns a
 	// placeholder node.
-	MethodNode(*descriptorpb.MethodDescriptorProto) ast.RPCDeclNode
+	MethodNode(*descriptorpb.MethodDescriptorProto) *ast.RPCNode
 
-	OptionDescriptor(ast.OptionDeclNode) *descriptorpb.UninterpretedOption
+	OptionDescriptor(*ast.OptionNode) *descriptorpb.UninterpretedOption
 	OptionNamePartDescriptor(ast.Node) *descriptorpb.UninterpretedOption_NamePart
-	MessageDescriptor(ast.MessageDeclNode) *descriptorpb.DescriptorProto
-	FieldDescriptor(ast.FieldDeclNode) *descriptorpb.FieldDescriptorProto
+	MessageDescriptor(*ast.MessageDeclNode) *descriptorpb.DescriptorProto
+	FieldDescriptor(*ast.FieldDeclNode) *descriptorpb.FieldDescriptorProto
 	OneofDescriptor(ast.Node) *descriptorpb.OneofDescriptorProto
-	ExtensionRangeDescriptor(ast.RangeDeclNode) *descriptorpb.DescriptorProto_ExtensionRange
-	MessageReservedRangeDescriptor(ast.RangeDeclNode) *descriptorpb.DescriptorProto_ReservedRange
-	EnumDescriptor(ast.EnumDeclNode) *descriptorpb.EnumDescriptorProto
-	EnumValueDescriptor(ast.EnumValueDeclNode) *descriptorpb.EnumValueDescriptorProto
-	EnumReservedRangeDescriptor(ast.RangeDeclNode) *descriptorpb.EnumDescriptorProto_EnumReservedRange
-	ServiceDescriptor(ast.ServiceDeclNode) *descriptorpb.ServiceDescriptorProto
-	MethodDescriptor(ast.RPCDeclNode) *descriptorpb.MethodDescriptorProto
+	ExtensionRangeDescriptor(*ast.RangeNode) *descriptorpb.DescriptorProto_ExtensionRange
+	MessageReservedRangeDescriptor(*ast.RangeNode) *descriptorpb.DescriptorProto_ReservedRange
+	EnumDescriptor(*ast.EnumNode) *descriptorpb.EnumDescriptorProto
+	EnumValueDescriptor(*ast.EnumValueNode) *descriptorpb.EnumValueDescriptorProto
+	EnumReservedRangeDescriptor(*ast.RangeNode) *descriptorpb.EnumDescriptorProto_EnumReservedRange
+	ServiceDescriptor(*ast.ServiceNode) *descriptorpb.ServiceDescriptorProto
+	MethodDescriptor(*ast.RPCNode) *descriptorpb.MethodDescriptorProto
 	Descriptor(ast.Node) proto.Message
 
 	ImportInsertionPoint() ast.SourcePos

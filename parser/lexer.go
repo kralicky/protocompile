@@ -269,7 +269,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 			// accumulated comments as a trailing comment on last symbol
 			// (if appropriate)
 			l.setRune(lval, 0)
-			l.eof = lval.b.Token()
+			l.eof = lval.b.GetToken()
 			return 0
 		}
 		if err != nil {
@@ -801,16 +801,16 @@ func (l *protoLex) setPrevAndAddComments(n ast.TerminalNodeInterface) {
 
 	// now we can associate comments
 	for _, c := range prevTrailingComments {
-		l.info.AddComment(c, l.prevSym.Token())
+		l.info.AddComment(c, l.prevSym.GetToken())
 	}
 
 	if rn, ok := n.(*ast.RuneNode); ok && rn.Virtual {
 		for _, c := range comments {
-			l.info.AddVirtualComment(c, l.prevSym.Token(), n.Token())
+			l.info.AddVirtualComment(c, l.prevSym.GetToken(), n.GetToken())
 		}
 	} else {
 		for _, c := range comments {
-			l.info.AddComment(c, n.Token())
+			l.info.AddComment(c, n.GetToken())
 		}
 	}
 
@@ -818,42 +818,42 @@ func (l *protoLex) setPrevAndAddComments(n ast.TerminalNodeInterface) {
 }
 
 func (l *protoLex) setString(lval *protoSymType, val string) {
-	node := &ast.StringLiteralNode{TerminalNode: l.newToken().AsTerminalNode(), Val: val}
+	node := &ast.StringLiteralNode{Token: l.newToken(), Val: val}
 	if l.inCompoundStringLiteral && lval.sv != nil {
-		switch sv := lval.sv.(type) {
+		switch sv := lval.sv.Unwrap().(type) {
 		case *ast.StringLiteralNode:
-			lval.sv = &ast.CompoundStringLiteralNode{Elements: []ast.StringValueNode{sv, node}}
+			lval.sv = (&ast.CompoundStringLiteralNode{Elements: []*ast.StringValueNode{sv.AsStringValueNode(), node.AsStringValueNode()}}).AsStringValueNode()
 		case *ast.CompoundStringLiteralNode:
-			lval.sv = &ast.CompoundStringLiteralNode{Elements: append(sv.Elements, node)}
+			lval.sv = (&ast.CompoundStringLiteralNode{Elements: append(sv.Elements, node.AsStringValueNode())}).AsStringValueNode()
 		}
 	} else {
-		lval.sv = node
+		lval.sv = node.AsStringValueNode()
 	}
 	l.setPrevAndAddComments(node)
 }
 
 func (l *protoLex) setIdent(lval *protoSymType, val string) {
-	lval.id = &ast.IdentNode{TerminalNode: l.newToken().AsTerminalNode(), Val: val}
+	lval.id = &ast.IdentNode{Token: l.newToken(), Val: val}
 	l.setPrevAndAddComments(lval.id)
 }
 
 func (l *protoLex) setInt(lval *protoSymType, val uint64, raw string) {
-	lval.i = &ast.UintLiteralNode{TerminalNode: l.newToken().AsTerminalNode(), Val: val, Raw: raw}
+	lval.i = &ast.UintLiteralNode{Token: l.newToken(), Val: val, Raw: raw}
 	l.setPrevAndAddComments(lval.i)
 }
 
 func (l *protoLex) setFloat(lval *protoSymType, val float64, raw string) {
-	lval.f = &ast.FloatLiteralNode{TerminalNode: l.newToken().AsTerminalNode(), Val: val, Raw: raw}
+	lval.f = &ast.FloatLiteralNode{Token: l.newToken(), Val: val, Raw: raw}
 	l.setPrevAndAddComments(lval.f)
 }
 
 func (l *protoLex) setRune(lval *protoSymType, val rune) {
-	lval.b = &ast.RuneNode{TerminalNode: l.newToken().AsTerminalNode(), Rune: val}
+	lval.b = &ast.RuneNode{Token: l.newToken(), Rune: val}
 	l.setPrevAndAddComments(lval.b)
 }
 
 func (l *protoLex) setVirtualRune(lval *protoSymType, val rune) {
-	lval.b = &ast.RuneNode{TerminalNode: l.newToken().AsTerminalNode(), Rune: val, Virtual: true}
+	lval.b = &ast.RuneNode{Token: l.newToken(), Rune: val, Virtual: true}
 	l.setPrevAndAddComments(lval.b)
 }
 
@@ -879,14 +879,14 @@ func (l *protoLex) beginExtensionIdent(lval *protoSymType) {
 }
 
 func (l *protoLex) endExtensionIdent(lval *protoSymType) {
-	var name ast.IdentValueNode
+	var name *ast.IdentValueNode
 	nDots := len(lval.cid.dots)
 	nIdents := len(lval.cid.idents)
 	switch {
 	case nDots == 0 && nIdents == 1:
-		name = lval.cid.idents[0]
+		name = lval.cid.idents[0].AsIdentValue()
 	case nDots > 0:
-		name = &ast.CompoundIdentNode{Components: lval.cid.idents, Dots: lval.cid.dots}
+		name = (&ast.CompoundIdentNode{Components: lval.cid.idents, Dots: lval.cid.dots}).AsIdentValueNode()
 	default:
 		if ast.ExtendedSyntaxEnabled {
 			l.ErrExtendedSyntax("extension name cannot be empty", CategoryEmptyDecl)
@@ -957,7 +957,7 @@ func (l *protoLex) endCompoundIdent(lval *protoSymType) (result int) {
 	}()
 
 	if len(lval.cid.idents) == 0 && len(lval.cid.refs) == 0 {
-		lval.idv = &ast.CompoundIdentNode{Components: nil, Dots: lval.cid.dots}
+		lval.idv = (&ast.CompoundIdentNode{Components: nil, Dots: lval.cid.dots}).AsIdentValueNode()
 		return _FULLY_QUALIFIED_IDENT // '.' (invalid, but important for completion)
 	}
 
@@ -966,13 +966,13 @@ func (l *protoLex) endCompoundIdent(lval *protoSymType) (result int) {
 		if len(lval.cid.idents) > 0 {
 			// interleave idents and refs by position
 			for _, id := range lval.cid.idents {
-				parts = append(parts, &ast.FieldReferenceNode{Name: id})
+				parts = append(parts, &ast.FieldReferenceNode{Name: id.AsIdentValue()})
 			}
 			slices.SortFunc(parts, func(a, b *ast.FieldReferenceNode) int {
 				return cmp.Compare(a.Start(), b.Start())
 			})
 		}
-		if len(lval.cid.dots) > 0 && len(parts) > 0 && parts[0].IsExtension() && lval.cid.dots[0].Token() < parts[0].Open.Token() {
+		if len(lval.cid.dots) > 0 && len(parts) > 0 && parts[0].IsExtension() && lval.cid.dots[0].GetToken() < parts[0].Open.GetToken() {
 			// warn on extension idents that start with '.(foo)'
 			l.ErrExtendedSyntaxAt("unexpected leading '.'", lval.cid.dots[0], CategoryExtraTokens)
 		}
@@ -981,8 +981,8 @@ func (l *protoLex) endCompoundIdent(lval *protoSymType) (result int) {
 	}
 
 	// if the first dot appears before the first ident, this is a fully qualified ident
-	lval.idv = &ast.CompoundIdentNode{Components: lval.cid.idents, Dots: lval.cid.dots}
-	if lval.cid.dots[0].Token() < lval.cid.idents[0].Token() {
+	lval.idv = (&ast.CompoundIdentNode{Components: lval.cid.idents, Dots: lval.cid.dots}).AsIdentValueNode()
+	if lval.cid.dots[0].GetToken() < lval.cid.idents[0].GetToken() {
 		return _FULLY_QUALIFIED_IDENT
 	}
 	return _QUALIFIED_IDENT
@@ -1412,6 +1412,7 @@ func (l *protoLex) unsafePeekNextIdentsFast(n int) (idents []string, nextRune ru
 	for i := 0; i < n; i++ {
 		nextRune = l.skipToNextRune()
 		mark := l.input.offset()
+		first := true
 		for {
 			c, sz, _ := l.input.readRune()
 			var ok bool
@@ -1421,12 +1422,17 @@ func (l *protoLex) unsafePeekNextIdentsFast(n int) (idents []string, nextRune ru
 			case '_', '.':
 				ok = true
 			default:
-				ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+				if first {
+					ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+				} else {
+					ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+				}
 			}
 			if !ok {
 				l.input.unreadRune(sz)
 				break
 			}
+			first = false
 		}
 		if l.input.offset() > mark {
 			idents = append(idents, string(l.input.data[mark:l.input.offset()]))

@@ -83,9 +83,8 @@ dependencies_ok:
 			var importNode *ast.ImportNode
 			if parsedAst := parsed.AST(); parsedAst != nil {
 				for _, node := range parsedAst.Decls {
-					var ok bool
-					importNode, ok = node.(*ast.ImportNode)
-					if !ok || importNode.IsIncomplete() {
+					importNode := node.GetImport()
+					if importNode == nil || importNode.IsIncomplete() {
 						continue
 					}
 					if importNode.Name.AsString() == imp {
@@ -117,7 +116,7 @@ dependencies_ok:
 		descriptors:          art.New(),
 		usedImports:          map[string]struct{}{},
 		prefix:               prefix,
-		optionQualifiedNames: map[ast.IdentValueNode]string{},
+		optionQualifiedNames: map[*ast.IdentValueNode]string{},
 		resolvedReferences:   map[protoreflect.Descriptor][]ast.NodeReference{},
 		extensionsByMessage:  map[protoreflect.FullName][]protoreflect.ExtensionDescriptor{},
 	}
@@ -181,7 +180,7 @@ type Result interface {
 
 	// ResolveMessageLiteralExtensionName returns the fully qualified name for
 	// an identifier for extension field names in message literals.
-	ResolveMessageLiteralExtensionName(ast.IdentValueNode) string
+	ResolveMessageLiteralExtensionName(*ast.IdentValueNode) string
 	// ValidateOptions runs some validation checks on the descriptor that can only
 	// be done after options are interpreted. Any errors or warnings encountered
 	// will be reported via the given handler. If any error is reported, this
@@ -264,7 +263,7 @@ func (e errUnusedImport) UnusedImport() string {
 type ErrorUndeclaredName interface {
 	error
 	UndeclaredName() string
-	ParentFile() ast.FileDeclNode
+	ParentFile() *ast.FileNode
 	Hint() string
 }
 
@@ -273,7 +272,7 @@ type errUndeclaredName struct {
 	what       string
 	name       string
 	hint       string
-	parentFile ast.FileDeclNode
+	parentFile *ast.FileNode
 }
 
 func (e *errUndeclaredName) Error() string {
@@ -288,7 +287,7 @@ func (e *errUndeclaredName) UndeclaredName() string {
 	return e.name
 }
 
-func (e *errUndeclaredName) ParentFile() ast.FileDeclNode {
+func (e *errUndeclaredName) ParentFile() *ast.FileNode {
 	return e.parentFile
 }
 
