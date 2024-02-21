@@ -1406,7 +1406,7 @@ func (interp *interpreter) indexEnumValueRef(fld protoreflect.FieldDescriptor, o
 }
 
 func (interp *interpreter) indexInterpretedFieldsRecursive(interpretedField *interpretedField, fieldDesc protoreflect.FieldDescriptor) {
-	if interpretedField.node == nil {
+	if interpretedField.node == nil || fieldDesc == nil {
 		return
 	}
 	interp.descriptorIndex.FieldReferenceNodesToFieldDescriptors[interpretedField.node] = fieldDesc

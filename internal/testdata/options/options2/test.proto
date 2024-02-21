@@ -11,6 +11,7 @@ syntax = "proto2";
 package bufbuild.protocompile.test2;
 
 import "github.com/kralicky/protocompile/internal/testdata/options/options2/options2.proto";
+import "google/protobuf/descriptor.proto";
 
 option go_package   = "foo";
 option java_package = "bar";
@@ -1258,4 +1259,25 @@ service TestService {
   };
 
   option deprecated = true;
+}
+
+message X {
+  optional X x = 1;
+  extensions 100 to max;
+}
+
+extend X {
+  optional X y = 100;
+}
+
+extend google.protobuf.FieldOptions {
+  optional X x = 1000;
+}
+
+message Y {
+  optional X x = 1 [
+    (.bufbuild.protocompile.test2.x).x.(y).x.(y).(y).x.x.(y).x = {
+      x: {[bufbuild.protocompile.test2.y]: {x: {}}}
+    }
+  ];
 }

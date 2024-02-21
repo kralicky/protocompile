@@ -1890,7 +1890,7 @@ protodefault:
 	case 162:
 		protoDollar = protoS[protopt-3 : protopt+1]
 		{
-			protoVAL.rng = &ast.RangeNode{StartVal: protoDollar[1].i.AsIntValueNode(), To: protoDollar[2].id.ToKeyword(), Max: protoDollar[3].id}
+			protoVAL.rng = &ast.RangeNode{StartVal: protoDollar[1].i.AsIntValueNode(), To: protoDollar[2].id.ToKeyword(), Max: protoDollar[3].id.ToKeyword()}
 		}
 	case 163:
 		protoDollar = protoS[protopt-1 : protopt+1]
@@ -1917,7 +1917,7 @@ protodefault:
 	case 167:
 		protoDollar = protoS[protopt-3 : protopt+1]
 		{
-			protoVAL.rng = &ast.RangeNode{StartVal: protoDollar[1].il, To: protoDollar[2].id.ToKeyword(), Max: protoDollar[3].id}
+			protoVAL.rng = &ast.RangeNode{StartVal: protoDollar[1].il, To: protoDollar[2].id.ToKeyword(), Max: protoDollar[3].id.ToKeyword()}
 		}
 	case 168:
 		protoDollar = protoS[protopt-1 : protopt+1]

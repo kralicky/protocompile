@@ -789,7 +789,7 @@ tagRange
 		$$ = &ast.RangeNode{StartVal: $1.AsIntValueNode(), To: $2.ToKeyword(), EndVal: $3.AsIntValueNode()}
 	}
 	| _INT_LIT _TO _MAX {
-		$$ = &ast.RangeNode{StartVal: $1.AsIntValueNode(), To: $2.ToKeyword(), Max: $3}
+		$$ = &ast.RangeNode{StartVal: $1.AsIntValueNode(), To: $2.ToKeyword(), Max: $3.ToKeyword()}
 	}
 
 enumValueRanges
@@ -810,7 +810,7 @@ enumValueRange
 		$$ = &ast.RangeNode{StartVal: $1, To: $2.ToKeyword(), EndVal: $3}
 	}
 	| enumValueNumber _TO _MAX {
-		$$ = &ast.RangeNode{StartVal: $1, To: $2.ToKeyword(), Max: $3}
+		$$ = &ast.RangeNode{StartVal: $1, To: $2.ToKeyword(), Max: $3.ToKeyword()}
 	}
 
 enumValueNumber
