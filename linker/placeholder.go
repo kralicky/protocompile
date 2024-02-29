@@ -1,6 +1,8 @@
 package linker
 
 import (
+	"strings"
+
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
@@ -51,6 +53,9 @@ func NewPlaceholderFile(path string) File {
 }
 
 func NewPlaceholderMessage(name protoreflect.FullName) protoreflect.MessageDescriptor {
+	if strings.HasPrefix(string(name), ".") {
+		name = name[1:]
+	}
 	fdp := descriptorpb.FileDescriptorProto{
 		Name: proto.String("placeholder"),
 		MessageType: []*descriptorpb.DescriptorProto{

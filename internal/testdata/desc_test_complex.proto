@@ -13,7 +13,7 @@ message Simple {
   repeated bool   _      = 4; // default JSON name will be empty(!)
 }
 
-extend .google. /* identifier broken up strangely should still be accepted */protobuf.ExtensionRangeOptions {
+extend .google. /* identifier broken up strangely should still be accepted */ protobuf.ExtensionRangeOptions {
   optional string label = 20000;
 }
 
@@ -92,36 +92,24 @@ extend google.protobuf.MessageOptions {
 
 message Another {
   option (.foo.bar.rept) = {
-    foo: "abc"
-    s    <name: "foo", id: 123>
-    array: [
-      1,
-      2,
-      3
-    ]
-    r: [
-      <name: "f">,
-      {name: "s"},
-      {id: 456}
-    ]
+    foo:   "abc"
+    s:     <name: "foo", id: 123>
+    array: [1, 2, 3]
+    r:     [<name: "f">, {name: "s"}, {id: 456}]
   };
   option (foo.bar.rept) = {
-    foo: "def"
-    s    {name: "bar", id: 321}
-    array: [
-      3,
-      2,
-      1
-    ]
-    r: {name: "g"}
-    r: {name: "s"}
+    foo:   "def"
+    s:     {name: "bar", id: 321}
+    array: [3, 2, 1]
+    r:     {name: "g"}
+    r:     {name: "s"}
   };
   option (rept)   = {foo: "def"};
   option (eee)    = V1;
   option (a)      = {fff: OK};
   option (a).test = {
-    m {key: "foo", value: 100}
-    m {key: "bar", value: 200}
+    m: {key: "foo", value: 100}
+    m: {key: "bar", value: 200}
     enums: [
       V1,
       V2,

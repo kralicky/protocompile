@@ -3,6 +3,9 @@ package ast
 import reflect "reflect"
 
 func Unwrap(node Node) Node {
+	if node == nil {
+		return nil
+	}
 	rn := node.ProtoReflect()
 	oneofs := rn.Descriptor().Oneofs()
 	for i := range oneofs.Len() {

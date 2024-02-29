@@ -37,3 +37,21 @@ func TestNewPlaceholderMessage(t *testing.T) {
 		}
 	}
 }
+
+func TestNewPlaceholderMessageLeadingDot(t *testing.T) {
+	for _, msg := range []protoreflect.FullName{
+		".Foo",
+		".foo.Bar",
+		".foo.bar.Baz",
+	} {
+		m := linker.NewPlaceholderMessage(msg)
+
+		if !m.IsPlaceholder() {
+			t.Errorf("Expected IsPlaceholder() to be true, got false")
+		}
+
+		if got := m.FullName(); got != protoreflect.FullName(msg[1:]) {
+			t.Errorf("Expected FullName().String() to be %q, got %q", msg, got)
+		}
+	}
+}

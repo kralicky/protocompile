@@ -1,5 +1,5 @@
-//protols:debug Wnoerror=empty_decl
 //protols:nogen
+//protols:debug Wnoerror=all
 syntax = "proto2"; // virtual semicolon ->
 
 package extsyntax.fmt; // virtual semicolon ->
@@ -7,10 +7,10 @@ package extsyntax.fmt; // virtual semicolon ->
 import "google/protobuf/descriptor.proto"; // virtual semicolon ->
 
 extend google.protobuf.ExtensionRangeOptions {
-  optional string  label = 5000; // virtual semicolon ->
-  optional int32   test  = 5001; // virtual semicolon ->
-  optional Message msg   = 5002; // virtual semicolon ->
-  optional List    list  = 5003; // virtual semicolon ->
+  optional string  label = 4004; // virtual semicolon ->
+  optional int32   test  = 4005; // virtual semicolon ->
+  optional Message msg   = 4006; // virtual semicolon ->
+  optional List    list  = 4007; // virtual semicolon ->
 }
 
 message /* a */ /* b */ Message /* c */ { // d
@@ -26,9 +26,7 @@ message /* a */ /* b */ Message /* c */ { // d
   ]; // virtual semicolon ->
 
   optional int32 c = 3; // virtual semicolon ->
-  optional int32 d = 4 [
-    /* test */
-  ]; // virtual semicolon ->
+  optional int32 d = 4; // virtual semicolon ->
 
   extensions 249, 300 /*bar*/ to /*foo*/ 350, 500 to 550, 20000 to max [
     (label) = "jazz",

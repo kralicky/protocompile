@@ -599,7 +599,7 @@ func (n NodeInfo) End() SourcePos {
 // there were no such comments, this returns the whitespace between the
 // previous element and the current one.
 func (n NodeInfo) LeadingWhitespace() string {
-	if n.fileInfo.isDummyFile() {
+	if n.fileInfo.isDummyFile() || !n.IsValid() {
 		return ""
 	}
 
@@ -627,7 +627,7 @@ func (n NodeInfo) LeadingWhitespace() string {
 // element and the previous element, except for any trailing comment on the
 // previous element.
 func (n NodeInfo) LeadingComments() Comments {
-	if n.fileInfo.isDummyFile() {
+	if n.fileInfo.isDummyFile() || !n.IsValid() {
 		return EmptyComments
 	}
 
@@ -686,7 +686,7 @@ func (n NodeInfo) String() string {
 //	        its on the same line as the
 //	        following token buzz */       buzz
 func (n NodeInfo) TrailingComments() Comments {
-	if n.fileInfo.isDummyFile() {
+	if n.fileInfo.isDummyFile() || !n.IsValid() {
 		return EmptyComments
 	}
 
