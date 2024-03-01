@@ -23,7 +23,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	"github.com/kralicky/protocompile/internal"
+	"github.com/kralicky/protocompile/protointernal"
 	"github.com/kralicky/protocompile/reporter"
 	"github.com/kralicky/protocompile/walk"
 )
@@ -88,13 +88,13 @@ func (r *result) validateExtension(fld protoreflect.FieldDescriptor, handler *re
 			info := file.NodeInfo(r.FieldNode(fd.proto).GetLabel())
 			return handler.HandleErrorf(info, "messages with message-set wire format cannot contain repeated extensions, only optional")
 		}
-	} else if fld.Number() > internal.MaxNormalTag {
+	} else if fld.Number() > protointernal.MaxNormalTag {
 		// In validateBasic() we just made sure these were within bounds for any message. But
 		// now that things are linked, we can check if the extendee is messageset wire format
 		// and, if not, enforce tighter limit.
 		file := r.FileNode()
 		info := file.NodeInfo(r.FieldNode(fd.proto).GetTag())
-		return handler.HandleErrorf(info, "tag number %d is higher than max allowed tag number (%d)", fld.Number(), internal.MaxNormalTag)
+		return handler.HandleErrorf(info, "tag number %d is higher than max allowed tag number (%d)", fld.Number(), protointernal.MaxNormalTag)
 	}
 
 	return nil
@@ -192,7 +192,7 @@ func (r *result) validateFieldJSONNames(md *descriptorpb.DescriptorProto, useCus
 
 	for _, fd := range md.GetField() {
 		scope := "field " + md.GetName() + "." + fd.GetName()
-		defaultName := internal.JSONName(fd.GetName())
+		defaultName := protointernal.JSONName(fd.GetName())
 		name := defaultName
 		custom := false
 		if useCustom {

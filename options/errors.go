@@ -4,13 +4,13 @@ import (
 	"fmt"
 
 	"github.com/kralicky/protocompile/ast"
-	"github.com/kralicky/protocompile/internal"
+	"github.com/kralicky/protocompile/protointernal"
 	"github.com/kralicky/protocompile/reporter"
 )
 
 type interpreterError struct {
 	base error
-	mc   *internal.MessageContext
+	mc   *protointernal.MessageContext
 	node ast.Node
 }
 
@@ -91,7 +91,7 @@ var (
 
 func (e *optionValueError) isOptionValueError() {}
 
-func (i *interpreter) HandleTypeMismatchErrorf(mc *internal.MessageContext, node ast.Node, formatStr string, args ...any) error {
+func (i *interpreter) HandleTypeMismatchErrorf(mc *protointernal.MessageContext, node ast.Node, formatStr string, args ...any) error {
 	if err := i.handler.HandleError(reporter.Error(i.nodeInfo(node), &optionTypeMismatchError{
 		interpreterError: interpreterError{
 			base: fmt.Errorf(formatStr, args...),
@@ -104,7 +104,7 @@ func (i *interpreter) HandleTypeMismatchErrorf(mc *internal.MessageContext, node
 	return i.handler.Error()
 }
 
-func (i *interpreter) HandleOptionForbiddenErrorf(mc *internal.MessageContext, node ast.Node, formatStr string, args ...any) error {
+func (i *interpreter) HandleOptionForbiddenErrorf(mc *protointernal.MessageContext, node ast.Node, formatStr string, args ...any) error {
 	if err := i.handler.HandleError(reporter.Error(i.nodeInfo(node), &optionForbiddenError{
 		interpreterError: interpreterError{
 			base: fmt.Errorf(formatStr, args...),
@@ -117,7 +117,7 @@ func (i *interpreter) HandleOptionForbiddenErrorf(mc *internal.MessageContext, n
 	return i.handler.Error()
 }
 
-func (i *interpreter) HandleOptionNotFoundErrorf(mc *internal.MessageContext, node ast.Node, formatStr string, args ...any) error {
+func (i *interpreter) HandleOptionNotFoundErrorf(mc *protointernal.MessageContext, node ast.Node, formatStr string, args ...any) error {
 	if err := i.handler.HandleError(reporter.Error(i.nodeInfo(node), &optionNotFoundError{
 		interpreterError: interpreterError{
 			base: fmt.Errorf(formatStr, args...),
@@ -130,7 +130,7 @@ func (i *interpreter) HandleOptionNotFoundErrorf(mc *internal.MessageContext, no
 	return i.handler.Error()
 }
 
-func (i *interpreter) HandleOptionValueErrorf(mc *internal.MessageContext, node ast.Node, formatStr string, args ...any) error {
+func (i *interpreter) HandleOptionValueErrorf(mc *protointernal.MessageContext, node ast.Node, formatStr string, args ...any) error {
 	if err := i.handler.HandleError(reporter.Error(i.nodeInfo(node), &optionValueError{
 		interpreterError: interpreterError{
 			base: fmt.Errorf(formatStr, args...),

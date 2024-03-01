@@ -24,7 +24,7 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/kralicky/protocompile/ast"
-	"github.com/kralicky/protocompile/internal"
+	"github.com/kralicky/protocompile/protointernal"
 	"github.com/kralicky/protocompile/reporter"
 	"github.com/kralicky/protocompile/walk"
 )
@@ -113,7 +113,7 @@ func validateNoFeatures(res *result, syntax syntaxType, scope string, opts []*de
 		// Editions is allowed to use features
 		return nil
 	}
-	if index, err := internal.FindFirstOption(res, handler, scope, opts, "features"); err != nil {
+	if index, err := protointernal.FindFirstOption(res, handler, scope, opts, "features"); err != nil {
 		return err
 	} else if index >= 0 {
 		optNode := res.OptionNode(opts[index])
@@ -136,7 +136,7 @@ func validateMessage(res *result, syntax syntaxType, name protoreflect.FullName,
 		}
 	}
 
-	if index, err := internal.FindOption(res, handler, scope, md.Options.GetUninterpretedOption(), "map_entry"); err != nil {
+	if index, err := protointernal.FindOption(res, handler, scope, md.Options.GetUninterpretedOption(), "map_entry"); err != nil {
 		return err
 	} else if index >= 0 {
 		optNode := res.OptionNode(md.Options.GetUninterpretedOption()[index])
@@ -339,7 +339,7 @@ func validateEnum(res *result, syntax syntaxType, name protoreflect.FullName, ed
 
 	allowAlias := false
 	var allowAliasOpt *descriptorpb.UninterpretedOption
-	if index, err := internal.FindOption(res, handler, scope, ed.Options.GetUninterpretedOption(), "allow_alias"); err != nil {
+	if index, err := protointernal.FindOption(res, handler, scope, ed.Options.GetUninterpretedOption(), "allow_alias"); err != nil {
 		return err
 	} else if index >= 0 {
 		allowAliasOpt = ed.Options.UninterpretedOption[index]
@@ -481,7 +481,7 @@ func validateField(res *result, syntax syntaxType, name protoreflect.FullName, f
 					return err
 				}
 			}
-			if index, err := internal.FindOption(res, handler, scope, fld.Options.GetUninterpretedOption(), "packed"); err != nil {
+			if index, err := protointernal.FindOption(res, handler, scope, fld.Options.GetUninterpretedOption(), "packed"); err != nil {
 				return err
 			} else if index >= 0 {
 				optNode := res.OptionNode(fld.Options.GetUninterpretedOption()[index])
@@ -491,7 +491,7 @@ func validateField(res *result, syntax syntaxType, name protoreflect.FullName, f
 				}
 			}
 		} else if syntax == syntaxProto3 {
-			if index, err := internal.FindOption(res, handler, scope, fld.Options.GetUninterpretedOption(), "default"); err != nil {
+			if index, err := protointernal.FindOption(res, handler, scope, fld.Options.GetUninterpretedOption(), "default"); err != nil {
 				return err
 			} else if index >= 0 {
 				optNode := res.OptionNode(fld.Options.GetUninterpretedOption()[index])

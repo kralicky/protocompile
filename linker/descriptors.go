@@ -29,8 +29,8 @@ import (
 	"google.golang.org/protobuf/types/dynamicpb"
 
 	"github.com/kralicky/protocompile/ast"
-	"github.com/kralicky/protocompile/internal"
 	"github.com/kralicky/protocompile/parser"
+	"github.com/kralicky/protocompile/protointernal"
 	"github.com/kralicky/protocompile/protoutil"
 	"github.com/kralicky/protocompile/sourceinfo"
 	art "github.com/plar/go-adaptive-radix-tree"
@@ -614,7 +614,7 @@ func (s *srcLocs) ByDescriptor(d protoreflect.Descriptor) protoreflect.SourceLoc
 	if d.ParentFile() != s.file {
 		return protoreflect.SourceLocation{}
 	}
-	path, ok := internal.ComputePath(d)
+	path, ok := protointernal.ComputeSourcePath(d)
 	if !ok {
 		return protoreflect.SourceLocation{}
 	}

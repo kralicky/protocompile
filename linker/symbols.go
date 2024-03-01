@@ -27,7 +27,7 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/kralicky/protocompile/ast"
-	"github.com/kralicky/protocompile/internal"
+	"github.com/kralicky/protocompile/protointernal"
 	"github.com/kralicky/protocompile/reporter"
 	"github.com/kralicky/protocompile/walk"
 )
@@ -500,8 +500,8 @@ func (ps *packageSymbols) checkFileLocked(f protoreflect.FileDescriptor, handler
 }
 
 func sourceSpanForPackage(fd protoreflect.FileDescriptor) ast.SourceSpan {
-	loc := fd.SourceLocations().ByPath([]int32{internal.FilePackageTag})
-	if internal.IsZeroLocation(loc) {
+	loc := fd.SourceLocations().ByPath([]int32{protointernal.FilePackageTag})
+	if protointernal.IsZeroSourceLocation(loc) {
 		return ast.UnknownSpan(fd.Path())
 	}
 	return ast.NewSourceSpan(
@@ -523,34 +523,34 @@ func sourceSpanFor(d protoreflect.Descriptor) ast.SourceSpan {
 	if file == nil {
 		return ast.UnknownSpan(unknownFilePath)
 	}
-	path, ok := internal.ComputePath(d)
+	path, ok := protointernal.ComputeSourcePath(d)
 	if !ok {
 		return ast.UnknownSpan(file.Path())
 	}
 	namePath := path
 	switch d.(type) {
 	case protoreflect.FieldDescriptor:
-		namePath = append(namePath, internal.FieldNameTag)
+		namePath = append(namePath, protointernal.FieldNameTag)
 	case protoreflect.MessageDescriptor:
-		namePath = append(namePath, internal.MessageNameTag)
+		namePath = append(namePath, protointernal.MessageNameTag)
 	case protoreflect.OneofDescriptor:
-		namePath = append(namePath, internal.OneofNameTag)
+		namePath = append(namePath, protointernal.OneofNameTag)
 	case protoreflect.EnumDescriptor:
-		namePath = append(namePath, internal.EnumNameTag)
+		namePath = append(namePath, protointernal.EnumNameTag)
 	case protoreflect.EnumValueDescriptor:
-		namePath = append(namePath, internal.EnumValNameTag)
+		namePath = append(namePath, protointernal.EnumValNameTag)
 	case protoreflect.ServiceDescriptor:
-		namePath = append(namePath, internal.ServiceNameTag)
+		namePath = append(namePath, protointernal.ServiceNameTag)
 	case protoreflect.MethodDescriptor:
-		namePath = append(namePath, internal.MethodNameTag)
+		namePath = append(namePath, protointernal.MethodNameTag)
 	default:
 		// NB: shouldn't really happen, but just in case fall back to path to
 		// descriptor, sans name field
 	}
 	loc := file.SourceLocations().ByPath(namePath)
-	if internal.IsZeroLocation(loc) {
+	if protointernal.IsZeroSourceLocation(loc) {
 		loc = file.SourceLocations().ByPath(path)
-		if internal.IsZeroLocation(loc) {
+		if protointernal.IsZeroSourceLocation(loc) {
 			return ast.UnknownSpan(file.Path())
 		}
 	}
@@ -573,16 +573,16 @@ func sourceSpanForNumber(fd protoreflect.FieldDescriptor) ast.SourceSpan {
 	if file == nil {
 		return ast.UnknownSpan(unknownFilePath)
 	}
-	path, ok := internal.ComputePath(fd)
+	path, ok := protointernal.ComputeSourcePath(fd)
 	if !ok {
 		return ast.UnknownSpan(file.Path())
 	}
 	numberPath := path
-	numberPath = append(numberPath, internal.FieldNumberTag)
+	numberPath = append(numberPath, protointernal.FieldNumberTag)
 	loc := file.SourceLocations().ByPath(numberPath)
-	if internal.IsZeroLocation(loc) {
+	if protointernal.IsZeroSourceLocation(loc) {
 		loc = file.SourceLocations().ByPath(path)
-		if internal.IsZeroLocation(loc) {
+		if protointernal.IsZeroSourceLocation(loc) {
 			return ast.UnknownSpan(file.Path())
 		}
 	}

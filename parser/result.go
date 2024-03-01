@@ -27,7 +27,7 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/kralicky/protocompile/ast"
-	"github.com/kralicky/protocompile/internal"
+	"github.com/kralicky/protocompile/protointernal"
 	"github.com/kralicky/protocompile/reporter"
 )
 
@@ -178,7 +178,7 @@ func (r *result) createFileDescriptor(filename string, file *ast.FileNode, handl
 			fd.Syntax = proto.String(file.Syntax.Syntax.AsString())
 		}
 	case file.Edition != nil:
-		if !internal.AllowEditions {
+		if !protointernal.AllowEditions {
 			nodeInfo := file.NodeInfo(file.Edition.Edition)
 			if handler.HandleErrorf(nodeInfo, `editions are not yet supported; use syntax proto2 or proto3 instead`) != nil {
 				return
@@ -376,7 +376,7 @@ func (r *result) addExtensions(ext *ast.ExtendNode, flds *[]*descriptorpb.FieldD
 			}
 			count++
 			// use higher limit since we don't know yet whether extendee is messageset wire format
-			fd := r.asFieldDescriptor(decl, internal.MaxTag, syntax, handler)
+			fd := r.asFieldDescriptor(decl, protointernal.MaxTag, syntax, handler)
 			fd.Extendee = proto.String(extendee)
 			*flds = append(*flds, fd)
 			r.putFieldNode(fd, decl)
@@ -384,7 +384,7 @@ func (r *result) addExtensions(ext *ast.ExtendNode, flds *[]*descriptorpb.FieldD
 		case *ast.GroupNode:
 			count++
 			// ditto: use higher limit right now
-			fd, md := r.asGroupDescriptors(decl, syntax, internal.MaxTag, handler, depth+1)
+			fd, md := r.asGroupDescriptors(decl, syntax, protointernal.MaxTag, handler, depth+1)
 			fd.Extendee = proto.String(extendee)
 			r.fieldExtendeeNodes[decl] = ext
 			*flds = append(*flds, fd)
@@ -455,7 +455,7 @@ var fieldTypes = map[string]descriptorpb.FieldDescriptorProto_Type{
 func newFieldDescriptor(name string, fieldType string, tag int32, lbl *descriptorpb.FieldDescriptorProto_Label) *descriptorpb.FieldDescriptorProto {
 	fd := &descriptorpb.FieldDescriptorProto{
 		Name:     proto.String(name),
-		JsonName: proto.String(internal.JSONName(name)),
+		JsonName: proto.String(protointernal.JSONName(name)),
 		Number:   proto.Int32(tag),
 		Label:    lbl,
 	}
@@ -483,7 +483,7 @@ func (r *result) asGroupDescriptors(group *ast.GroupNode, syntax syntaxType, max
 	fieldName := strings.ToLower(group.Name.Val)
 	fd := &descriptorpb.FieldDescriptorProto{
 		Name:     proto.String(fieldName),
-		JsonName: proto.String(internal.JSONName(fieldName)),
+		JsonName: proto.String(protointernal.JSONName(fieldName)),
 		Number:   proto.Int32(int32(tag)),
 		Label:    asLabel(group.Label),
 		Type:     descriptorpb.FieldDescriptorProto_TYPE_GROUP.Enum(),
@@ -515,7 +515,7 @@ func (r *result) asMapDescriptors(mapField *ast.MapFieldNode, syntax syntaxType,
 	r.putSyntheticFieldNode(keyFd, mapField.KeyField())
 	valFd := newFieldDescriptor("value", string(mapField.MapType.ValueType.AsIdentifier()), 2, lbl)
 	r.putSyntheticFieldNode(valFd, mapField.ValueField())
-	entryName := internal.InitCap(internal.JSONName(mapField.Name.Val)) + "Entry"
+	entryName := protointernal.InitCap(protointernal.JSONName(mapField.Name.Val)) + "Entry"
 	fd := newFieldDescriptor(mapField.Name.Val, entryName, int32(tag), descriptorpb.FieldDescriptorProto_LABEL_REPEATED.Enum())
 	if opts := mapField.Options.GetElements(); len(opts) > 0 {
 		fd.Options = &descriptorpb.FieldOptions{UninterpretedOption: r.asUninterpretedOptions(opts)}
@@ -713,7 +713,7 @@ func (r *result) addMessageBody(msgd *descriptorpb.DescriptorProto, decls []*ast
 
 	// now that we have options, we can see if this uses messageset wire format, which
 	// impacts how we validate tag numbers in any fields in the message
-	maxTag := int32(internal.MaxNormalTag)
+	maxTag := int32(protointernal.MaxNormalTag)
 	messageSetOpt, err := r.isMessageSetWireFormat("message "+msgd.GetName(), msgd, handler)
 	if err != nil {
 		return
@@ -723,7 +723,7 @@ func (r *result) addMessageBody(msgd *descriptorpb.DescriptorProto, decls []*ast
 			nodeInfo := r.file.NodeInfo(node)
 			_ = handler.HandleErrorf(nodeInfo, "messages with message-set wire format are not allowed with proto3 syntax")
 		}
-		maxTag = internal.MaxTag // higher limit for messageset wire format
+		maxTag = protointernal.MaxTag // higher limit for messageset wire format
 	}
 
 	rsvdNames := map[string]ast.SourcePos{}
@@ -823,7 +823,7 @@ func (r *result) addMessageBody(msgd *descriptorpb.DescriptorProto, decls []*ast
 
 func (r *result) isMessageSetWireFormat(scope string, md *descriptorpb.DescriptorProto, handler *reporter.Handler) (*descriptorpb.UninterpretedOption, error) {
 	uo := md.GetOptions().GetUninterpretedOption()
-	index, err := internal.FindOption(r, handler, scope, uo, "message_set_wire_format")
+	index, err := protointernal.FindOption(r, handler, scope, uo, "message_set_wire_format")
 	if err != nil {
 		return nil, err
 	}
@@ -913,8 +913,8 @@ func (r *result) checkTag(n ast.Node, v uint64, maxTag int32) error {
 		return reporter.Errorf(r.file.NodeInfo(n), "tag number %d must be greater than zero", v)
 	case v > uint64(maxTag):
 		return reporter.Errorf(r.file.NodeInfo(n), "tag number %d is higher than max allowed tag number (%d)", v, maxTag)
-	case v >= internal.SpecialReservedStart && v <= internal.SpecialReservedEnd:
-		return reporter.Errorf(r.file.NodeInfo(n), "tag number %d is in disallowed reserved range %d-%d", v, internal.SpecialReservedStart, internal.SpecialReservedEnd)
+	case v >= protointernal.SpecialReservedStart && v <= protointernal.SpecialReservedEnd:
+		return reporter.Errorf(r.file.NodeInfo(n), "tag number %d is in disallowed reserved range %d-%d", v, protointernal.SpecialReservedStart, protointernal.SpecialReservedEnd)
 	default:
 		return nil
 	}

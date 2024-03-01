@@ -585,7 +585,7 @@ func TestGoogleapisProtocompileASTMemory(t *testing.T) {
 				}
 			}()
 			h := reporter.NewHandler(nil)
-			ast, err := parser.Parse(file, f, h)
+			ast, err := parser.Parse(file, f, h, 0)
 			require.NoError(t, err)
 			asts = append(asts, ast)
 		}()

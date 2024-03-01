@@ -25,14 +25,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kralicky/protocompile/internal"
 	"github.com/kralicky/protocompile/internal/protoc"
+	"github.com/kralicky/protocompile/protointernal"
 	"github.com/kralicky/protocompile/reporter"
 )
 
 func TestMain(m *testing.M) {
 	// Enable just for tests.
-	internal.AllowEditions = true
+	protointernal.AllowEditions = true
 	status := m.Run()
 	os.Exit(status)
 }

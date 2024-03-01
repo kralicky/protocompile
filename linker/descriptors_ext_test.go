@@ -29,7 +29,7 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/kralicky/protocompile"
-	"github.com/kralicky/protocompile/internal/prototest"
+	"github.com/kralicky/protocompile/protointernal/prototest"
 	"github.com/kralicky/protocompile/protoutil"
 )
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package protointernal
 
 // AllowEditions is set to true in tests to enable editions syntax for testing.
 // This will be removed and editions will be allowed by non-test code once the

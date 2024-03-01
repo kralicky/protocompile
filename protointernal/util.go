@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package protointernal
 
 import (
 	"bytes"
+	"slices"
 	"unicode"
 	"unicode/utf8"
 
@@ -120,9 +121,9 @@ func WriteEscapedBytes(buf *bytes.Buffer, b []byte) {
 	}
 }
 
-// IsZeroLocation returns true if the given loc is a zero value
+// IsZeroSourceLocation returns true if the given loc is a zero value
 // (which is returned from queries that have no result).
-func IsZeroLocation(loc protoreflect.SourceLocation) bool {
+func IsZeroSourceLocation(loc protoreflect.SourceLocation) bool {
 	return loc.Path == nil &&
 		loc.StartLine == 0 &&
 		loc.StartColumn == 0 &&
@@ -134,10 +135,10 @@ func IsZeroLocation(loc protoreflect.SourceLocation) bool {
 		loc.Next == 0
 }
 
-// ComputePath computes the source location path for the given descriptor.
+// ComputeSourcePath computes the source location path for the given descriptor.
 // The boolean value indicates whether the result is valid. If the path
 // cannot be computed for d, the function returns nil, false.
-func ComputePath(d protoreflect.Descriptor) (protoreflect.SourcePath, bool) {
+func ComputeSourcePath(d protoreflect.Descriptor) (protoreflect.SourcePath, bool) {
 	_, ok := d.(protoreflect.FileDescriptor)
 	if ok {
 		return nil, true
@@ -147,7 +148,8 @@ func ComputePath(d protoreflect.Descriptor) (protoreflect.SourcePath, bool) {
 		p := d.Parent()
 		switch d := d.(type) {
 		case protoreflect.FileDescriptor:
-			return reverse(path), true
+			slices.Reverse(path)
+			return path, true
 		case protoreflect.MessageDescriptor:
 			path = append(path, int32(d.Index()))
 			switch p.(type) {
@@ -217,11 +219,4 @@ func ComputePath(d protoreflect.Descriptor) (protoreflect.SourcePath, bool) {
 		}
 		d = p
 	}
-}
-
-func reverse(p protoreflect.SourcePath) protoreflect.SourcePath {
-	for i, j := 0, len(p)-1; i < j; i, j = i+1, j-1 {
-		p[i], p[j] = p[j], p[i]
-	}
-	return p
 }

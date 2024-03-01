@@ -25,7 +25,7 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/kralicky/protocompile/ast"
-	"github.com/kralicky/protocompile/internal"
+	"github.com/kralicky/protocompile/protointernal"
 	"github.com/kralicky/protocompile/reporter"
 	"github.com/kralicky/protocompile/walk"
 )
@@ -467,7 +467,7 @@ func isValidMap(mapField protoreflect.FieldDescriptor, mapEntry protoreflect.Mes
 	return !mapField.IsExtension() &&
 		mapEntry.Parent() == mapField.ContainingMessage() &&
 		mapField.Cardinality() == protoreflect.Repeated &&
-		string(mapEntry.Name()) == internal.InitCap(internal.JSONName(string(mapField.Name())))+"Entry"
+		string(mapEntry.Name()) == protointernal.InitCap(protointernal.JSONName(string(mapField.Name())))+"Entry"
 }
 
 func resolveMethodTypes(m *mtdDescriptor, handler *reporter.Handler, scopes []scope) error {
@@ -533,7 +533,7 @@ func resolveMethodTypes(m *mtdDescriptor, handler *reporter.Handler, scopes []sc
 }
 
 func (r *result) resolveOptions(handler *reporter.Handler, elemType string, elemName protoreflect.FullName, opts []*descriptorpb.UninterpretedOption, scopes []scope) error {
-	mc := &internal.MessageContext{
+	mc := &protointernal.MessageContext{
 		File:        r,
 		ElementName: string(elemName),
 		ElementType: elemType,
@@ -574,7 +574,7 @@ opts:
 	return nil
 }
 
-func (r *result) resolveOptionValue(handler *reporter.Handler, mc *internal.MessageContext, val *ast.ValueNode, scopes []scope) error {
+func (r *result) resolveOptionValue(handler *reporter.Handler, mc *protointernal.MessageContext, val *ast.ValueNode, scopes []scope) error {
 	optVal := val.Value()
 	switch optVal := optVal.(type) {
 	case []*ast.ValueNode:
@@ -736,7 +736,7 @@ func fileScope(r *result) scope {
 	// we search symbols in this file, but also symbols in other files that have
 	// the same package as this file or a "parent" package (in protobuf,
 	// packages are a hierarchy like C++ namespaces)
-	prefixes := internal.CreatePrefixList(r.FileDescriptorProto().GetPackage())
+	prefixes := protointernal.CreatePrefixList(r.FileDescriptorProto().GetPackage())
 	querySymbol := func(n string) protoreflect.Descriptor {
 		return r.resolveElement(protoreflect.FullName(n))
 	}

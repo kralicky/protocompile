@@ -15,7 +15,7 @@
 package protocompile
 
 import (
-	"github.com/kralicky/protocompile/internal"
+	"github.com/kralicky/protocompile/protointernal"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -77,6 +77,6 @@ func IsWellKnownType(name protoreflect.FullName) bool {
 }
 
 func IsScalarType(t string) bool {
-	_, ok := internal.FieldTypes[t]
+	_, ok := protointernal.FieldTypes[t]
 	return ok
 }

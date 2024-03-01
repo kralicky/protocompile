@@ -34,9 +34,9 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/kralicky/protocompile/internal"
-	"github.com/kralicky/protocompile/internal/prototest"
 	"github.com/kralicky/protocompile/linker"
 	"github.com/kralicky/protocompile/parser"
+	"github.com/kralicky/protocompile/protointernal/prototest"
 	"github.com/kralicky/protocompile/reporter"
 )
 

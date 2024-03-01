@@ -34,16 +34,16 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/kralicky/protocompile"
-	"github.com/kralicky/protocompile/internal"
 	"github.com/kralicky/protocompile/internal/protoc"
-	"github.com/kralicky/protocompile/internal/prototest"
 	"github.com/kralicky/protocompile/linker"
+	"github.com/kralicky/protocompile/protointernal"
+	"github.com/kralicky/protocompile/protointernal/prototest"
 	"github.com/kralicky/protocompile/reporter"
 )
 
 func TestMain(m *testing.M) {
 	// Enable just for tests.
-	internal.AllowEditions = true
+	protointernal.AllowEditions = true
 	status := m.Run()
 	os.Exit(status)
 }
