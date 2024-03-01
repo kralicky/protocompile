@@ -80,7 +80,7 @@ func (r *result) validateExtension(fld protoreflect.FieldDescriptor, handler *re
 		// themselves (no scalar extensions)
 		if fld.Kind() != protoreflect.MessageKind {
 			file := r.FileNode()
-			info := file.NodeInfo(r.FieldNode(fd.proto).GetFieldType())
+			info := file.NodeInfo(r.FieldNode(fd.proto).GetFieldTypeNode())
 			return handler.HandleErrorf(info, "messages with message-set wire format cannot contain scalar extensions, only messages")
 		}
 		if fld.Cardinality() == protoreflect.Repeated {

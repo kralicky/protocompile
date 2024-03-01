@@ -21,7 +21,15 @@ import (
 )
 
 func (n *OptionNode) Start() Token { return startToken(n.Keyword, n.Name, n.Equals, n.Val) }
-func (n *OptionNode) End() Token   { return endToken(n.Semicolon, n.Val) }
+func (n *OptionNode) End() Token   { return n.Semicolon.GetToken() }
+func (n *OptionNode) SourceInfoEnd() Token {
+	if n.Keyword != nil {
+		return n.End()
+	}
+	// For source info purposes, the trailing comma is not considered part of the
+	// option node.
+	return n.Val.End()
+}
 
 func (n *OptionNode) fileElement()    {}
 func (n *OptionNode) msgElement()     {}

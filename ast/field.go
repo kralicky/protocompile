@@ -42,9 +42,9 @@ func (f *FieldDeclNode) GetName() *IdentNode {
 	return nil
 }
 
-func (f *FieldDeclNode) GetFieldType() *IdentValueNode {
+func (f *FieldDeclNode) GetFieldTypeNode() Node {
 	if u := f.Unwrap(); u != nil {
-		return u.GetFieldType()
+		return u.GetFieldTypeNode()
 	}
 	return nil
 }
@@ -52,13 +52,6 @@ func (f *FieldDeclNode) GetFieldType() *IdentValueNode {
 func (f *FieldDeclNode) GetTag() *UintLiteralNode {
 	if u := f.Unwrap(); u != nil {
 		return u.GetTag()
-	}
-	return nil
-}
-
-func (f *FieldDeclNode) GetGroupKeyword() *IdentNode {
-	if u := f.Unwrap(); u != nil {
-		return u.GetGroupKeyword()
 	}
 	return nil
 }
@@ -82,25 +75,23 @@ func (n *FieldNode) IsIncomplete() bool {
 	return n.Tag == nil || n.Equals == nil || n.Name == nil
 }
 
-func (n *FieldNode) GetGroupKeyword() *IdentNode {
-	return nil
+func (n *FieldNode) GetFieldTypeNode() Node {
+	return n.FieldType
 }
 
 func (n *GroupNode) Start() Token {
 	return startToken(n.Label, n.Keyword, n.Name, n.Equals, n.Tag)
 }
 
-func (n *GroupNode) End() Token { return n.Semicolon.Token }
-
-func (n *MapFieldNode) GetFieldType() *IdentValueNode {
-	return n.GetMapType().GetKeyType().AsIdentValue()
+func (n *GroupNode) End() Token {
+	return n.Semicolon.Token
 }
 
-func (n *GroupNode) GetFieldType() *IdentValueNode {
-	return n.GetKeyword().AsIdentValue()
+func (n *MapFieldNode) GetFieldTypeNode() Node {
+	return n.MapType
 }
 
-func (n *GroupNode) GetGroupKeyword() *IdentNode {
+func (n *GroupNode) GetFieldTypeNode() Node {
 	return n.GetKeyword()
 }
 
@@ -129,16 +120,12 @@ func (n *OneofNode) End() Token {
 func (*OneofNode) msgElement() {}
 
 func (n *MapTypeNode) Start() Token { return n.GetKeyword().GetToken() }
-func (n *MapTypeNode) End() Token   { return n.GetSemicolon().GetToken() }
+func (n *MapTypeNode) End() Token   { return n.Semicolon.Token }
 
 func (n *MapFieldNode) Start() Token { return n.GetMapType().Start() }
 func (n *MapFieldNode) End() Token   { return n.Semicolon.Token }
 
 func (*MapFieldNode) msgElement() {}
-
-func (n *MapFieldNode) GetGroupKeyword() *IdentNode {
-	return nil
-}
 
 func (n *MapFieldNode) GetLabel() *IdentNode {
 	return nil
@@ -148,9 +135,9 @@ func (n *MapFieldNode) KeyField() *SyntheticMapField {
 	return &SyntheticMapField{
 		Name: &IdentNode{
 			Val:   "key",
-			Token: n.MapType.KeyType.Token,
+			Token: n.GetMapType().GetKeyType().GetToken(),
 		},
-		FieldType: n.GetFieldType(),
+		FieldType: n.GetMapType().GetKeyType().AsIdentValue(),
 		Tag: &UintLiteralNode{
 			Token: n.GetMapType().GetKeyType().GetToken(),
 			Val:   2,
@@ -184,10 +171,10 @@ func (n *SyntheticMapField) GetOptions() *CompactOptionsNode {
 	return nil
 }
 
-func (n *SyntheticMapField) GetGroupKeyword() *IdentNode {
+func (n *SyntheticMapField) GetLabel() *IdentNode {
 	return nil
 }
 
-func (n *SyntheticMapField) GetLabel() *IdentNode {
-	return nil
+func (n *SyntheticMapField) GetFieldTypeNode() Node {
+	return n.GetFieldType()
 }

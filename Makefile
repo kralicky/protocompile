@@ -153,6 +153,12 @@ internal/testdata/editions/all.protoset: $(PROTOC) $(sort $(wildcard internal/te
 internal/testdata/source_info.protoset: $(PROTOC) internal/testdata/desc_test_options.proto internal/testdata/desc_test_comments.proto internal/testdata/desc_test_complex.proto
 	cd $(@D) && $(PROTOC) --descriptor_set_out=$(@F) --include_source_info -I. $(filter-out protoc,$(^F))
 
+internal/testdata/encoding/tabs.protoset: $(PROTOC) internal/testdata/encoding/tabs.proto
+	cd $(@D) && $(PROTOC) --descriptor_set_out=$(@F) --include_source_info -I. $(filter-out protoc,$(^F))
+
+internal/testdata/encoding/spaces.protoset: $(PROTOC) internal/testdata/encoding/spaces.proto
+	cd $(@D) && $(PROTOC) --descriptor_set_out=$(@F) --include_source_info -I. $(filter-out protoc,$(^F))
+
 internal/testdata/options/test.protoset: $(PROTOC) internal/testdata/options/test.proto
 	cd $(@D) && $(PROTOC) --descriptor_set_out=$(@F) -I. $(filter-out protoc,$(^F))
 

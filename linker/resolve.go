@@ -380,9 +380,9 @@ func resolveFieldTypes(f *fldDescriptor, handler *reporter.Handler, s *Symbols, 
 		return nil
 	}
 
-	dsc := r.resolve(ast.NewNodeReference(file, node.GetFieldType()), fld.GetTypeName(), true, scopes)
+	dsc := r.resolve(ast.NewNodeReference(file, node.GetFieldTypeNode()), fld.GetTypeName(), true, scopes)
 	if dsc == nil {
-		return handler.HandleErrorWithPos(file.NodeInfo(node.GetFieldType()), &errUndeclaredName{
+		return handler.HandleErrorWithPos(file.NodeInfo(node.GetFieldTypeNode()), &errUndeclaredName{
 			scope:      scope,
 			what:       "type",
 			name:       fld.GetTypeName(),
@@ -390,7 +390,7 @@ func resolveFieldTypes(f *fldDescriptor, handler *reporter.Handler, s *Symbols, 
 		})
 	}
 	if isSentinelDescriptor(dsc) {
-		return handler.HandleErrorf(file.NodeInfo(node.GetFieldType()), "%s: unknown type %s; resolved to %s which is not defined; consider using a leading dot", scope, fld.GetTypeName(), dsc.FullName())
+		return handler.HandleErrorf(file.NodeInfo(node.GetFieldTypeNode()), "%s: unknown type %s; resolved to %s which is not defined; consider using a leading dot", scope, fld.GetTypeName(), dsc.FullName())
 	}
 	switch dsc := dsc.(type) {
 	case protoreflect.MessageDescriptor:
@@ -417,7 +417,7 @@ func resolveFieldTypes(f *fldDescriptor, handler *reporter.Handler, s *Symbols, 
 				}
 			}
 			if !isValid {
-				return handler.HandleErrorf(file.NodeInfo(node.GetFieldType()), "%s: %s is a synthetic map entry and may not be referenced explicitly", scope, dsc.FullName())
+				return handler.HandleErrorf(file.NodeInfo(node.GetFieldTypeNode()), "%s: %s is a synthetic map entry and may not be referenced explicitly", scope, dsc.FullName())
 			}
 		}
 		typeName := "." + string(dsc.FullName())
@@ -428,7 +428,7 @@ func resolveFieldTypes(f *fldDescriptor, handler *reporter.Handler, s *Symbols, 
 			// if type was tentatively unset, we now know it's actually a message
 			fld.Type = descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum()
 		} else if fld.GetType() != descriptorpb.FieldDescriptorProto_TYPE_MESSAGE && fld.GetType() != descriptorpb.FieldDescriptorProto_TYPE_GROUP {
-			return handler.HandleErrorf(file.NodeInfo(node.GetFieldType()), "%s: descriptor proto indicates type %v but should be %v", scope, fld.GetType(), descriptorpb.FieldDescriptorProto_TYPE_MESSAGE)
+			return handler.HandleErrorf(file.NodeInfo(node.GetFieldTypeNode()), "%s: descriptor proto indicates type %v but should be %v", scope, fld.GetType(), descriptorpb.FieldDescriptorProto_TYPE_MESSAGE)
 		}
 		f.msgType = dsc
 	case protoreflect.EnumDescriptor:
@@ -436,7 +436,7 @@ func resolveFieldTypes(f *fldDescriptor, handler *reporter.Handler, s *Symbols, 
 		enumIsProto3 := dsc.Syntax() == protoreflect.Proto3
 		if fld.GetExtendee() == "" && proto3 && !enumIsProto3 {
 			// fields in a proto3 message cannot refer to proto2 enums
-			return handler.HandleErrorf(file.NodeInfo(node.GetFieldType()), "%s: cannot use proto2 enum %s in a proto3 message", scope, fld.GetTypeName())
+			return handler.HandleErrorf(file.NodeInfo(node.GetFieldTypeNode()), "%s: cannot use proto2 enum %s in a proto3 message", scope, fld.GetTypeName())
 		}
 		typeName := "." + string(dsc.FullName())
 		if fld.GetTypeName() != typeName {
@@ -446,11 +446,11 @@ func resolveFieldTypes(f *fldDescriptor, handler *reporter.Handler, s *Symbols, 
 			// the type was tentatively unset, but now we know it's actually an enum
 			fld.Type = descriptorpb.FieldDescriptorProto_TYPE_ENUM.Enum()
 		} else if fld.GetType() != descriptorpb.FieldDescriptorProto_TYPE_ENUM {
-			return handler.HandleErrorf(file.NodeInfo(node.GetFieldType()), "%s: descriptor proto indicates type %v but should be %v", scope, fld.GetType(), descriptorpb.FieldDescriptorProto_TYPE_ENUM)
+			return handler.HandleErrorf(file.NodeInfo(node.GetFieldTypeNode()), "%s: descriptor proto indicates type %v but should be %v", scope, fld.GetType(), descriptorpb.FieldDescriptorProto_TYPE_ENUM)
 		}
 		f.enumType = dsc
 	default:
-		return handler.HandleErrorf(file.NodeInfo(node.GetFieldType()), "%s: invalid type: %s is %s, not a message or enum", scope, dsc.FullName(), descriptorTypeWithArticle(dsc))
+		return handler.HandleErrorf(file.NodeInfo(node.GetFieldTypeNode()), "%s: invalid type: %s is %s, not a message or enum", scope, dsc.FullName(), descriptorTypeWithArticle(dsc))
 	}
 	return nil
 }

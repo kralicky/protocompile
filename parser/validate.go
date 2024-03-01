@@ -464,7 +464,7 @@ func validateField(res *result, syntax syntaxType, name protoreflect.FullName, f
 	node := res.FieldNode(fld)
 	if syntax != syntaxProto2 {
 		if fld.GetType() == descriptorpb.FieldDescriptorProto_TYPE_GROUP {
-			groupNodeInfo := res.file.NodeInfo(node.GetGroupKeyword())
+			groupNodeInfo := res.file.NodeInfo(node.GetGroup().GetKeyword())
 			if err := handler.HandleErrorf(groupNodeInfo, "%s: groups are not allowed in proto3 or editions", scope); err != nil {
 				return err
 			}

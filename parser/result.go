@@ -1110,7 +1110,7 @@ func (r *result) ExtensionRangeDescriptor(n *ast.RangeNode) *descriptorpb.Descri
 
 // FieldDescriptor implements Result.
 func (r *result) FieldDescriptor(n *ast.FieldDeclNode) *descriptorpb.FieldDescriptorProto {
-	if d, ok := r.nodesInverse[n]; ok {
+	if d, ok := r.nodesInverse[n.Unwrap()]; ok {
 		if fd, ok := d.(*descriptorpb.FieldDescriptorProto); ok {
 			return fd
 		}
@@ -1120,7 +1120,7 @@ func (r *result) FieldDescriptor(n *ast.FieldDeclNode) *descriptorpb.FieldDescri
 
 // MessageDescriptor implements Result.
 func (r *result) MessageDescriptor(n *ast.MessageDeclNode) *descriptorpb.DescriptorProto {
-	if d, ok := r.nodesInverse[n]; ok {
+	if d, ok := r.nodesInverse[n.Unwrap()]; ok {
 		if md, ok := d.(*descriptorpb.DescriptorProto); ok {
 			return md
 		}

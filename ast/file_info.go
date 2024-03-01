@@ -20,6 +20,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 // NewFileInfo creates a new instance for the given file.
@@ -184,6 +185,9 @@ func (f *FileInfo) AddVirtualComment(comment Token, attributedTo Token, virtualT
 func (f *FileInfo) NodeInfo(n Node) NodeInfo {
 	if IsNil(n) {
 		return NodeInfo{fileInfo: f}
+	}
+	if s, ok := n.(interface{ SourceInfoEnd() Token }); ok {
+		return f.nodeInfo(int(n.Start()), int(s.SourceInfoEnd()))
 	}
 	return f.nodeInfo(int(n.Start()), int(n.End()))
 }
@@ -394,9 +398,22 @@ func (f *FileInfo) SourcePos(offset int) SourcePos {
 		return f.Lines[n] > int32(offset)
 	})
 
-	col := offset
-	if lineNumber > 0 {
-		col -= int(f.Lines[lineNumber-1])
+	var col int
+	switch f.PositionEncoding {
+	case FileInfo_PositionEncodingByteOffset:
+		col = offset
+		if lineNumber > 0 {
+			col -= int(f.Lines[lineNumber-1])
+		}
+	case FileInfo_PositionEncodingProtocCompatible:
+		for i := f.Lines[lineNumber-1]; i < int32(offset); i++ {
+			if f.Data[i] == '\t' {
+				nextTabStop := 8 - (col % 8)
+				col += nextTabStop
+			} else if utf8.RuneStart(f.Data[i]) {
+				col++
+			}
+		}
 	}
 
 	return SourcePos{

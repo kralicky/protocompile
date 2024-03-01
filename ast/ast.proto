@@ -40,6 +40,10 @@ message FileInfo {
     // the length of the item
     int32 length = 2;
   }
+  enum PositionEncoding {
+    PositionEncodingByteOffset       = 0;
+    PositionEncodingProtocCompatible = 1;
+  }
   // The name of the source file.
   string name = 1;
   // The raw contents of the source file.
@@ -63,9 +67,11 @@ message FileInfo {
   // to the file for use in external tooling.
   int32 version = 6;
 
+  PositionEncoding positionEncoding = 7;
+
   // zero-length-token counts, used for validation.
-  int32 zeroLengthTokenCount            = 7;
-  int32 zeroLengthTokenConsecutiveCount = 8;
+  int32 zeroLengthTokenCount            = 8;
+  int32 zeroLengthTokenConsecutiveCount = 9;
 }
 
 message FileElement {

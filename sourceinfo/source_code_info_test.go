@@ -42,7 +42,7 @@ func TestSourceCodeInfo(t *testing.T) {
 		Resolver: protocompile.WithStandardImports(&protocompile.SourceResolver{
 			ImportPaths: []string{"../internal/testdata"},
 		}),
-		SourceInfoMode: protocompile.SourceInfoStandard,
+		SourceInfoMode: protocompile.SourceInfoStandard | protocompile.SourceInfoProtocCompatible,
 	}
 	fds, err := compiler.Compile(context.Background(), "desc_test_comments.proto", "desc_test_complex.proto")
 	if pe, ok := err.(protocompile.PanicError); ok {
@@ -76,6 +76,27 @@ func TestSourceCodeInfo(t *testing.T) {
 		}
 		fixupProtocSourceCodeInfo(expectedFd.SourceCodeInfo)
 		prototest.AssertMessagesEqual(t, expectedFd.SourceCodeInfo, actualFd.SourceCodeInfo, expectedFd.GetName())
+	}
+}
+
+func TestSourcePositionEncoding(t *testing.T) {
+	compiler := protocompile.Compiler{
+		Resolver: protocompile.WithStandardImports(&protocompile.SourceResolver{
+			ImportPaths: []string{"../internal/testdata/encoding"},
+		}),
+		SourceInfoMode: protocompile.SourceInfoStandard,
+	}
+	fds, err := compiler.Compile(context.Background(), "tabs.proto", "spaces.proto")
+	require.NoError(t, err)
+
+	// check that tabs.proto in default mode is equal to protoc's spaces.proto output
+	{
+		// tabs := fds.Files[0]
+		spaces := fds.Files[1]
+
+		actual := fds.Files[0].(linker.Result).FileDescriptorProto().SourceCodeInfo
+		expected := prototest.LoadDescriptorSet(t, "../internal/testdata/encoding/spaces.protoset", linker.ResolverFromFile(spaces)).File[0].SourceCodeInfo
+		prototest.AssertMessagesEqual(t, expected, actual, "tabs.proto")
 	}
 }
 
@@ -164,7 +185,7 @@ func TestSourceCodeInfoOptions(t *testing.T) {
 	t.Parallel()
 
 	// set to true to re-generate golden output file
-	const regenerateGoldenOutputFile = false
+	const regenerateGoldenOutputFile = true
 
 	generateSourceInfoText := func(filename string, mode protocompile.SourceInfoMode) string {
 		compiler := protocompile.Compiler{
@@ -193,12 +214,12 @@ func TestSourceCodeInfoOptions(t *testing.T) {
 		{
 			name:     "extra_comments",
 			filename: "desc_test_comments.proto",
-			mode:     protocompile.SourceInfoExtraComments,
+			mode:     protocompile.SourceInfoExtraComments | protocompile.SourceInfoProtocCompatible,
 		},
 		{
 			name:     "extra_option_locations",
 			filename: "desc_test_complex.proto",
-			mode:     protocompile.SourceInfoExtraOptionLocations,
+			mode:     protocompile.SourceInfoExtraOptionLocations | protocompile.SourceInfoProtocCompatible,
 		},
 	}
 
@@ -210,11 +231,11 @@ func TestSourceCodeInfoOptions(t *testing.T) {
 
 			baseName := strings.TrimSuffix(testCase.filename, ".proto")
 			if regenerateGoldenOutputFile {
-				err := os.WriteFile(fmt.Sprintf("testdata/%s.%s.txt", baseName, testCase.name), []byte(output), 0644)
+				err := os.WriteFile(fmt.Sprintf("testdata/%s.%s.txt", baseName, testCase.name), []byte(output), 0o644)
 				require.NoError(t, err)
 				// also create a file with standard comments, as a useful demonstration of the differences
-				output := generateSourceInfoText(testCase.filename, protocompile.SourceInfoStandard)
-				err = os.WriteFile(fmt.Sprintf("testdata/%s.standard.txt", baseName), []byte(output), 0644)
+				output := generateSourceInfoText(testCase.filename, protocompile.SourceInfoStandard|protocompile.SourceInfoProtocCompatible)
+				err = os.WriteFile(fmt.Sprintf("testdata/%s.standard.txt", baseName), []byte(output), 0o644)
 				require.NoError(t, err)
 				return
 			}

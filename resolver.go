@@ -167,8 +167,12 @@ func (r *SourceResolver) FindFileByPath(path UnresolvedPath, _ ImportContext) (S
 			}
 			return SearchResult{}, err
 		}
+		rel, err := filepath.Rel(importPath, string(resolved))
+		if err != nil {
+			return SearchResult{}, err
+		}
 		return SearchResult{
-			ResolvedPath: resolved,
+			ResolvedPath: ResolvedPath(rel),
 			Source:       reader,
 		}, nil
 	}

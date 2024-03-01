@@ -398,6 +398,7 @@ func (n *ReservedNode) AsEnumElement() *EnumElement {
 
 type AnyMessageDeclNode interface {
 	Node
+	AsMessageDeclNode() *MessageDeclNode
 	GetName() *IdentNode
 }
 
@@ -576,9 +577,8 @@ type AnyFieldDeclNode interface {
 	AsFieldDeclNode() *FieldDeclNode
 	GetLabel() *IdentNode
 	GetName() *IdentNode
-	GetFieldType() *IdentValueNode
+	GetFieldTypeNode() Node
 	GetTag() *UintLiteralNode
-	GetGroupKeyword() *IdentNode
 	GetOptions() *CompactOptionsNode
 }
 

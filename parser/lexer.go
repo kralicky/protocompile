@@ -114,7 +114,7 @@ type protoLex struct {
 	res          *ast.FileNode
 	parsedSyntax string
 
-	prevSym    ast.TerminalNodeInterface
+	prevSym    ast.TerminalNode
 	prevOffset int
 	eof        ast.Token
 
@@ -277,11 +277,6 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 			return _ERROR
 		}
 
-		if strings.ContainsRune("\r\t\f\v ", c) {
-			// skip whitespace
-			continue
-		}
-
 		if l.insertSemi&immediate == immediate {
 			rn := ';'
 			if l.insertSemi&insertComma == insertComma {
@@ -292,6 +287,11 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 				return l.writeVirtualRune(lval, rn)
 			}
 			l.insertSemi = 0
+		}
+
+		if strings.ContainsRune("\r\t\f\v ", c) {
+			// skip whitespace
+			continue
 		}
 
 		switch c {
@@ -763,7 +763,7 @@ func (l *protoLex) newToken() ast.Token {
 	return l.info.AddToken(offset, length)
 }
 
-func (l *protoLex) setPrevAndAddComments(n ast.TerminalNodeInterface) {
+func (l *protoLex) setPrevAndAddComments(n ast.TerminalNode) {
 	comments := l.comments
 	l.comments = nil
 	var prevTrailingComments []ast.Token

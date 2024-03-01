@@ -143,6 +143,8 @@ const (
 	// literals in option values. This can be combined with the above by
 	// bitwise-OR'ing it with SourceInfoExtraComments.
 	SourceInfoExtraOptionLocations = SourceInfoMode(4)
+
+	SourceInfoProtocCompatible = SourceInfoMode(8)
 )
 
 type CompileResult struct {
@@ -911,6 +913,9 @@ func (t *task) link(parseRes parser.Result, deps linker.Files, interpretOpts ...
 		}
 		if t.e.c.SourceInfoMode&SourceInfoExtraOptionLocations != 0 {
 			srcInfoOpts = append(srcInfoOpts, sourceinfo.WithExtraOptionLocations())
+		}
+		if t.e.c.SourceInfoMode&SourceInfoProtocCompatible != 0 {
+			srcInfoOpts = append(srcInfoOpts, sourceinfo.WithProtocCompatMode())
 		}
 		parseRes.FileDescriptorProto().SourceCodeInfo = sourceinfo.GenerateSourceInfo(parseRes, optsIndex, srcInfoOpts...)
 		file.PopulateSourceCodeInfo(optsIndex, descIndex)

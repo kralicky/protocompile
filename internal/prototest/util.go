@@ -93,7 +93,6 @@ func AssertMessagesEqualWithOptions(t *testing.T, exp, act proto.Message, opts [
 		} else if len(msgAndArgs) > 1 {
 			prefix = fmt.Sprintf(msgAndArgs[0].(string)+": ", msgAndArgs[1:]...)
 		}
-
 		t.Errorf("%smessage mismatch (-want +got):\n%v", prefix, diff)
 	}
 }

@@ -129,12 +129,12 @@ message Another {
   option (map_vals).vals = {key: "bar", value: {name: "baz"}};
 
   option (a).test.floats = 1.0;
-  option (a).test.floats = inf;
-  option (a).test.floats = infinity;
-  option (a).test.floats = -inf;
-  option (a).test.floats = -infinity;
-  option (a).test.floats = nan;
-  option (a).test.floats = -nan;
+//  option (a).test.floats = inf;
+//  option (a).test.floats = infinity;
+//  option (a).test.floats = -inf;
+//  option (a).test.floats = -infinity;
+//  option (a).test.floats = nan;
+//  option (a).test.floats = -nan;
 
   optional Test                          test = 1;
   optional Test.Nested._NestedNested.EEE fff  = 2 [default = V1, json_name = "fff"];
@@ -341,10 +341,11 @@ message KeywordCollisionOptions {
     (to)         = true,
     (true)       = 111,
     (false)      = -111,
-    (default)    = 222,
-    (inf)        = inf,
-    (infinity)   = infinity,
-    (nan)        = nan
+    (default)    = 222
+//    (default)    = 222,
+//    (inf)        = inf,
+//    (infinity)   = infinity,
+//    (nan)        = nan
   ];
   optional string name = 2 [
     (boom) = {

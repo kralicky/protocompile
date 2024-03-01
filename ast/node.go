@@ -32,11 +32,11 @@ type Node interface {
 	End() Token
 }
 
-// TerminalNodeInterface represents a leaf in the AST. These represent
+// TerminalNode represents a leaf in the AST. These represent
 // the items/lexemes in the protobuf language. Comments and
 // whitespace are accumulated by the lexer and associated with
 // the following lexed token.
-type TerminalNodeInterface interface {
+type TerminalNode interface {
 	Node
 	GetToken() Token
 }
@@ -47,11 +47,11 @@ type NamedNode interface {
 }
 
 var (
-	_ TerminalNodeInterface = (*StringLiteralNode)(nil)
-	_ TerminalNodeInterface = (*UintLiteralNode)(nil)
-	_ TerminalNodeInterface = (*FloatLiteralNode)(nil)
-	_ TerminalNodeInterface = (*IdentNode)(nil)
-	_ TerminalNodeInterface = (*RuneNode)(nil)
+	_ TerminalNode = (*StringLiteralNode)(nil)
+	_ TerminalNode = (*UintLiteralNode)(nil)
+	_ TerminalNode = (*FloatLiteralNode)(nil)
+	_ TerminalNode = (*IdentNode)(nil)
+	_ TerminalNode = (*RuneNode)(nil)
 )
 
 func (n *StringLiteralNode) Start() Token { return n.GetToken() }
@@ -73,12 +73,12 @@ func (n *RuneNode) Start() Token { return n.GetToken() }
 func (n *RuneNode) End() Token   { return n.GetToken() }
 
 func IsCompositeNode(n Node) bool {
-	_, ok := n.(TerminalNodeInterface)
+	_, ok := n.(TerminalNode)
 	return !ok
 }
 
 func IsTerminalNode(n Node) bool {
-	_, ok := n.(TerminalNodeInterface)
+	_, ok := n.(TerminalNode)
 	return ok
 }
 

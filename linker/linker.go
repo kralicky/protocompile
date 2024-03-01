@@ -83,7 +83,7 @@ dependencies_ok:
 			var importNode *ast.ImportNode
 			if parsedAst := parsed.AST(); parsedAst != nil {
 				for _, node := range parsedAst.Decls {
-					importNode := node.GetImport()
+					importNode = node.GetImport()
 					if importNode == nil || importNode.IsIncomplete() {
 						continue
 					}
