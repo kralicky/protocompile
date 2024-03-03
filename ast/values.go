@@ -284,7 +284,7 @@ func (n *ArrayLiteralNode) End() Token {
 }
 
 func (n *ArrayLiteralNode) Value() interface{} {
-	return n.Elements
+	return n.FilterValues()
 }
 
 func (n *ArrayLiteralNode) FilterValues() []*ValueNode {
