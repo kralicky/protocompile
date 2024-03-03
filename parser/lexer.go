@@ -878,17 +878,26 @@ func (l *protoLex) beginExtensionIdent(lval *protoSymType) {
 
 func (l *protoLex) endExtensionIdent(lval *protoSymType) {
 	var name *ast.IdentValueNode
-	switch len(lval.cid) {
-	case 0:
+	var nIdents, nDots int
+	for _, c := range lval.cid {
+		switch c.GetVal().(type) {
+		case *ast.ComplexIdentComponent_Ident:
+			nIdents++
+		case *ast.ComplexIdentComponent_Dot:
+			nDots++
+		}
+	}
+	switch {
+	case nDots == 0 && nIdents == 1:
+		name = lval.cid[0].GetIdent().AsIdentValueNode()
+	case nDots > 0:
+		name = (&ast.CompoundIdentNode{Components: lval.cid}).AsIdentValueNode()
+	default:
 		if ast.ExtendedSyntaxEnabled {
 			l.ErrExtendedSyntax("extension name cannot be empty", CategoryEmptyDecl)
 		} else {
 			l.Error("extension name cannot be empty")
 		}
-	case 1:
-		name = lval.cid[0].GetIdent().AsIdentValue()
-	default:
-		name = (&ast.CompoundIdentNode{Components: lval.cid}).AsIdentValueNode()
 	}
 
 	lval.xid = append(lval.xid, (&ast.FieldReferenceNode{Open: lval.refp.open, Name: name, Close: lval.refp.close}).AsComplexIdentComponent())
@@ -970,14 +979,33 @@ func (l *protoLex) endCompoundIdent(lval *protoSymType) (result int) {
 		return _FULLY_QUALIFIED_IDENT // '.' (invalid, but important for completion)
 	}
 
-	if nRefs > 0 && len(lval.cid) > 1 {
-		first := lval.cid[0].GetDot()
-		second := lval.cid[1].GetFieldRef()
-		if first != nil && second != nil {
-			// warn on extension idents that start with '.(foo)'
-			l.ErrExtendedSyntaxAt("unexpected leading '.'", first, CategoryExtraTokens)
+	if nRefs > 0 {
+		if len(lval.cid) > 1 {
+			first := lval.cid[0].GetDot()
+			second := lval.cid[1].GetFieldRef()
+			if first != nil && second != nil && second.IsExtension() {
+				// warn on extension idents that start with '.(foo)'
+				l.ErrExtendedSyntaxAt("unexpected leading '.'", first, CategoryExtraTokens)
+			}
 		}
-		lval.optName = &ast.OptionNameNode{Parts: lval.cid}
+		parts := make([]*ast.ComplexIdentComponent, len(lval.cid))
+		for i, c := range lval.cid {
+			switch c := c.GetVal().(type) {
+			case *ast.ComplexIdentComponent_Ident:
+				parts[i] = &ast.ComplexIdentComponent{
+					Val: &ast.ComplexIdentComponent_FieldRef{
+						FieldRef: &ast.FieldReferenceNode{
+							Name: c.Ident.AsIdentValueNode(),
+						},
+					},
+				}
+			case *ast.ComplexIdentComponent_Dot:
+				parts[i] = c.Dot.AsComplexIdentComponent()
+			case *ast.ComplexIdentComponent_FieldRef:
+				parts[i] = c.FieldRef.AsComplexIdentComponent()
+			}
+		}
+		lval.optName = &ast.OptionNameNode{Parts: parts}
 		return _EXTENSION_IDENT
 	}
 

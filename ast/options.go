@@ -58,11 +58,22 @@ func OptionNameNodeFromIdentValue(ident *IdentValueNode) *OptionNameNode {
 	switch ident := ident.GetVal().(type) {
 	case *IdentValueNode_Ident:
 		return &OptionNameNode{
-			Parts: []*ComplexIdentComponent{ident.Ident.AsComplexIdentComponent()},
+			Parts: []*ComplexIdentComponent{
+				(&FieldReferenceNode{Name: ident.Ident.AsIdentValueNode()}).AsComplexIdentComponent(),
+			},
 		}
 	case *IdentValueNode_CompoundIdent:
+		parts := make([]*ComplexIdentComponent, len(ident.CompoundIdent.Components))
+		for i, component := range ident.CompoundIdent.Components {
+			switch component := component.Val.(type) {
+			case *ComplexIdentComponent_Ident:
+				parts[i] = (&FieldReferenceNode{Name: component.Ident.AsIdentValueNode()}).AsComplexIdentComponent()
+			case *ComplexIdentComponent_Dot:
+				parts[i] = ident.CompoundIdent.Components[i]
+			}
+		}
 		return &OptionNameNode{
-			Parts: ident.CompoundIdent.GetComponents(),
+			Parts: parts,
 		}
 	default:
 		panic(fmt.Sprintf("unknown ident type: %T", ident))
@@ -148,4 +159,18 @@ func (e *OptionNameNode) FilterFieldReferences() []*FieldReferenceNode {
 		}
 	}
 	return fieldRefs
+}
+
+func (e *OptionNameNode) Split() ([]*FieldReferenceNode, []*RuneNode) {
+	var fieldRefs []*FieldReferenceNode
+	var dots []*RuneNode
+	for _, part := range e.Parts {
+		switch part := part.GetVal().(type) {
+		case *ComplexIdentComponent_FieldRef:
+			fieldRefs = append(fieldRefs, part.FieldRef)
+		case *ComplexIdentComponent_Dot:
+			dots = append(dots, part.Dot)
+		}
+	}
+	return fieldRefs, dots
 }

@@ -74,6 +74,16 @@ func (r *ReservedNode) FilterNames() []*StringValueNode {
 	return s
 }
 
+func (r *ReservedNode) FilterCommas() []*RuneNode {
+	s := make([]*RuneNode, 0, len(r.Elements))
+	for _, e := range r.Elements {
+		if n := e.GetComma(); n != nil {
+			s = append(s, n)
+		}
+	}
+	return s
+}
+
 func (r *ReservedNode) FilterRanges() []*RangeNode {
 	s := make([]*RangeNode, 0, len(r.Elements))
 	for _, e := range r.Elements {
@@ -98,6 +108,16 @@ func (r *ExtensionRangeNode) FilterRanges() []*RangeNode {
 	s := make([]*RangeNode, 0, len(r.Elements))
 	for _, e := range r.Elements {
 		if n := e.GetRange(); n != nil {
+			s = append(s, n)
+		}
+	}
+	return s
+}
+
+func (r *ExtensionRangeNode) FilterCommas() []*RuneNode {
+	s := make([]*RuneNode, 0, len(r.Elements))
+	for _, e := range r.Elements {
+		if n := e.GetComma(); n != nil {
 			s = append(s, n)
 		}
 	}

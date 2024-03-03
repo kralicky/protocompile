@@ -137,7 +137,7 @@ func (n *MapFieldNode) KeyField() *SyntheticMapField {
 			Val:   "key",
 			Token: n.GetMapType().GetKeyType().GetToken(),
 		},
-		FieldType: n.GetMapType().GetKeyType().AsIdentValue(),
+		FieldType: n.GetMapType().GetKeyType().AsIdentValueNode(),
 		Tag: &UintLiteralNode{
 			Token: n.GetMapType().GetKeyType().GetToken(),
 			Val:   2,

@@ -36,17 +36,6 @@ func (n *IdentNode) AsIdentifier() Identifier {
 	return Identifier(n.Val)
 }
 
-func (n *IdentNode) AsIdentValue() *IdentValueNode {
-	if n == nil {
-		return nil
-	}
-	return &IdentValueNode{
-		Val: &IdentValueNode_Ident{
-			Ident: n,
-		},
-	}
-}
-
 func (n *CompoundIdentNode) Start() Token {
 	if len(n.Components) > 0 {
 		return n.Components[0].Start()
@@ -113,4 +102,16 @@ func (n *CompoundIdentNode) FilterIdents() []*IdentNode {
 		}
 	}
 	return idents
+}
+
+func (n *CompoundIdentNode) Split() (idents []*IdentNode, dots []*RuneNode) {
+	for _, component := range n.Components {
+		switch component := component.Val.(type) {
+		case *ComplexIdentComponent_Ident:
+			idents = append(idents, component.Ident)
+		case *ComplexIdentComponent_Dot:
+			dots = append(dots, component.Dot)
+		}
+	}
+	return
 }

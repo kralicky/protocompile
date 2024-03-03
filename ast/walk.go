@@ -12,8 +12,8 @@ import (
 type WalkOption func(*walkOptions)
 
 type walkOptions struct {
-	before func(protopath.Values) bool
-	after  func(protopath.Values)
+	before func(protopath.Values) error
+	after  func(protopath.Values) error
 
 	hasRangeRequirement bool
 	start, end          Token
@@ -26,7 +26,7 @@ type walkOptions struct {
 // WithBefore returns a WalkOption that will cause the given function to be
 // invoked before a node is visited during a walk operation. If this hook
 // returns an error, the node is not visited and the walk operation is aborted.
-func WithBefore(fn func(protopath.Values) bool) WalkOption {
+func WithBefore(fn func(protopath.Values) error) WalkOption {
 	return func(options *walkOptions) {
 		options.before = fn
 	}
@@ -41,7 +41,7 @@ func WithBefore(fn func(protopath.Values) bool) WalkOption {
 // error, the after hook is still called for all nodes that have been visited.
 // However, the walk operation fails with the first error it encountered, so any
 // error returned from an after hook is effectively ignored.
-func WithAfter(fn func(protopath.Values)) WalkOption {
+func WithAfter(fn func(protopath.Values) error) WalkOption {
 	return func(options *walkOptions) {
 		options.after = fn
 	}
@@ -95,10 +95,21 @@ func Inspect(node Node, visit func(Node) bool, opts ...WalkOption) {
 				isMessage = true
 				isList = fd.IsList()
 			}
+		case protopath.ListIndexStep:
+			// for list indexes, visit only if the list type is concrete
+			prev := v.Index(-2)
+			switch prev.Step.Kind() {
+			case protopath.FieldAccessStep:
+				switch prev.Step.FieldDescriptor().Kind() {
+				case protoreflect.MessageKind:
+					isMessage = true
+				}
+			}
 		}
 		return
 	}
 
+	shouldBreak := false
 	protorange.Options{
 		Stable: true,
 	}.Range(
@@ -107,10 +118,16 @@ func Inspect(node Node, visit func(Node) bool, opts ...WalkOption) {
 			if len(v.Path) > wOpts.depthLimit {
 				return protorange.Break
 			}
+			if shouldBreak {
+				return protorange.Break
+			}
 			if isMessage, isList := check(v); isMessage {
 				if wOpts.before != nil {
-					if !wOpts.before(v) {
-						return nil
+					if err := wOpts.before(v); err != nil {
+						if err == protorange.Break {
+							return nil
+						}
+						return err
 					}
 				}
 				if !isList {
@@ -127,13 +144,19 @@ func Inspect(node Node, visit func(Node) bool, opts ...WalkOption) {
 						}
 					}
 					if canVisit {
-						visit(node)
+						if !visit(node) {
+							shouldBreak = true
+						}
 					}
 				}
 			}
 			return nil
 		},
 		func(v protopath.Values) error {
+			if shouldBreak {
+				shouldBreak = false
+				return nil // intentional - don't override error returned from push()
+			}
 			if isMessage, _ := check(v); isMessage {
 				if wOpts.after != nil {
 					wOpts.after(v)
@@ -151,22 +174,36 @@ type AncestorTracker struct {
 	ancestors protopath.Values
 }
 
-func (t *AncestorTracker) nodeIsConcrete(top struct {
-	Step  protopath.Step
-	Value protoreflect.Value
-},
+func nodeIsConcrete(
+	values protopath.Values,
+	index int,
 ) bool {
-	switch top.Step.Kind() {
+	v := values.Index(index)
+	switch v.Step.Kind() {
 	case protopath.RootStep:
 		return true
 	case protopath.FieldAccessStep:
-		fld := top.Step.FieldDescriptor()
+		fld := v.Step.FieldDescriptor()
 		switch fld.Kind() {
 		case protoreflect.MessageKind:
 			if fld.IsList() || fld.IsMap() {
 				return false
 			}
-			switch top.Value.Message().Interface().(type) {
+			switch v.Value.Message().Interface().(type) {
+			case WrapperNode:
+				return false
+			case Node:
+				return true
+			}
+		}
+	case protopath.ListIndexStep:
+		prev := values.Index(index - 1)
+		if prev.Step.Kind() == protopath.FieldAccessStep {
+			prevFld := prev.Step.FieldDescriptor()
+			if prevFld.Kind() != protoreflect.MessageKind {
+				return false
+			}
+			switch v.Value.Message().Interface().(type) {
 			case WrapperNode:
 				return false
 			case Node:
@@ -181,9 +218,12 @@ func (t *AncestorTracker) nodeIsConcrete(top struct {
 // to track the path through the AST during the walk operation.
 func (t *AncestorTracker) AsWalkOptions() []WalkOption {
 	return []WalkOption{
-		WithBefore(func(v protopath.Values) bool {
+		WithBefore(func(v protopath.Values) error {
 			t.ancestors = v
-			return t.nodeIsConcrete(v.Index(-1))
+			if nodeIsConcrete(v, -1) {
+				return nil
+			}
+			return protorange.Break
 		}),
 	}
 }
@@ -197,7 +237,7 @@ func (t *AncestorTracker) AsWalkOptions() []WalkOption {
 func (t *AncestorTracker) Path() []Node {
 	nodes := make([]Node, 0, len(t.ancestors.Values))
 	for i := range len(t.ancestors.Values) {
-		if t.nodeIsConcrete(t.ancestors.Index(i)) {
+		if nodeIsConcrete(t.ancestors, i) {
 			nodes = append(nodes, t.ancestors.Index(i).Value.Message().Interface().(Node))
 		}
 	}
@@ -206,4 +246,13 @@ func (t *AncestorTracker) Path() []Node {
 
 func (t *AncestorTracker) ProtoPath() protopath.Path {
 	return t.ancestors.Path
+}
+
+func NodeView(in func(v Node)) func(v protopath.Values) error {
+	return func(v protopath.Values) error {
+		if nodeIsConcrete(v, -1) {
+			in(v.Index(-1).Value.Message().Interface().(Node))
+		}
+		return nil
+	}
 }

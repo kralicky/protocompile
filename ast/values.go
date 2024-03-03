@@ -297,6 +297,20 @@ func (n *ArrayLiteralNode) FilterValues() []*ValueNode {
 	return s
 }
 
+func (n *ArrayLiteralNode) Split() ([]*ValueNode, []*RuneNode) {
+	var values []*ValueNode
+	var commas []*RuneNode
+	for _, elem := range n.Elements {
+		switch elem := elem.Val.(type) {
+		case *ArrayLiteralElement_Value:
+			values = append(values, elem.Value)
+		case *ArrayLiteralElement_Comma:
+			commas = append(commas, elem.Comma)
+		}
+	}
+	return values, commas
+}
+
 func (n *MessageLiteralNode) Start() Token {
 	return n.Open.GetToken()
 }
