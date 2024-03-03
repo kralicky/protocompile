@@ -583,6 +583,15 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 					}
 				case _RETURNS:
 					l.inMethodDecl = false
+				case _MAX:
+					// "to max" always ends a reserved expression
+					if l.prevSym != nil {
+						if ident := l.prevSym.(*ast.IdentNode); ident.Val == "to" {
+							if _, ok := l.matchNextRune(';', ',', '['); !ok {
+								l.insertSemi |= immediate
+							}
+						}
+					}
 				}
 				l.setIdent(lval, str)
 				return keyword

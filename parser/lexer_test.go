@@ -110,6 +110,7 @@ func TestLexer(t *testing.T) {
 		optional uint64 id = 2 [
 			(syntax) =
 		]
+		reserved 1 to max
 	}
 
 	// some strange cases
@@ -413,6 +414,7 @@ func TestLexer(t *testing.T) {
 		//   optional uint64 id = 2 [
 		//     (syntax) =
 		//   ]
+		//   reserved 1 to max
 		// }
 		{t: _MESSAGE, v: "message"},
 		{t: _SINGULAR_IDENT, v: "Simple"},
@@ -441,6 +443,11 @@ func TestLexer(t *testing.T) {
 		{t: '=', v: '='},
 		{t: ',', v: ',', virtual: true},
 		{t: ']', v: ']'},
+		{t: ';', v: ';', virtual: true},
+		{t: _RESERVED, v: "reserved"},
+		{t: _INT_LIT, v: uint64(1)},
+		{t: _TO, v: "to"},
+		{t: _MAX, v: "max"},
 		{t: ';', v: ';', virtual: true},
 		{t: '}', v: '}'},
 		{t: ';', v: ';', virtual: true},
@@ -622,7 +629,7 @@ func runLexerTest(t *testing.T, l *protoLex, expected []testCase) {
 		}
 		var val any
 		switch tok {
-		case _SYNTAX, _OPTION, _INT32, _UINT32, _SERVICE, _RPC, _MESSAGE, _RETURNS, _EXTEND, _OPTIONAL, _REPEATED, _INT64, _UINT64, _TRUE, _FALSE, _BOOL, _STRING, _RESERVED, _TO:
+		case _SYNTAX, _OPTION, _INT32, _UINT32, _SERVICE, _RPC, _MESSAGE, _RETURNS, _EXTEND, _OPTIONAL, _REPEATED, _INT64, _UINT64, _TRUE, _FALSE, _BOOL, _STRING, _RESERVED, _TO, _MAX:
 			val = sym.id.Val
 		case _SINGULAR_IDENT:
 			val = sym.id.Val
