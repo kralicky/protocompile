@@ -15,10 +15,8 @@
 package parser
 
 import (
-	"cmp"
 	"fmt"
 	"io"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -1133,18 +1131,8 @@ func stringForFieldReference(fieldReference *ast.FieldReferenceNode) string {
 // stringForOptionName returns the string representation of the given option name node.
 func stringForOptionName(optionNameNode *ast.OptionNameNode) string {
 	var result string
-	var nodes []ast.Node
-	for _, p := range optionNameNode.Parts {
-		nodes = append(nodes, p)
-	}
-	for _, p := range optionNameNode.Dots {
-		nodes = append(nodes, p)
-	}
-	slices.SortFunc(nodes, func(i, j ast.Node) int {
-		return cmp.Compare(i.Start(), j.Start())
-	})
-	for _, node := range nodes {
-		switch node := node.(type) {
+	for _, node := range optionNameNode.Parts {
+		switch node := node.Unwrap().(type) {
 		case *ast.FieldReferenceNode:
 			result += stringForFieldReference(node)
 		case *ast.RuneNode:

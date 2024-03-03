@@ -287,6 +287,16 @@ func (n *ArrayLiteralNode) Value() interface{} {
 	return n.Elements
 }
 
+func (n *ArrayLiteralNode) FilterValues() []*ValueNode {
+	var s []*ValueNode
+	for _, r := range n.GetElements() {
+		if v := r.GetValue(); v != nil {
+			s = append(s, v)
+		}
+	}
+	return s
+}
+
 func (n *MessageLiteralNode) Start() Token {
 	return n.Open.GetToken()
 }

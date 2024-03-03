@@ -264,7 +264,7 @@ func generateSourceCodeInfoForOption(opts OptionIndex, sci *sourceCodeInfo, n *a
 		sci.newLoc(n.Val, append(optPath, valTag))
 	}
 	if n.Name != nil {
-		for j, nn := range n.Name.Parts {
+		for j, nn := range n.Name.FilterFieldReferences() {
 			optNmPath := optPath
 			optNmPath = append(optNmPath, protointernal.UninterpretedNameTag, int32(j))
 			sci.newLoc(nn, optNmPath)
@@ -290,7 +290,7 @@ func generateSourceInfoForOptionChildren(sci *sourceCodeInfo, n *ast.ValueNode, 
 	switch childInfo := childInfo.(type) {
 	case *ArrayLiteralSourceInfo:
 		if arrayLiteral := n.GetArrayLiteral(); arrayLiteral != nil {
-			for i, val := range arrayLiteral.Elements {
+			for i, val := range arrayLiteral.FilterValues() {
 				elementInfo := childInfo.Elements[i]
 				fullPath := combinePathsForOption(pathPrefix, elementInfo.Path)
 				sci.newLoc(val, fullPath)
@@ -389,20 +389,20 @@ func generateSourceCodeInfoForMessage(opts OptionIndex, sci *sourceCodeInfo, n a
 		case *ast.ExtensionRangeNode:
 			generateSourceCodeInfoForExtensionRanges(opts, sci, child, &extRangeIndex, append(path, protointernal.MessageExtensionRangesTag))
 		case *ast.ReservedNode:
-			if len(child.Names) > 0 {
+			if len(child.FilterNames()) > 0 {
 				resPath := path
 				resPath = append(resPath, protointernal.MessageReservedNamesTag)
 				sci.newLocWithComments(child, resPath)
-				for _, rn := range child.Names {
+				for _, rn := range child.FilterNames() {
 					sci.newLoc(rn, append(resPath, reservedNameIndex))
 					reservedNameIndex++
 				}
 			}
-			if len(child.Ranges) > 0 {
+			if len(child.FilterRanges()) > 0 {
 				resPath := path
 				resPath = append(resPath, protointernal.MessageReservedRangesTag)
 				sci.newLocWithComments(child, resPath)
-				for _, rr := range child.Ranges {
+				for _, rr := range child.FilterRanges() {
 					generateSourceCodeInfoForReservedRange(sci, rr, append(resPath, reservedRangeIndex))
 					reservedRangeIndex++
 				}
@@ -424,20 +424,20 @@ func generateSourceCodeInfoForEnum(opts OptionIndex, sci *sourceCodeInfo, n *ast
 			generateSourceCodeInfoForEnumValue(opts, sci, child, append(path, protointernal.EnumValuesTag, valIndex))
 			valIndex++
 		case *ast.ReservedNode:
-			if len(child.Names) > 0 {
+			if len(child.FilterNames()) > 0 {
 				resPath := path
 				resPath = append(resPath, protointernal.EnumReservedNamesTag)
 				sci.newLocWithComments(child, resPath)
-				for _, rn := range child.Names {
+				for _, rn := range child.FilterNames() {
 					sci.newLoc(rn, append(resPath, reservedNameIndex))
 					reservedNameIndex++
 				}
 			}
-			if len(child.Ranges) > 0 {
+			if len(child.FilterRanges()) > 0 {
 				resPath := path
 				resPath = append(resPath, protointernal.EnumReservedRangesTag)
 				sci.newLocWithComments(child, resPath)
-				for _, rr := range child.Ranges {
+				for _, rr := range child.FilterRanges() {
 					generateSourceCodeInfoForReservedRange(sci, rr, append(resPath, reservedRangeIndex))
 					reservedRangeIndex++
 				}
@@ -579,7 +579,7 @@ func generateSourceCodeInfoForField(opts OptionIndex, sci *sourceCodeInfo, n ast
 func generateSourceCodeInfoForExtensionRanges(opts OptionIndex, sci *sourceCodeInfo, n *ast.ExtensionRangeNode, extRangeIndex *int32, path []int32) {
 	sci.newLocWithComments(n, path)
 	startExtRangeIndex := *extRangeIndex
-	for _, child := range n.Ranges {
+	for _, child := range n.FilterRanges() {
 		path := append(path, *extRangeIndex)
 		*extRangeIndex++
 		sci.newLoc(child, path)
@@ -594,7 +594,7 @@ func generateSourceCodeInfoForExtensionRanges(opts OptionIndex, sci *sourceCodeI
 		}
 	}
 	// options for all ranges go after the start+end values
-	for range n.Ranges {
+	for range n.FilterRanges() {
 		path := append(path, startExtRangeIndex)
 		startExtRangeIndex++
 		if n.Options != nil {

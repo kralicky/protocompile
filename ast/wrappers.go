@@ -1,23 +1,27 @@
 package ast
 
-import reflect "reflect"
+import (
+	reflect "reflect"
+
+	"google.golang.org/protobuf/reflect/protoreflect"
+)
 
 func Unwrap(node Node) Node {
+	n, _ := TryUnwrap(node)
+	return n
+}
+
+func TryUnwrap(node Node) (Node, protoreflect.FieldDescriptor) {
 	if node == nil {
-		return nil
+		return nil, nil
 	}
-	rn := node.ProtoReflect()
-	oneofs := rn.Descriptor().Oneofs()
-	for i := range oneofs.Len() {
-		o := oneofs.Get(i)
-		if o.IsSynthetic() {
-			continue
-		}
-		if fd := rn.WhichOneof(o); fd != nil {
-			return rn.Get(fd).Message().Interface().(Node)
+	if wn, ok := node.(WrapperNode); ok {
+		rn := wn.ProtoReflect()
+		if fd := rn.WhichOneof(rn.Descriptor().Oneofs().Get(0)); fd != nil {
+			return rn.Get(fd).Message().Interface().(Node), fd
 		}
 	}
-	return node
+	return node, nil
 }
 
 type AnyValueNode interface {
@@ -636,4 +640,212 @@ func (n *OneofNode) GetElements() []*OneofElement {
 
 func (n *EnumNode) GetElements() []*EnumElement {
 	return n.GetDecls()
+}
+
+type AnyComplexIdentComponent interface {
+	Node
+	AsComplexIdentComponent() *ComplexIdentComponent
+}
+
+func (c *ComplexIdentComponent) Start() Token {
+	if u := c.Unwrap(); u != nil {
+		return u.Start()
+	}
+	return TokenError
+}
+
+func (c *ComplexIdentComponent) End() Token {
+	if u := c.Unwrap(); u != nil {
+		return u.End()
+	}
+	return TokenError
+}
+
+type AnyArrayLiteralElement interface {
+	Node
+	AsArrayLiteralElement() *ArrayLiteralElement
+}
+
+func (n *ArrayLiteralElement) Start() Token {
+	if u := n.Unwrap(); u != nil {
+		return u.Start()
+	}
+	return TokenError
+}
+
+func (n *ArrayLiteralElement) End() Token {
+	if u := n.Unwrap(); u != nil {
+		return u.End()
+	}
+	return TokenError
+}
+
+type AnyRangeElement interface {
+	Node
+	AsRangeElement() *RangeElement
+}
+
+func (n *RangeElement) Start() Token {
+	if u := n.Unwrap(); u != nil {
+		return u.Start()
+	}
+	return TokenError
+}
+
+func (n *RangeElement) End() Token {
+	if u := n.Unwrap(); u != nil {
+		return u.End()
+	}
+	return TokenError
+}
+
+type AnyReservedElement interface {
+	Node
+	AsReservedElement() *ReservedElement
+}
+
+func (n *ReservedElement) Start() Token {
+	if u := n.Unwrap(); u != nil {
+		return u.Start()
+	}
+	return TokenError
+}
+
+func (n *ReservedElement) End() Token {
+	if u := n.Unwrap(); u != nil {
+		return u.End()
+	}
+	return TokenError
+}
+
+func (n *ComplexIdentComponent) Unwrap() AnyComplexIdentComponent {
+	switch n := n.GetVal().(type) {
+	case *ComplexIdentComponent_Ident:
+		return n.Ident
+	case *ComplexIdentComponent_Dot:
+		return n.Dot
+	case *ComplexIdentComponent_FieldRef:
+		return n.FieldRef
+	}
+	return nil
+}
+
+func (n *ArrayLiteralElement) Unwrap() AnyArrayLiteralElement {
+	switch n := n.GetVal().(type) {
+	case *ArrayLiteralElement_Value:
+		return n.Value
+	case *ArrayLiteralElement_Comma:
+		return n.Comma
+	}
+	return nil
+}
+
+func (n *RangeElement) Unwrap() AnyRangeElement {
+	switch n := n.GetVal().(type) {
+	case *RangeElement_Range:
+		return n.Range
+	case *RangeElement_Comma:
+		return n.Comma
+	}
+	return nil
+}
+
+func (n *ReservedElement) Unwrap() AnyReservedElement {
+	switch n := n.GetVal().(type) {
+	case *ReservedElement_Range:
+		return n.Range
+	case *ReservedElement_Name:
+		return n.Name
+	case *ReservedElement_Identifier:
+		return n.Identifier
+	case *ReservedElement_Comma:
+		return n.Comma
+	}
+	return nil
+}
+
+func (n *RangeElement) ToReservedElement() *ReservedElement {
+	switch n := n.GetVal().(type) {
+	case *RangeElement_Range:
+		return n.Range.AsReservedElement()
+	case *RangeElement_Comma:
+		return n.Comma.AsReservedElement()
+	}
+	return nil
+}
+
+func RangeElementsToReservedElements(n []*RangeElement) []*ReservedElement {
+	var res []*ReservedElement
+	for _, r := range n {
+		res = append(res, r.ToReservedElement())
+	}
+	return res
+}
+
+func (n *IdentNode) AsComplexIdentComponent() *ComplexIdentComponent {
+	return &ComplexIdentComponent{Val: &ComplexIdentComponent_Ident{Ident: n}}
+}
+
+func (n *RuneNode) AsComplexIdentComponent() *ComplexIdentComponent {
+	return &ComplexIdentComponent{Val: &ComplexIdentComponent_Dot{Dot: n}}
+}
+
+func (n *FieldReferenceNode) AsComplexIdentComponent() *ComplexIdentComponent {
+	return &ComplexIdentComponent{Val: &ComplexIdentComponent_FieldRef{FieldRef: n}}
+}
+
+func (n *ValueNode) AsArrayLiteralElement() *ArrayLiteralElement {
+	return &ArrayLiteralElement{Val: &ArrayLiteralElement_Value{Value: n}}
+}
+
+func (n *RuneNode) AsArrayLiteralElement() *ArrayLiteralElement {
+	return &ArrayLiteralElement{Val: &ArrayLiteralElement_Comma{Comma: n}}
+}
+
+func (n *RangeNode) AsRangeElement() *RangeElement {
+	return &RangeElement{Val: &RangeElement_Range{Range: n}}
+}
+
+func (n *RuneNode) AsRangeElement() *RangeElement {
+	return &RangeElement{Val: &RangeElement_Comma{Comma: n}}
+}
+
+func (n *RangeNode) AsReservedElement() *ReservedElement {
+	return &ReservedElement{Val: &ReservedElement_Range{Range: n}}
+}
+
+func (n *StringValueNode) AsReservedElement() *ReservedElement {
+	return &ReservedElement{Val: &ReservedElement_Name{Name: n}}
+}
+
+func (n *IdentNode) AsReservedElement() *ReservedElement {
+	return &ReservedElement{Val: &ReservedElement_Identifier{Identifier: n}}
+}
+
+func (n *RuneNode) AsReservedElement() *ReservedElement {
+	return &ReservedElement{Val: &ReservedElement_Comma{Comma: n}}
+}
+
+func (w *FileElement) isWrapperNode()           {}
+func (w *StringValueNode) isWrapperNode()       {}
+func (w *IdentValueNode) isWrapperNode()        {}
+func (w *ValueNode) isWrapperNode()             {}
+func (w *FloatValueNode) isWrapperNode()        {}
+func (w *MessageDeclNode) isWrapperNode()       {}
+func (w *MessageElement) isWrapperNode()        {}
+func (w *ExtendElement) isWrapperNode()         {}
+func (w *OneofElement) isWrapperNode()          {}
+func (w *EnumElement) isWrapperNode()           {}
+func (w *IntValueNode) isWrapperNode()          {}
+func (w *ServiceElement) isWrapperNode()        {}
+func (w *RPCElement) isWrapperNode()            {}
+func (w *FieldDeclNode) isWrapperNode()         {}
+func (w *ComplexIdentComponent) isWrapperNode() {}
+func (w *ArrayLiteralElement) isWrapperNode()   {}
+func (w *RangeElement) isWrapperNode()          {}
+func (w *ReservedElement) isWrapperNode()       {}
+
+type WrapperNode interface {
+	Node
+	isWrapperNode()
 }

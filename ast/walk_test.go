@@ -1,10 +1,17 @@
-package ast
+package ast_test
 
 import (
+	"os"
 	"slices"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+	. "github.com/kralicky/protocompile/ast"
+	"github.com/kralicky/protocompile/parser"
+	"github.com/kralicky/protocompile/reporter"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 func TestInspect(t *testing.T) {
@@ -14,20 +21,30 @@ func TestInspect(t *testing.T) {
 				Val: &MessageElement_Option{
 					Option: &OptionNode{
 						Name: &OptionNameNode{
-							Parts: []*FieldReferenceNode{
+							Parts: []*ComplexIdentComponent{
 								{
-									Name: &IdentValueNode{
-										Val: &IdentValueNode_CompoundIdent{
-											CompoundIdent: &CompoundIdentNode{
-												Components: []*IdentNode{
-													{
-														Token: 1,
-													},
-													{
-														Token: 2,
-													},
-													{
-														Token: 3,
+									Val: &ComplexIdentComponent_FieldRef{
+										FieldRef: &FieldReferenceNode{
+											Name: &IdentValueNode{
+												Val: &IdentValueNode_CompoundIdent{
+													CompoundIdent: &CompoundIdentNode{
+														Components: []*ComplexIdentComponent{
+															{
+																Val: &ComplexIdentComponent_Ident{Ident: &IdentNode{Token: 1}},
+															},
+															{
+																Val: &ComplexIdentComponent_Dot{Dot: &RuneNode{Token: 2}},
+															},
+															{
+																Val: &ComplexIdentComponent_Ident{Ident: &IdentNode{Token: 3}},
+															},
+															{
+																Val: &ComplexIdentComponent_Dot{Dot: &RuneNode{Token: 4}},
+															},
+															{
+																Val: &ComplexIdentComponent_Ident{Ident: &IdentNode{Token: 5}},
+															},
+														},
 													},
 												},
 											},
@@ -35,7 +52,7 @@ func TestInspect(t *testing.T) {
 									},
 								},
 								{
-									Open: &RuneNode{Rune: 'x'},
+									Val: &ComplexIdentComponent_Ident{Ident: &IdentNode{Token: 6}},
 								},
 							},
 						},
@@ -45,81 +62,74 @@ func TestInspect(t *testing.T) {
 		},
 	}
 	var tracker AncestorTracker
-	paths := [][]Node{}
+	nodePaths := [][]Node{}
+	paths := []string{}
+
 	Inspect(tree, func(n Node) bool {
-		paths = append(paths, slices.Clone(tracker.Path()))
+		nodePaths = append(nodePaths, slices.Clone(tracker.Path()))
+		paths = append(paths, tracker.ProtoPath().String())
 		return true
 	}, tracker.AsWalkOptions()...)
 
-	expectedPaths := [][]Node{
-		{tree},
-		{tree, tree.Decls[0].Unwrap()},
-		{tree, tree.Decls[0].Unwrap(), tree.Decls[0].GetOption().Name},
-		{tree, tree.Decls[0].Unwrap(), tree.Decls[0].GetOption().Name, tree.Decls[0].GetOption().Name.Parts[0]},
-		{tree, tree.Decls[0].Unwrap(), tree.Decls[0].GetOption().Name, tree.Decls[0].GetOption().Name.Parts[0], tree.Decls[0].GetOption().Name.Parts[0].Name.Unwrap()},
-		{tree, tree.Decls[0].Unwrap(), tree.Decls[0].GetOption().Name, tree.Decls[0].GetOption().Name.Parts[0], tree.Decls[0].GetOption().Name.Parts[0].Name.Unwrap(), tree.Decls[0].GetOption().Name.Parts[0].Name.GetCompoundIdent().Components[0]},
-		{tree, tree.Decls[0].Unwrap(), tree.Decls[0].GetOption().Name, tree.Decls[0].GetOption().Name.Parts[0], tree.Decls[0].GetOption().Name.Parts[0].Name.Unwrap(), tree.Decls[0].GetOption().Name.Parts[0].Name.GetCompoundIdent().Components[1]},
-		{tree, tree.Decls[0].Unwrap(), tree.Decls[0].GetOption().Name, tree.Decls[0].GetOption().Name.Parts[0], tree.Decls[0].GetOption().Name.Parts[0].Name.Unwrap(), tree.Decls[0].GetOption().Name.Parts[0].Name.GetCompoundIdent().Components[2]},
-		{tree, tree.Decls[0].Unwrap(), tree.Decls[0].GetOption().Name, tree.Decls[0].GetOption().Name.Parts[1]},
-		{tree, tree.Decls[0].Unwrap(), tree.Decls[0].GetOption().Name, tree.Decls[0].GetOption().Name.Parts[1], tree.Decls[0].GetOption().Name.Parts[1].Open},
+	root := tree
+	option := root.Decls[0].GetOption()
+	optionName := option.GetName()
+	part0FieldRef := optionName.GetParts()[0].GetFieldRef()
+	compoundIdent := part0FieldRef.GetName().GetCompoundIdent()
+
+	expectedNodePaths := [][]Node{
+		{root},
+		{root, option},
+		{root, option, optionName},
+		{root, option, optionName, part0FieldRef},
+		{root, option, optionName, part0FieldRef, compoundIdent},
+		{root, option, optionName, part0FieldRef, compoundIdent, compoundIdent.GetComponents()[0].GetIdent()},
+		{root, option, optionName, part0FieldRef, compoundIdent, compoundIdent.GetComponents()[1].GetDot()},
+		{root, option, optionName, part0FieldRef, compoundIdent, compoundIdent.GetComponents()[2].GetIdent()},
+		{root, option, optionName, part0FieldRef, compoundIdent, compoundIdent.GetComponents()[3].GetDot()},
+		{root, option, optionName, part0FieldRef, compoundIdent, compoundIdent.GetComponents()[4].GetIdent()},
+		{root, option, optionName, optionName.GetParts()[1].GetIdent()},
 	}
+	expectedPaths := []string{
+		"(ast.MessageNode)",
+		"(ast.MessageNode).decls[0].option",
+		"(ast.MessageNode).decls[0].option.name",
+		"(ast.MessageNode).decls[0].option.name.parts[0].fieldRef",
+		"(ast.MessageNode).decls[0].option.name.parts[0].fieldRef.name.compoundIdent",
+		"(ast.MessageNode).decls[0].option.name.parts[0].fieldRef.name.compoundIdent.components[0].ident",
+		"(ast.MessageNode).decls[0].option.name.parts[0].fieldRef.name.compoundIdent.components[1].dot",
+		"(ast.MessageNode).decls[0].option.name.parts[0].fieldRef.name.compoundIdent.components[2].ident",
+		"(ast.MessageNode).decls[0].option.name.parts[0].fieldRef.name.compoundIdent.components[3].dot",
+		"(ast.MessageNode).decls[0].option.name.parts[0].fieldRef.name.compoundIdent.components[4].ident",
+		"(ast.MessageNode).decls[0].option.name.parts[1].ident",
+	}
+
+	assert.Equal(t, len(expectedNodePaths), len(nodePaths))
+	for i := range expectedNodePaths {
+		for j := range expectedNodePaths[i] {
+			if diff := cmp.Diff(expectedNodePaths[i][j], nodePaths[i][j], protocmp.Transform()); diff != "" {
+				t.Errorf("unexpected node path at index (%d, %d) (-want +got):\n%s", i, j, diff)
+			}
+		}
+	}
+
 	assert.Equal(t, expectedPaths, paths)
 }
 
-func TestZipWalk(t *testing.T) {
-	// Test case 1: a and b have the same length
-	a := []Node{&IdentNode{Token: 1}, &IdentNode{Token: 3}, &IdentNode{Token: 5}}
-	b := []Node{&RuneNode{Token: 2}, &RuneNode{Token: 4}, &RuneNode{Token: 6}}
-	visitedNodes := make([]Node, 0)
-	visitor := testVisitFn(func(n Node) {
-		visitedNodes = append(visitedNodes, n)
-	})
-	zipWalk(visitor, a, b)
-	expectedVisitedNodes := []Node{a[0], b[0], a[1], b[1], a[2], b[2]}
-	assertVisitedNodes(t, visitedNodes, expectedVisitedNodes)
+func TestFullAST(t *testing.T) {
+	f, err := os.Open("../internal/testdata/desc_test_complex.proto")
+	require.NoError(t, err)
+	res, err := parser.Parse("../internal/testdata/desc_test_complex.proto", f, reporter.NewHandler(nil), 0)
+	require.NoError(t, err)
+	var tracker AncestorTracker
+	nodePaths := [][]Node{}
+	paths := []string{}
 
-	// Test case 2: a is longer than b
-	a = []Node{&IdentNode{Token: 1}, &IdentNode{Token: 3}, &IdentNode{Token: 5}}
-	b = []Node{&RuneNode{Token: 2}, &RuneNode{Token: 4}}
-	visitedNodes = make([]Node, 0)
-	zipWalk(visitor, a, b)
-	expectedVisitedNodes = []Node{a[0], b[0], a[1], b[1], a[2]}
-	assertVisitedNodes(t, visitedNodes, expectedVisitedNodes)
+	Inspect(res, func(n Node) bool {
+		nodePaths = append(nodePaths, slices.Clone(tracker.Path()))
+		paths = append(paths, tracker.ProtoPath().String())
+		return true
+	}, tracker.AsWalkOptions()...)
 
-	// Test case 3: b is longer than a
-	a = []Node{&IdentNode{Token: 1}, &IdentNode{Token: 3}}
-	b = []Node{&RuneNode{Token: 2}, &RuneNode{Token: 4}, &RuneNode{Token: 6}}
-	visitedNodes = make([]Node, 0)
-	zipWalk(visitor, a, b)
-	expectedVisitedNodes = []Node{a[0], b[0], a[1], b[1], b[2]}
-	assertVisitedNodes(t, visitedNodes, expectedVisitedNodes)
-
-	// Test case 4: a and b are empty
-	a = []Node{}
-	b = []Node{}
-	visitedNodes = make([]Node, 0)
-	zipWalk(visitor, a, b)
-	expectedVisitedNodes = []Node{}
-	assertVisitedNodes(t, visitedNodes, expectedVisitedNodes)
-}
-
-type testVisitFn func(n Node)
-
-func (f testVisitFn) Visit(n Node) Visitor {
-	f(n)
-	return f
-}
-
-func (f testVisitFn) Before(Node) bool { return true }
-func (f testVisitFn) After(Node)       {}
-func assertVisitedNodes(t *testing.T, visitedNodes, expectedVisitedNodes []Node) {
-	if len(visitedNodes) != len(expectedVisitedNodes) {
-		t.Errorf("Unexpected number of visited nodes. Expected: %d, Got: %d", len(expectedVisitedNodes), len(visitedNodes))
-		return
-	}
-	for i := range visitedNodes {
-		if visitedNodes[i] != expectedVisitedNodes[i] {
-			t.Errorf("Unexpected visited node at index %d. Expected: %v, Got: %v", i, expectedVisitedNodes[i], visitedNodes[i])
-		}
-	}
+	require.NotNil(t, nodePaths)
 }

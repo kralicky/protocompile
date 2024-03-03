@@ -308,7 +308,7 @@ func findReservedNameNode[T interface {
 		if rsvd == nil {
 			continue
 		}
-		for _, rsvdName := range rsvd.Names {
+		for _, rsvdName := range rsvd.FilterNames() {
 			if rsvdName.AsString() == name {
 				return rsvdName
 			}

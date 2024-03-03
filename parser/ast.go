@@ -19,10 +19,10 @@ import "github.com/kralicky/protocompile/ast"
 // the types below are accumulator types, just used in intermediate productions
 // to accumulate slices that will get stored in AST nodes
 
-type compactOptionSlices struct {
-	options []*ast.OptionNode
-	commas  []*ast.RuneNode
-}
+// type compactOptionSlices struct {
+// 	options []*ast.OptionNode
+// 	commas  []*ast.RuneNode
+// }
 
 // func toStringValueNode(strs ...*ast.StringLiteralNode) ast.StringValueNode {
 // 	if len(strs) == 1 {
@@ -31,55 +31,55 @@ type compactOptionSlices struct {
 // 	return ast.NewCompoundLiteralStringNode(strs...)
 // }
 
-type nameSlices struct {
-	// only names or idents will be set, never both
-	names  []*ast.StringValueNode
-	idents []*ast.IdentNode
-	commas []*ast.RuneNode
-}
+// type nameSlices struct {
+// 	// only names or idents will be set, never both
+// 	names  []*ast.StringValueNode
+// 	idents []*ast.IdentNode
+// 	commas []*ast.RuneNode
+// }
 
-type rangeSlices struct {
-	ranges []*ast.RangeNode
-	commas []*ast.RuneNode
-}
+// type rangeSlices struct {
+// 	ranges []*ast.RangeNode
+// 	commas []*ast.RuneNode
+// }
 
-type valueSlices struct {
-	vals   []*ast.ValueNode
-	commas []*ast.RuneNode
-}
+// type valueSlices struct {
+// 	vals   []*ast.ValueNode
+// 	commas []*ast.RuneNode
+// }
 
 type fieldRefParens struct {
 	open  *ast.RuneNode
 	close *ast.RuneNode
 }
 
-type identSlices struct {
-	idents []*ast.IdentNode
-	refs   []*ast.FieldReferenceNode
-	dots   []*ast.RuneNode
-}
+// type identSlices struct {
+// 	idents []*ast.IdentNode
+// 	refs   []*ast.FieldReferenceNode
+// 	dots   []*ast.RuneNode
+// }
 
-type messageFieldList struct {
-	field     *ast.MessageFieldNode
-	delimiter *ast.RuneNode
-	next      *messageFieldList
-}
+// type messageFieldList struct {
+// 	field     *ast.MessageFieldNode
+// 	delimiter *ast.RuneNode
+// 	next      *messageFieldList
+// }
 
-func (list *messageFieldList) toNodes() ([]*ast.MessageFieldNode, []*ast.RuneNode) {
-	if list == nil {
-		return nil, nil
-	}
-	l := 0
-	for cur := list; cur != nil; cur = cur.next {
-		l++
-	}
-	fields := make([]*ast.MessageFieldNode, l)
-	delimiters := make([]*ast.RuneNode, l)
-	for cur, i := list, 0; cur != nil; cur, i = cur.next, i+1 {
-		fields[i] = cur.field
-		if cur.delimiter != nil {
-			delimiters[i] = cur.delimiter
-		}
-	}
-	return fields, delimiters
-}
+// func (list *messageFieldList) toNodes() ([]*ast.MessageFieldNode, []*ast.RuneNode) {
+// 	if list == nil {
+// 		return nil, nil
+// 	}
+// 	l := 0
+// 	for cur := list; cur != nil; cur = cur.next {
+// 		l++
+// 	}
+// 	fields := make([]*ast.MessageFieldNode, l)
+// 	delimiters := make([]*ast.RuneNode, l)
+// 	for cur, i := list, 0; cur != nil; cur, i = cur.next, i+1 {
+// 		fields[i] = cur.field
+// 		if cur.delimiter != nil {
+// 			delimiters[i] = cur.delimiter
+// 		}
+// 	}
+// 	return fields, delimiters
+// }

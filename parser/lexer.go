@@ -17,12 +17,10 @@ package parser
 import (
 	"bufio"
 	"bytes"
-	"cmp"
 	"errors"
 	"fmt"
 	"io"
 	"math"
-	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -379,7 +377,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 				l.input.unreadRune(szn)
 				if l.inCompoundIdent {
 					l.setRune(lval, c)
-					lval.cid.dots = append(lval.cid.dots, lval.b)
+					lval.cid = append(lval.cid, lval.b.AsComplexIdentComponent())
 				}
 				continue
 			}
@@ -476,7 +474,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 					l.maybeProcessPartialField(".")
 				}
 				l.setRune(lval, c)
-				lval.cid.dots = append(lval.cid.dots, lval.b)
+				lval.cid = append(lval.cid, lval.b.AsComplexIdentComponent())
 				continue
 			}
 
@@ -497,12 +495,12 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 					}
 					l.beginCompoundIdent(lval)
 					l.setIdent(lval, str)
-					lval.cid.idents = append(lval.cid.idents, lval.id)
+					lval.cid = append(lval.cid, lval.id.AsComplexIdentComponent())
 					continue
 				}
 				if l.inCompoundIdent {
 					l.setIdent(lval, str)
-					lval.cid.idents = append(lval.cid.idents, lval.id)
+					lval.cid = append(lval.cid, lval.id.AsComplexIdentComponent())
 					if next == ')' {
 						if l.inMethodTypeDecl {
 							return l.endCompoundIdent(lval)
@@ -520,7 +518,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 						if l.peekNewline() {
 							// missing ')', as in 'foo.(bar\n'
 							l.setIdent(lval, str)
-							lval.cid.idents = append(lval.cid.idents, lval.id)
+							lval.cid = append(lval.cid, lval.id.AsComplexIdentComponent())
 							// this case is handled separately above, so we can just continue
 							// and let it encounter the newline as usual
 							continue
@@ -532,7 +530,7 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 					}
 					// end of compound ident
 					l.setIdent(lval, str)
-					lval.cid.idents = append(lval.cid.idents, lval.id)
+					lval.cid = append(lval.cid, lval.id.AsComplexIdentComponent())
 					return l.endCompoundIdent(lval)
 				}
 			}
@@ -863,7 +861,7 @@ func (l *protoLex) setError(lval *protoSymType, err error) {
 
 func (l *protoLex) beginCompoundIdent(lval *protoSymType) {
 	l.inCompoundIdent = true
-	lval.cid = &identSlices{}
+	lval.cid = []*ast.ComplexIdentComponent{}
 }
 
 func (l *protoLex) beginExtensionIdent(lval *protoSymType) {
@@ -874,28 +872,26 @@ func (l *protoLex) beginExtensionIdent(lval *protoSymType) {
 		l.beginCompoundIdent(lval)
 	}
 	l.inExtensionIdent = true
-	lval.cid, lval.xid = &identSlices{}, lval.cid
+	lval.cid, lval.xid = []*ast.ComplexIdentComponent{}, lval.cid
 	lval.refp = &fieldRefParens{}
 }
 
 func (l *protoLex) endExtensionIdent(lval *protoSymType) {
 	var name *ast.IdentValueNode
-	nDots := len(lval.cid.dots)
-	nIdents := len(lval.cid.idents)
-	switch {
-	case nDots == 0 && nIdents == 1:
-		name = lval.cid.idents[0].AsIdentValue()
-	case nDots > 0:
-		name = (&ast.CompoundIdentNode{Components: lval.cid.idents, Dots: lval.cid.dots}).AsIdentValueNode()
-	default:
+	switch len(lval.cid) {
+	case 0:
 		if ast.ExtendedSyntaxEnabled {
 			l.ErrExtendedSyntax("extension name cannot be empty", CategoryEmptyDecl)
 		} else {
 			l.Error("extension name cannot be empty")
 		}
+	case 1:
+		name = lval.cid[0].GetIdent().AsIdentValue()
+	default:
+		name = (&ast.CompoundIdentNode{Components: lval.cid}).AsIdentValueNode()
 	}
 
-	lval.xid.refs = append(lval.xid.refs, &ast.FieldReferenceNode{Open: lval.refp.open, Name: name, Close: lval.refp.close})
+	lval.xid = append(lval.xid, (&ast.FieldReferenceNode{Open: lval.refp.open, Name: name, Close: lval.refp.close}).AsComplexIdentComponent())
 	lval.cid, lval.xid = lval.xid, nil
 	lval.refp = nil
 	l.inExtensionIdent = false
@@ -947,7 +943,20 @@ func (l *protoLex) endCompoundIdent(lval *protoSymType) (result int) {
 	if lval.cid == nil {
 		panic("bug (lexer): compound ident is nil")
 	}
-	if len(lval.cid.idents) > 0 && len(lval.cid.dots) == 0 {
+
+	var nIdents, nDots, nRefs int
+	for _, c := range lval.cid {
+		switch c.GetVal().(type) {
+		case *ast.ComplexIdentComponent_Ident:
+			nIdents++
+		case *ast.ComplexIdentComponent_Dot:
+			nDots++
+		case *ast.ComplexIdentComponent_FieldRef:
+			nRefs++
+		}
+	}
+
+	if nIdents > 0 && nDots == 0 {
 		panic("bug (lexer): compound ident has no dots")
 	}
 
@@ -956,33 +965,25 @@ func (l *protoLex) endCompoundIdent(lval *protoSymType) (result int) {
 		l.inCompoundIdent = false
 	}()
 
-	if len(lval.cid.idents) == 0 && len(lval.cid.refs) == 0 {
-		lval.idv = (&ast.CompoundIdentNode{Components: nil, Dots: lval.cid.dots}).AsIdentValueNode()
+	if nIdents == 0 && nRefs == 0 {
+		lval.idv = (&ast.CompoundIdentNode{Components: lval.cid}).AsIdentValueNode()
 		return _FULLY_QUALIFIED_IDENT // '.' (invalid, but important for completion)
 	}
 
-	if len(lval.cid.refs) > 0 {
-		parts := lval.cid.refs
-		if len(lval.cid.idents) > 0 {
-			// interleave idents and refs by position
-			for _, id := range lval.cid.idents {
-				parts = append(parts, &ast.FieldReferenceNode{Name: id.AsIdentValue()})
-			}
-			slices.SortFunc(parts, func(a, b *ast.FieldReferenceNode) int {
-				return cmp.Compare(a.Start(), b.Start())
-			})
-		}
-		if len(lval.cid.dots) > 0 && len(parts) > 0 && parts[0].IsExtension() && lval.cid.dots[0].GetToken() < parts[0].Open.GetToken() {
+	if nRefs > 0 && len(lval.cid) > 1 {
+		first := lval.cid[0].GetDot()
+		second := lval.cid[1].GetFieldRef()
+		if first != nil && second != nil {
 			// warn on extension idents that start with '.(foo)'
-			l.ErrExtendedSyntaxAt("unexpected leading '.'", lval.cid.dots[0], CategoryExtraTokens)
+			l.ErrExtendedSyntaxAt("unexpected leading '.'", first, CategoryExtraTokens)
 		}
-		lval.optName = &ast.OptionNameNode{Parts: parts, Dots: lval.cid.dots}
+		lval.optName = &ast.OptionNameNode{Parts: lval.cid}
 		return _EXTENSION_IDENT
 	}
 
 	// if the first dot appears before the first ident, this is a fully qualified ident
-	lval.idv = (&ast.CompoundIdentNode{Components: lval.cid.idents, Dots: lval.cid.dots}).AsIdentValueNode()
-	if lval.cid.dots[0].GetToken() < lval.cid.idents[0].GetToken() {
+	lval.idv = (&ast.CompoundIdentNode{Components: lval.cid}).AsIdentValueNode()
+	if lval.cid[0].GetDot() != nil {
 		return _FULLY_QUALIFIED_IDENT
 	}
 	return _QUALIFIED_IDENT

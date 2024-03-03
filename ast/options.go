@@ -15,9 +15,7 @@
 package ast
 
 import (
-	"cmp"
 	"fmt"
-	"slices"
 )
 
 func (n *OptionNode) Start() Token { return startToken(n.Keyword, n.Name, n.Equals, n.Val) }
@@ -44,56 +42,27 @@ func (n *OptionNode) IsIncomplete() bool {
 
 func (n *OptionNameNode) Start() Token {
 	if len(n.Parts) > 0 {
-		if len(n.Dots) > 0 {
-			return min(n.Parts[0].Start(), n.Dots[0].Start())
-		}
 		return n.Parts[0].Start()
-	} else if len(n.Dots) > 0 {
-		return n.Dots[0].Start()
 	}
 	return TokenError
 }
 
 func (n *OptionNameNode) End() Token {
 	if len(n.Parts) > 0 {
-		if len(n.Dots) > 0 {
-			return max(n.Parts[len(n.Parts)-1].End(), n.Dots[len(n.Dots)-1].End())
-		}
 		return n.Parts[len(n.Parts)-1].End()
-	} else if len(n.Dots) > 0 {
-		return n.Dots[len(n.Dots)-1].End()
 	}
 	return TokenError
-}
-
-func (n *OptionNameNode) OrderedNodes() []Node {
-	nodes := make([]Node, 0, len(n.Parts)+len(n.Dots))
-	for _, comp := range n.Parts {
-		nodes = append(nodes, comp)
-	}
-	for _, dot := range n.Dots {
-		nodes = append(nodes, dot)
-	}
-	slices.SortFunc(nodes, func(i, j Node) int {
-		return cmp.Compare(i.Start(), j.Start())
-	})
-	return nodes
 }
 
 func OptionNameNodeFromIdentValue(ident *IdentValueNode) *OptionNameNode {
 	switch ident := ident.GetVal().(type) {
 	case *IdentValueNode_Ident:
 		return &OptionNameNode{
-			Parts: []*FieldReferenceNode{{Name: &IdentValueNode{Val: ident}}},
+			Parts: []*ComplexIdentComponent{ident.Ident.AsComplexIdentComponent()},
 		}
 	case *IdentValueNode_CompoundIdent:
-		parts := make([]*FieldReferenceNode, len(ident.CompoundIdent.Components))
-		for i, comp := range ident.CompoundIdent.Components {
-			parts[i] = &FieldReferenceNode{Name: &IdentValueNode{Val: &IdentValueNode_Ident{Ident: comp}}}
-		}
 		return &OptionNameNode{
-			Parts: parts,
-			Dots:  ident.CompoundIdent.Dots,
+			Parts: ident.CompoundIdent.GetComponents(),
 		}
 	default:
 		panic(fmt.Sprintf("unknown ident type: %T", ident))
@@ -105,7 +74,7 @@ func (n *OptionNameNode) IsIncomplete() bool {
 		return true
 	}
 	for _, part := range n.Parts {
-		if part.IsIncomplete() {
+		if frn := part.GetFieldRef(); frn != nil && frn.IsIncomplete() {
 			return true
 		}
 	}
@@ -169,4 +138,14 @@ func (e *CompactOptionsNode) GetElements() []*OptionNode {
 		return nil
 	}
 	return e.Options
+}
+
+func (e *OptionNameNode) FilterFieldReferences() []*FieldReferenceNode {
+	var fieldRefs []*FieldReferenceNode
+	for _, part := range e.Parts {
+		if fieldRef := part.GetFieldRef(); fieldRef != nil {
+			fieldRefs = append(fieldRefs, fieldRef)
+		}
+	}
+	return fieldRefs
 }

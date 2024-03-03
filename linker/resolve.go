@@ -645,11 +645,13 @@ func (r *result) indexCompoundIdentRefs(fullIdent *ast.CompoundIdentNode, desc p
 	componentIdx := len(fullIdent.Components) - 1
 
 	for componentIdx >= 0 && desc != nil {
-		switch desc := desc.(type) {
-		case protoreflect.FileDescriptor:
-			break
-		case protoreflect.MessageDescriptor:
-			r.resolvedReferences[desc] = append(r.resolvedReferences[desc], ast.NewNodeReference(r.AST(), fullIdent.Components[componentIdx]))
+		if ident := fullIdent.Components[componentIdx].GetIdent(); ident != nil {
+			switch desc := desc.(type) {
+			case protoreflect.FileDescriptor:
+				break
+			case protoreflect.MessageDescriptor:
+				r.resolvedReferences[desc] = append(r.resolvedReferences[desc], ast.NewNodeReference(r.AST(), ident))
+			}
 		}
 		desc = desc.Parent()
 		componentIdx--

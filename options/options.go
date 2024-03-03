@@ -1077,10 +1077,7 @@ func matchInterpretedOption(info *interpretedOption, path []protoreflect.FieldNu
 		// no more path elements to match
 		node := info.node
 		if optsNode, ok := node.(*ast.OptionNode); ok {
-			// Do we need to check this? It should always be true...
-			if len(optsNode.Name.Parts) == len(info.pathPrefix)+1 {
-				node = optsNode.Name.Parts[len(path)-1]
-			}
+			node = optsNode.Name.Parts[len(path)-1].Unwrap()
 		}
 		return true, nil, node
 	}

@@ -63,3 +63,43 @@ func (n *ReservedNode) End() Token   { return n.Semicolon.End() }
 
 func (*ReservedNode) msgElement()  {}
 func (*ReservedNode) enumElement() {}
+
+func (r *ReservedNode) FilterNames() []*StringValueNode {
+	s := make([]*StringValueNode, 0, len(r.Elements))
+	for _, e := range r.Elements {
+		if n := e.GetName(); n != nil {
+			s = append(s, n)
+		}
+	}
+	return s
+}
+
+func (r *ReservedNode) FilterRanges() []*RangeNode {
+	s := make([]*RangeNode, 0, len(r.Elements))
+	for _, e := range r.Elements {
+		if n := e.GetRange(); n != nil {
+			s = append(s, n)
+		}
+	}
+	return s
+}
+
+func (r *ReservedNode) FilterIdentifiers() []*IdentNode {
+	s := make([]*IdentNode, 0, len(r.Elements))
+	for _, e := range r.Elements {
+		if n := e.GetIdentifier(); n != nil {
+			s = append(s, n)
+		}
+	}
+	return s
+}
+
+func (r *ExtensionRangeNode) FilterRanges() []*RangeNode {
+	s := make([]*RangeNode, 0, len(r.Elements))
+	for _, e := range r.Elements {
+		if n := e.GetRange(); n != nil {
+			s = append(s, n)
+		}
+	}
+	return s
+}

@@ -288,7 +288,7 @@ func (r *result) asUninterpretedOptions(nodes []*ast.OptionNode) []*descriptorpb
 }
 
 func (r *result) asUninterpretedOption(node *ast.OptionNode) *descriptorpb.UninterpretedOption {
-	opt := &descriptorpb.UninterpretedOption{Name: r.asUninterpretedOptionName(node.Name.Parts)}
+	opt := &descriptorpb.UninterpretedOption{Name: r.asUninterpretedOptionName(node.Name.FilterFieldReferences())}
 	r.putOptionNode(opt, node)
 
 	if node.Val == nil && ast.ExtendedSyntaxEnabled {
@@ -318,12 +318,8 @@ func (r *result) asUninterpretedOption(node *ast.OptionNode) *descriptorpb.Unint
 		// *ast.MessageLiteralNode
 		if n := node.Val.GetMessageLiteral(); n != nil {
 			var buf bytes.Buffer
-			for i, el := range n.Elements {
+			for _, el := range n.Elements {
 				flattenNode(r.file, el, &buf)
-				if len(n.Seps) > i && n.Seps[i] != nil && !n.Seps[i].Virtual {
-					buf.WriteRune(' ')
-					buf.WriteRune(n.Seps[i].Rune)
-				}
 			}
 			aggStr := buf.String()
 			opt.AggregateValue = proto.String(aggStr)
@@ -531,8 +527,8 @@ func (r *result) asMapDescriptors(mapField *ast.MapFieldNode, syntax syntaxType,
 
 func (r *result) asExtensionRanges(node *ast.ExtensionRangeNode, maxTag int32, handler *reporter.Handler) []*descriptorpb.DescriptorProto_ExtensionRange {
 	opts := r.asUninterpretedOptions(node.Options.GetElements())
-	ers := make([]*descriptorpb.DescriptorProto_ExtensionRange, len(node.Ranges))
-	for i, rng := range node.Ranges {
+	ers := make([]*descriptorpb.DescriptorProto_ExtensionRange, len(node.FilterRanges()))
+	for i, rng := range node.FilterRanges() {
 		start, end := r.getRangeBounds(rng, 1, maxTag, handler)
 		er := &descriptorpb.DescriptorProto_ExtensionRange{
 			Start: proto.Int32(start),
@@ -620,7 +616,7 @@ func (r *result) asEnumDescriptor(en *ast.EnumNode, syntax syntaxType, handler *
 			ed.Value = append(ed.Value, r.asEnumValue(decl, handler))
 		case *ast.ReservedNode:
 			r.addReservedNames(&ed.ReservedName, decl, syntax, handler, rsvdNames)
-			for _, rng := range decl.Ranges {
+			for _, rng := range decl.FilterRanges() {
 				ed.ReservedRange = append(ed.ReservedRange, r.asEnumReservedRange(rng, handler))
 			}
 		}
@@ -650,11 +646,11 @@ func (r *result) asMessageDescriptor(node *ast.MessageNode, syntax syntaxType, h
 
 func (r *result) addReservedNames(names *[]string, node *ast.ReservedNode, syntax syntaxType, handler *reporter.Handler, alreadyReserved map[string]ast.SourcePos) {
 	if syntax == syntaxEditions {
-		if len(node.Names) > 0 {
-			nameNodeInfo := r.file.NodeInfo(node.Names[0])
+		if len(node.FilterNames()) > 0 {
+			nameNodeInfo := r.file.NodeInfo(node.FilterNames()[0])
 			_ = handler.HandleErrorf(nameNodeInfo, `must use identifiers, not string literals, to reserved names with editions`)
 		}
-		for _, n := range node.Identifiers {
+		for _, n := range node.FilterIdentifiers() {
 			name := string(n.AsIdentifier())
 			nameNodeInfo := r.file.NodeInfo(n)
 			if existing, ok := alreadyReserved[name]; ok {
@@ -667,11 +663,11 @@ func (r *result) addReservedNames(names *[]string, node *ast.ReservedNode, synta
 		return
 	}
 
-	if len(node.Identifiers) > 0 {
-		nameNodeInfo := r.file.NodeInfo(node.Identifiers[0])
+	if len(node.FilterIdentifiers()) > 0 {
+		nameNodeInfo := r.file.NodeInfo(node.FilterIdentifiers()[0])
 		_ = handler.HandleErrorf(nameNodeInfo, `must use string literals, not identifiers, to reserved names with proto2 and proto3`)
 	}
-	for _, n := range node.Names {
+	for _, n := range node.FilterNames() {
 		name := n.AsString()
 		nameNodeInfo := r.file.NodeInfo(n)
 		if existing, ok := alreadyReserved[name]; ok {
@@ -796,7 +792,7 @@ func (r *result) addMessageBody(msgd *descriptorpb.DescriptorProto, decls []*ast
 			msgd.NestedType = append(msgd.NestedType, r.asMessageDescriptor(decl, syntax, handler, depth+1))
 		case *ast.ReservedNode:
 			r.addReservedNames(&msgd.ReservedName, decl, syntax, handler, rsvdNames)
-			for _, rng := range decl.Ranges {
+			for _, rng := range decl.FilterRanges() {
 				msgd.ReservedRange = append(msgd.ReservedRange, r.asMessageReservedRange(rng, maxTag, handler))
 			}
 		}

@@ -17,7 +17,7 @@ package ast
 import (
 	"reflect"
 
-	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // Node is the interface implemented by all nodes in the AST. It
@@ -26,7 +26,7 @@ import (
 // about all prior comments (attached as leading comments) and
 // optional subsequent comments (attached as trailing comments).
 type Node interface {
-	proto.Message
+	protoreflect.ProtoMessage
 
 	Start() Token
 	End() Token

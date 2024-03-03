@@ -124,8 +124,17 @@ message EmptyDeclNode {
 //
 //	.com.foobar.Baz
 message CompoundIdentNode {
-  repeated IdentNode components = 1;
-  repeated RuneNode  dots       = 2;
+  // List of components in the compound identifier in token order. Values in
+  // this list are either idents or dots.
+  repeated ComplexIdentComponent components = 1;
+}
+
+message ComplexIdentComponent {
+  oneof val {
+    IdentNode          ident    = 1;
+    RuneNode           dot      = 2;
+    FieldReferenceNode fieldRef = 3;
+  }
 }
 
 // EditionNode represents an edition declaration, which if present must be
@@ -261,20 +270,9 @@ message IdentValueNode {
 //
 //	(foo.bar).baz.(bob)
 message OptionNameNode {
-  repeated FieldReferenceNode parts = 1;
-  // Dots represent the separating '.' characters between name parts. The
-  // length of this slice must be exactly len(Parts)-1, each item in Parts
-  // having a corresponding item in this slice *except the last* (since a
-  // trailing dot is not allowed).
-  //
-  // These do *not* include dots that are inside of an extension name. For
-  // example: (foo.bar).baz.(bob) has three parts:
-  //    1. (foo.bar)  - an extension name
-  //    2. baz        - a regular field in foo.bar
-  //    3. (bob)      - an extension field in baz
-  // Note that the dot in foo.bar will thus not be present in Dots but is
-  // instead in Parts[0].
-  repeated RuneNode dots = 2;
+  // List of name parts in token order. Values in this list are either
+  // field references or dots.
+  repeated ComplexIdentComponent parts = 1;
 }
 
 // FieldReferenceNode is a reference to a field name. It can indicate a regular
@@ -354,11 +352,17 @@ message SignedFloatLiteralNode {
 //
 //	["foo", "bar", "baz"]
 message ArrayLiteralNode {
-  RuneNode           openBracket  = 1;
-  repeated ValueNode elements     = 2;
-  repeated RuneNode  commas       = 3;
-  RuneNode           closeBracket = 4;
-  RuneNode           semicolon    = 5;
+  RuneNode                     openBracket  = 1;
+  repeated ArrayLiteralElement elements     = 2;
+  RuneNode                     closeBracket = 3;
+  RuneNode                     semicolon    = 4;
+}
+
+message ArrayLiteralElement {
+  oneof val {
+    ValueNode value = 1;
+    RuneNode  comma = 2;
+  }
 }
 
 // MessageLiteralNode represents a message literal, which is compatible with the
@@ -367,16 +371,10 @@ message ArrayLiteralNode {
 //
 //	{ foo:1 foo:2 foo:3 bar:<name:"abc" id:123> }
 message MessageLiteralNode {
-  RuneNode                  open     = 1; // should be '{' or '<'
-  repeated MessageFieldNode elements = 2;
-  // Separator characters between elements, which can be either ','
-  // or ';' if present. This slice must be exactly len(Elements) in
-  // length, with each item in Elements having one corresponding item
-  // in Seps. Separators in message literals are optional, so a given
-  // item in this slice may be nil to indicate absence of a separator.
-  repeated RuneNode seps      = 3;
-  RuneNode          close     = 4; // should be '}' or '>', depending on Open
-  RuneNode          semicolon = 5;
+  RuneNode                  open      = 1; // should be '{' or '<'
+  repeated MessageFieldNode elements  = 2;
+  RuneNode                  close     = 4; // should be '}' or '>', depending on Open
+  RuneNode                  semicolon = 5;
 }
 
 // FloatValueNode is an AST node that represents a numeric literal with
@@ -570,15 +568,17 @@ message ExtendNode {
 //
 //	extensions 100 to max;
 message ExtensionRangeNode {
-  IdentNode          keyword = 1;
-  repeated RangeNode ranges  = 2;
-  // Commas represent the separating ',' characters between ranges. The
-  // length of this slice must be exactly len(Ranges)-1, each item in Ranges
-  // having a corresponding item in this slice *except the last* (since a
-  // trailing comma is not allowed).
-  repeated RuneNode  commas    = 3;
-  CompactOptionsNode options   = 4;
-  RuneNode           semicolon = 5;
+  IdentNode             keyword   = 1;
+  repeated RangeElement elements  = 2;
+  CompactOptionsNode    options   = 4;
+  RuneNode              semicolon = 5;
+}
+
+message RangeElement {
+  oneof val {
+    RangeNode range = 1;
+    RuneNode  comma = 2;
+  }
 }
 
 // ReservedNode represents reserved declaration, which can be used to reserve
@@ -589,23 +589,24 @@ message ExtensionRangeNode {
 //	reserved foo, bar, baz;
 message ReservedNode {
   IdentNode keyword = 1;
-  // If non-empty, this node represents reserved ranges, and Names and Identifiers
-  // will be empty.
-  repeated RangeNode ranges = 2;
-  // If non-empty, this node represents reserved names as string literals, and
-  // Ranges and Identifiers will be empty. String literals are used for reserved
-  // names in proto2 and proto3 syntax.
-  repeated StringValueNode names = 3;
-  // If non-empty, this node represents reserved names as identifiers, and Ranges
-  // and Names will be empty. Identifiers are used for reserved names in editions.
-  repeated IdentNode identifiers = 4;
-  // Commas represent the separating ',' characters between options. The
-  // length of this slice must be exactly len(Ranges)-1 or len(Names)-1, depending
-  // on whether this node represents reserved ranges or reserved names. Each item
-  // in Ranges or Names has a corresponding item in this slice *except the last*
-  // (since a trailing comma is not allowed).
-  repeated RuneNode commas    = 5;
-  RuneNode          semicolon = 6;
+  // A list of all elements in token order. Values in this list contain either
+  // ranges, string literals, or identifiers, interspersed with commas. A
+  // valid reserved node must only contain a single kind of element (not
+  // including commas).
+  repeated ReservedElement elements  = 2;
+  RuneNode                 semicolon = 6;
+}
+
+message ReservedElement {
+  oneof val {
+    // A numeric range of reserved numbers.
+    RangeNode range = 1;
+    // A reserved name (used in in proto2 and proto3 syntax)
+    StringValueNode name = 2;
+    // A reserved name (used in editions)
+    IdentNode identifier = 3;
+    RuneNode  comma      = 4;
+  }
 }
 
 // MapTypeNode represents the type declaration for a map field. It defines

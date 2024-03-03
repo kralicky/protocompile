@@ -15,8 +15,6 @@
 package ast
 
 import (
-	"cmp"
-	"slices"
 	"strings"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -50,25 +48,15 @@ func (n *IdentNode) AsIdentValue() *IdentValueNode {
 }
 
 func (n *CompoundIdentNode) Start() Token {
-	if len(n.GetComponents()) > 0 {
-		if len(n.GetDots()) > 0 {
-			return min(n.Components[0].Start(), n.Dots[0].Start())
-		}
+	if len(n.Components) > 0 {
 		return n.Components[0].Start()
-	} else if len(n.GetDots()) > 0 {
-		return n.Dots[0].Start()
 	}
 	return TokenError
 }
 
 func (n *CompoundIdentNode) End() Token {
-	if len(n.GetComponents()) > 0 {
-		if len(n.GetDots()) > 0 {
-			return max(n.Components[len(n.Components)-1].End(), n.Dots[len(n.Dots)-1].End())
-		}
+	if len(n.Components) > 0 {
 		return n.Components[len(n.Components)-1].End()
-	} else if len(n.GetDots()) > 0 {
-		return n.Dots[len(n.Dots)-1].End()
 	}
 	return TokenError
 }
@@ -79,51 +67,16 @@ func (n *CompoundIdentNode) Value() interface{} {
 
 func (n *CompoundIdentNode) AsIdentifier() Identifier {
 	b := strings.Builder{}
-	nodes := make([]Node, 0, len(n.GetComponents())+len(n.GetDots()))
-	for _, comp := range n.GetComponents() {
-		nodes = append(nodes, comp)
-	}
-	for _, dot := range n.GetDots() {
-		nodes = append(nodes, dot)
-	}
-	slices.SortFunc(nodes, func(i, j Node) int {
-		return cmp.Compare(i.Start(), j.Start())
-	})
-	for _, node := range nodes {
-		if ident, ok := node.(*IdentNode); ok {
-			b.WriteString(ident.Val)
-		} else if dot, ok := node.(*RuneNode); ok {
-			b.WriteRune(dot.Rune)
+
+	for _, node := range n.GetComponents() {
+		switch node := node.Unwrap().(type) {
+		case *IdentNode:
+			b.WriteString(node.Val)
+		case *RuneNode:
+			b.WriteRune(node.Rune)
 		}
 	}
 	return Identifier(b.String())
-}
-
-func (n *CompoundIdentNode) LeadingDot() (dot *RuneNode, ok bool) {
-	if len(n.Dots) > 0 {
-		if len(n.Components) == 0 {
-			return n.Dots[0], true
-		}
-		if n.Dots[0].GetToken() < n.Components[0].GetToken() {
-			return n.Dots[0], true
-		}
-		return nil, false
-	}
-	return nil, false
-}
-
-func (n *CompoundIdentNode) OrderedNodes() []Node {
-	nodes := make([]Node, 0, len(n.GetComponents())+len(n.GetDots()))
-	for _, comp := range n.GetComponents() {
-		nodes = append(nodes, comp)
-	}
-	for _, dot := range n.GetDots() {
-		nodes = append(nodes, dot)
-	}
-	slices.SortFunc(nodes, func(i, j Node) int {
-		return cmp.Compare(i.Start(), j.Start())
-	})
-	return nodes
 }
 
 func (n *IdentValueNode) AsIdentifier() Identifier {
@@ -150,4 +103,14 @@ func (n *IdentValueNode) End() Token {
 func (n *IdentNode) ToKeyword() *IdentNode {
 	n.IsKeyword = true
 	return n
+}
+
+func (n *CompoundIdentNode) FilterIdents() []*IdentNode {
+	var idents []*IdentNode
+	for _, component := range n.Components {
+		if ident, ok := component.Val.(*ComplexIdentComponent_Ident); ok {
+			idents = append(idents, ident.Ident)
+		}
+	}
+	return idents
 }

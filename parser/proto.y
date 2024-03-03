@@ -48,19 +48,19 @@ import (
 	mtdElement   *ast.RPCElement
 	mtdElements  []*ast.RPCElement
 	opt          *ast.OptionNode
-	opts         *compactOptionSlices
+	opts         []*ast.OptionNode
 	ref          *ast.FieldReferenceNode
 	refp         *fieldRefParens
 	optName      *ast.OptionNameNode
 	cmpctOpts    *ast.CompactOptionsNode
 	rng          *ast.RangeNode
-	rngs         *rangeSlices
-	names        *nameSlices
-	cid          *identSlices
-	xid          *identSlices
+	rngs         []*ast.RangeElement
+	names        []*ast.ReservedElement
+	cid          []*ast.ComplexIdentComponent
+	xid          []*ast.ComplexIdentComponent
 	idv          *ast.IdentValueNode
-	sl           *valueSlices
-	msgLitFlds   *messageFieldList
+	sl           []*ast.ArrayLiteralElement
+	msgLitFlds   []*ast.MessageFieldNode
 	msgLitFld    *ast.MessageFieldNode
 	v            *ast.ValueNode
 	il           *ast.IntValueNode
@@ -350,12 +350,7 @@ specialFloatLit
 
 messageLiteral
 	: messageLiteralOpen messageTextFormat messageLiteralClose {
-		if $2 == nil {
-			$$ = (&ast.MessageLiteralNode{Open: $1, Close: $3}).AsValueNode()
-		} else {
-			fields, delimiters := $2.toNodes()
-			$$ = (&ast.MessageLiteralNode{Open: $1, Elements: fields, Seps: delimiters, Close: $3}).AsValueNode()
-		}
+		$$ = (&ast.MessageLiteralNode{Open: $1, Elements: $2, Close: $3}).AsValueNode()
 	}
 	| messageLiteralOpen messageLiteralClose {
 		$$ = (&ast.MessageLiteralNode{Open: $1, Close: $2}).AsValueNode()
@@ -365,46 +360,24 @@ messageTextFormat
 	: messageLiteralFields
 
 messageLiteralFields
-	: messageLiteralFieldEntry
-	| messageLiteralFieldEntry messageLiteralFields {
-		if $1 != nil {
-			$1.next = $2
-			$$ = $1
-		} else {
-			$$ = $2
-		}
+	: messageLiteralFieldEntry {
+		$$ = $1
+	}
+	| messageLiteralFields messageLiteralFieldEntry {
+		$$ = append($1, $2...)
 	}
 
 messageLiteralFieldEntry
 	: messageLiteralField {
-		if $1 != nil {
-			$$ = &messageFieldList{field: $1}
-		} else {
-			$$ = nil
-		}
+		$$ = []*ast.MessageFieldNode{$1}
 	}
 	| messageLiteralField ',' {
-		if $1 != nil {
-			$$ = &messageFieldList{field: $1, delimiter: $2}
-		} else {
-			$$ = nil
-		}
+		$1.Semicolon = $2
+		$$ = []*ast.MessageFieldNode{$1}
 	}
 	| messageLiteralField ';' {
-		if $1 != nil {
-			$$ = &messageFieldList{field: $1, delimiter: $2}
-		} else {
-			$$ = nil
-		}
-	}
-	| error ',' {
-		$$ = nil
-	}
-	| error ';' {
-		$$ = nil
-	}
-	| error {
-		$$ = nil
+		$1.Semicolon = $2
+		$$ = []*ast.MessageFieldNode{$1}
 	}
 
 messageLiteralField
@@ -501,12 +474,12 @@ messageValue
 listLiteral
 	: '[' listElements virtualComma ']' {
 		if $3 != nil {
-			$2.commas = append($2.commas, $3)
+			$2 = append($2, $3.AsArrayLiteralElement())
 		}
-		$$ = (&ast.ArrayLiteralNode{OpenBracket: $1, Elements: $2.vals, Commas: $2.commas, CloseBracket: $4}).AsValueNode()
+		$$ = (&ast.ArrayLiteralNode{OpenBracket: $1, Elements: $2, CloseBracket: $4}).AsValueNode()
 	}
 	| '[' virtualComma ']' {
-		$$ = (&ast.ArrayLiteralNode{OpenBracket: $1, Commas: []*ast.RuneNode{$2}, CloseBracket: $3}).AsValueNode()
+		$$ = (&ast.ArrayLiteralNode{OpenBracket: $1, Elements: []*ast.ArrayLiteralElement{$2.AsArrayLiteralElement()}, CloseBracket: $3}).AsValueNode()
 	}
 	| '[' ']' {
 		$$ = (&ast.ArrayLiteralNode{OpenBracket: $1, CloseBracket: $2}).AsValueNode()
@@ -517,12 +490,10 @@ listLiteral
 
 listElements
 	: listElement {
-		$$ = &valueSlices{vals: []*ast.ValueNode{$1}}
+		$$ = []*ast.ArrayLiteralElement{$1.AsArrayLiteralElement()}
 	}
 	| listElements ',' listElement {
-		$1.vals = append($1.vals, $3)
-		$1.commas = append($1.commas, $2)
-		$$ = $1
+		$$ = append($1, $2.AsArrayLiteralElement(), $3.AsArrayLiteralElement())
 	}
 
 listElement
@@ -535,12 +506,12 @@ listElement
 listOfMessagesLiteral
 	: '[' messageLiterals virtualComma ']' {
 		if $3 != nil {
-			$2.commas = append($2.commas, $3)
+			$2 = append($2, $3.AsArrayLiteralElement())
 		}
-		$$ = (&ast.ArrayLiteralNode{OpenBracket: $1, Elements: $2.vals, Commas: $2.commas, CloseBracket: $4}).AsValueNode()
+		$$ = (&ast.ArrayLiteralNode{OpenBracket: $1, Elements: $2, CloseBracket: $4}).AsValueNode()
 	}
 	| '[' virtualComma ']' {
-		$$ = (&ast.ArrayLiteralNode{OpenBracket: $1, Commas: []*ast.RuneNode{$2}, CloseBracket: $3}).AsValueNode()
+		$$ = (&ast.ArrayLiteralNode{OpenBracket: $1, Elements: []*ast.ArrayLiteralElement{$2.AsArrayLiteralElement()}, CloseBracket: $3}).AsValueNode()
 	}
 	| '[' ']' {
 		$$ = (&ast.ArrayLiteralNode{OpenBracket: $1, CloseBracket: $2}).AsValueNode()
@@ -552,13 +523,11 @@ listOfMessagesLiteral
 messageLiterals
 	: messageLiteral virtualSemicolon {
 		$1.GetMessageLiteral().Semicolon = $2
-		$$ = &valueSlices{vals: []*ast.ValueNode{$1}}
+		$$ = []*ast.ArrayLiteralElement{$1.AsArrayLiteralElement()}
 	}
 	| messageLiterals ',' messageLiteral virtualSemicolon {
 		$3.GetMessageLiteral().Semicolon = $4
-		$1.vals = append($1.vals, $3)
-		$1.commas = append($1.commas, $2)
-		$$ = $1
+		$$ = append($1, $2.AsArrayLiteralElement(), $3.AsArrayLiteralElement())
 	}
 
 
@@ -619,10 +588,10 @@ fieldCardinality
 
 compactOptions
 	: '[' compactOptionDecls ']' {
-		if r := $2.options[len($2.options)-1].Semicolon; r != nil && !r.Virtual {
+		if r := $2[len($2)-1].Semicolon; r != nil && !r.Virtual {
 			protolex.(*protoLex).ErrExtendedSyntax("unexpected trailing '"+string(r.Rune)+"'", CategoryExtraTokens)
 		}
-		$$ = &ast.CompactOptionsNode{OpenBracket: $1, Options: $2.options, CloseBracket: $3}
+		$$ = &ast.CompactOptionsNode{OpenBracket: $1, Options: $2, CloseBracket: $3}
 	}
 	| '[' ']' {
 		protolex.(*protoLex).ErrExtendedSyntax("compact options list cannot be empty", CategoryEmptyDecl)
@@ -632,12 +601,11 @@ compactOptions
 compactOptionDecls
 	:	compactOption commaOrInvalidSemicolon {
 		$1.Semicolon = $2
-		$$ = &compactOptionSlices{options: []*ast.OptionNode{$1}}
+		$$ = []*ast.OptionNode{$1}
 	}
 	| compactOptionDecls compactOption commaOrInvalidSemicolon {
 		$2.Semicolon = $3
-		$1.options = append($1.options, $2)
-		$$ = $1
+		$$ = append($1, $2)
 	}
 
 
@@ -760,25 +728,23 @@ mapKeyType
 extensionRangeDecl
 	: _EXTENSIONS tagRanges optionalTrailingComma {
 		if $3 != nil {
-			$2.commas = append($2.commas, $3)
+			$2 = append($2, $3.AsRangeElement())
 		}
-		$$ = &ast.ExtensionRangeNode{Keyword: $1.ToKeyword(), Ranges: $2.ranges, Commas: $2.commas}
+		$$ = &ast.ExtensionRangeNode{Keyword: $1.ToKeyword(), Elements: $2}
 	}
 	| _EXTENSIONS tagRanges optionalTrailingComma compactOptions {
 		if $3 != nil {
-			$2.commas = append($2.commas, $3)
+			$2 = append($2, $3.AsRangeElement())
 		}
-		$$ = &ast.ExtensionRangeNode{Keyword: $1.ToKeyword(), Ranges: $2.ranges, Commas: $2.commas, Options: $4}
+		$$ = &ast.ExtensionRangeNode{Keyword: $1.ToKeyword(), Elements: $2, Options: $4}
 	}
 
 tagRanges
 	: tagRange {
-		$$ = &rangeSlices{ranges: []*ast.RangeNode{$1}}
+		$$ = []*ast.RangeElement{$1.AsRangeElement()}
 	}
 	| tagRanges ',' tagRange {
-		$1.ranges = append($1.ranges, $3)
-		$1.commas = append($1.commas, $2)
-		$$ = $1
+		$$ = append($1, $2.AsRangeElement(), $3.AsRangeElement())
 	}
 
 tagRange
@@ -794,12 +760,10 @@ tagRange
 
 enumValueRanges
 	: enumValueRange {
-		$$ = &rangeSlices{ranges: []*ast.RangeNode{$1}}
+		$$ = []*ast.RangeElement{$1.AsRangeElement()}
 	}
 	| enumValueRanges ',' enumValueRange {
-		$1.ranges = append($1.ranges, $3)
-		$1.commas = append($1.commas, $2)
-		$$ = $1
+		$$ = append($1, $2.AsRangeElement(), $3.AsRangeElement())
 	}
 
 enumValueRange
@@ -824,50 +788,46 @@ enumValueNumber
 msgReserved
 	: _RESERVED tagRanges optionalTrailingComma {
 		if $3 != nil {
-			$2.commas = append($2.commas, $3)
+			$2 = append($2, $3.AsRangeElement())
 		}
-		$$ = &ast.ReservedNode{Keyword: $1.ToKeyword(), Ranges: $2.ranges, Commas: $2.commas}
+		$$ = &ast.ReservedNode{Keyword: $1.ToKeyword(), Elements: ast.RangeElementsToReservedElements($2)}
 	}
 	| reservedNames
 
 enumReserved
 	: _RESERVED enumValueRanges optionalTrailingComma {
 		if $3 != nil {
-			$2.commas = append($2.commas, $3)
+			$2 = append($2, $3.AsRangeElement())
 		}
-		$$ = &ast.ReservedNode{Keyword: $1.ToKeyword(), Ranges: $2.ranges, Commas: $2.commas}
+		$$ = &ast.ReservedNode{Keyword: $1.ToKeyword(), Elements: ast.RangeElementsToReservedElements($2)}
 	}
 	| reservedNames
 
 reservedNames
 	: _RESERVED fieldNameStrings optionalTrailingComma {
 		if $3 != nil {
-			$2.commas = append($2.commas, $3)
+			$2 = append($2, $3.AsReservedElement())
 		}
-		$$ = &ast.ReservedNode{Keyword: $1.ToKeyword(), Names: $2.names, Commas: $2.commas}
+		$$ = &ast.ReservedNode{Keyword: $1.ToKeyword(), Elements: $2}
 	}
 	| _RESERVED fieldNameIdents {
-		$$ = &ast.ReservedNode{Keyword: $1.ToKeyword(), Identifiers: $2.idents, Commas: $2.commas}
+		$$ = &ast.ReservedNode{Keyword: $1.ToKeyword(), Elements: $2}
 	}
 
 fieldNameStrings
 	: _STRING_LIT {
-		$$ = &nameSlices{names: []*ast.StringValueNode{$1}}
+		$$ = []*ast.ReservedElement{$1.AsReservedElement()}
 	}
 	| fieldNameStrings ',' _STRING_LIT {
-		$1.names = append($1.names, $3)
-		$1.commas = append($1.commas, $2)
-		$$ = $1
+		$$ = append($1, $2.AsReservedElement(), $3.AsReservedElement())
 	}
 
 fieldNameIdents
 	: singularIdent {
-		$$ = &nameSlices{idents: []*ast.IdentNode{$1}}
+		$$ = []*ast.ReservedElement{$1.AsReservedElement()}
 	}
 	| fieldNameIdents ',' singularIdent {
-		$1.idents = append($1.idents, $3)
-		$1.commas = append($1.commas, $2)
-		$$ = $1
+		$$ = append($1, $2.AsReservedElement(), $3.AsReservedElement())
 	}
 
 enumDecl
