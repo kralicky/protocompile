@@ -2,9 +2,11 @@ syntax = "proto3";
 
 package ast;
 
+import "github.com/kralicky/codegen/pathbuilder/pathbuilder.proto";
 import "google/protobuf/descriptor.proto";
 
-option go_package = "github.com/kralicky/protocompile/ast";
+option go_package                      = "github.com/kralicky/protocompile/ast";
+option (pathbuilder.generator).enabled = true;
 
 // Token represents a single lexed token.
 enum Token {

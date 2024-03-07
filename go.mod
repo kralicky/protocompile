@@ -1,13 +1,14 @@
 module github.com/kralicky/protocompile
 
-go 1.22
+go 1.22.0
 
 require (
 	github.com/google/go-cmp v0.6.0
+	github.com/kralicky/codegen v0.0.0-20240307225947-51de80fcb2f3
 	github.com/plar/go-adaptive-radix-tree v1.0.5
 	github.com/stretchr/testify v1.8.4
 	golang.org/x/sync v0.6.0
-	google.golang.org/protobuf v1.32.0
+	google.golang.org/protobuf v1.33.0
 )
 
 require (

@@ -1,9 +1,11 @@
 package ast
 
 import (
+	"fmt"
+
 	"google.golang.org/protobuf/reflect/protopath"
 	"google.golang.org/protobuf/reflect/protorange"
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // WalkOption represents an option used with the Walk function. These
@@ -79,32 +81,28 @@ func Inspect(node Node, visit func(Node) bool, opts ...WalkOption) {
 		opt(&wOpts)
 	}
 
-	check := func(v protopath.Values) (isMessage, isList bool) {
+	check := func(v protopath.Values) (kind protoreflect.Kind, isList bool, err error) {
 		top := v.Index(-1)
 		switch top.Step.Kind() {
 		case protopath.RootStep:
-			isMessage = true
+			return protoreflect.MessageKind, false, nil
 		case protopath.FieldAccessStep:
 			fd := top.Step.FieldDescriptor()
 			if fd.IsExtension() {
-				isMessage = false
-				break
+				return 0, false, protorange.Break
 			}
-			switch fd.Kind() {
-			case protoreflect.MessageKind:
-				isMessage = true
-				isList = fd.IsList()
-			}
+			return fd.Kind(), fd.IsList(), nil
 		case protopath.ListIndexStep:
-			// for list indexes, visit only if the list type is concrete
+			// for list indexes, visit only if the list type is concrete and
+			// not an extension
 			prev := v.Index(-2)
 			switch prev.Step.Kind() {
 			case protopath.FieldAccessStep:
-				switch prev.Step.FieldDescriptor().Kind() {
-				case protoreflect.MessageKind:
-					isMessage = true
-				}
+				fd := prev.Step.FieldDescriptor()
+				return fd.Kind(), false, nil
 			}
+		default:
+			panic(fmt.Sprintf("ast.Inspect: invalid step kind %q in path: %s"+top.Step.Kind().String(), v.Path))
 		}
 		return
 	}
@@ -121,33 +119,42 @@ func Inspect(node Node, visit func(Node) bool, opts ...WalkOption) {
 			if shouldBreak {
 				return protorange.Break
 			}
-			if isMessage, isList := check(v); isMessage {
-				if wOpts.before != nil {
-					if err := wOpts.before(v); err != nil {
-						if err == protorange.Break {
-							return nil
-						}
-						return err
+			kind, isList, err := check(v)
+			if err != nil {
+				return err
+			}
+			if kind != protoreflect.MessageKind {
+				return nil
+			}
+
+			if wOpts.before != nil {
+				if err := wOpts.before(v); err != nil {
+					if err == protorange.Break {
+						return nil
 					}
+					return err
 				}
-				if !isList {
-					node := v.Index(-1).Value.Message().Interface().(Node)
-					canVisit := true
-					if wOpts.hasRangeRequirement {
-						if node.Start() > wOpts.end || node.End() < wOpts.start {
-							canVisit = false
-						}
-					}
-					if canVisit && wOpts.hasIntersectionRequirement {
-						if node.Start() > wOpts.intersects || node.End() < wOpts.intersects {
-							canVisit = false
-						}
-					}
-					if canVisit {
-						if !visit(node) {
-							shouldBreak = true
-						}
-					}
+			}
+
+			if isList {
+				return nil
+			}
+
+			node := v.Index(-1).Value.Message().Interface().(Node)
+			canVisit := true
+			if wOpts.hasRangeRequirement {
+				if node.Start() > wOpts.end || node.End() < wOpts.start {
+					canVisit = false
+				}
+			}
+			if canVisit && wOpts.hasIntersectionRequirement {
+				if node.Start() > wOpts.intersects || node.End() < wOpts.intersects {
+					canVisit = false
+				}
+			}
+			if canVisit {
+				if !visit(node) {
+					shouldBreak = true
 				}
 			}
 			return nil
@@ -157,102 +164,13 @@ func Inspect(node Node, visit func(Node) bool, opts ...WalkOption) {
 				shouldBreak = false
 				return nil // intentional - don't override error returned from push()
 			}
-			if isMessage, _ := check(v); isMessage {
-				if wOpts.after != nil {
+			if wOpts.after != nil {
+				kind, _, err := check(v)
+				if err == nil && kind == protoreflect.MessageKind {
 					wOpts.after(v)
 				}
 			}
 			return nil
 		},
 	)
-}
-
-// AncestorTracker is used to track the path of nodes during a walk operation.
-// By passing AsWalkOptions to a call to Walk, a visitor can inspect the path to
-// the node being visited using this tracker.
-type AncestorTracker struct {
-	ancestors protopath.Values
-}
-
-func nodeIsConcrete(
-	values protopath.Values,
-	index int,
-) bool {
-	v := values.Index(index)
-	switch v.Step.Kind() {
-	case protopath.RootStep:
-		return true
-	case protopath.FieldAccessStep:
-		fld := v.Step.FieldDescriptor()
-		switch fld.Kind() {
-		case protoreflect.MessageKind:
-			if fld.IsList() || fld.IsMap() {
-				return false
-			}
-			switch v.Value.Message().Interface().(type) {
-			case WrapperNode:
-				return false
-			case Node:
-				return true
-			}
-		}
-	case protopath.ListIndexStep:
-		prev := values.Index(index - 1)
-		if prev.Step.Kind() == protopath.FieldAccessStep {
-			prevFld := prev.Step.FieldDescriptor()
-			if prevFld.Kind() != protoreflect.MessageKind {
-				return false
-			}
-			switch v.Value.Message().Interface().(type) {
-			case WrapperNode:
-				return false
-			case Node:
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// AsWalkOptions returns WalkOption values that will cause this ancestor tracker
-// to track the path through the AST during the walk operation.
-func (t *AncestorTracker) AsWalkOptions() []WalkOption {
-	return []WalkOption{
-		WithBefore(func(v protopath.Values) error {
-			t.ancestors = v
-			if nodeIsConcrete(v, -1) {
-				return nil
-			}
-			return protorange.Break
-		}),
-	}
-}
-
-// Path returns a slice of nodes that represents the path from the root of the
-// walk operaiton to the currently visited node. The first element in the path
-// is the root supplied to Walk. The last element in the path is the currently
-// visited node.
-//
-// The returned slice is not a defensive copy; so callers should NOT mutate it.
-func (t *AncestorTracker) Path() []Node {
-	nodes := make([]Node, 0, len(t.ancestors.Values))
-	for i := range len(t.ancestors.Values) {
-		if nodeIsConcrete(t.ancestors, i) {
-			nodes = append(nodes, t.ancestors.Index(i).Value.Message().Interface().(Node))
-		}
-	}
-	return nodes
-}
-
-func (t *AncestorTracker) ProtoPath() protopath.Path {
-	return t.ancestors.Path
-}
-
-func NodeView(in func(v Node)) func(v protopath.Values) error {
-	return func(v protopath.Values) error {
-		if nodeIsConcrete(v, -1) {
-			in(v.Index(-1).Value.Message().Interface().(Node))
-		}
-		return nil
-	}
 }

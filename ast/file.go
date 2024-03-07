@@ -48,13 +48,15 @@ func newFileNode(info *FileInfo, syntax *SyntaxNode, edition *EditionNode, decls
 	eofNode := &RuneNode{Token: eof, Rune: 0}
 
 	node := &FileNode{
-		Pragmas: pragmas,
 		Syntax:  syntax,
 		Edition: edition,
 		Decls:   decls,
 		EOF:     eofNode,
 	}
 	proto.SetExtension(node, E_FileInfo, info)
+	if pragmas != nil {
+		proto.SetExtension(node, E_ExtendedAttributes, &ExtendedAttributes{Pragmas: pragmas})
+	}
 	return node
 }
 
@@ -159,11 +161,15 @@ func (f *FileNode) TokenAtOffset(offset int) Token {
 }
 
 func (f *FileNode) Pragma(key string) (string, bool) {
-	if f.Pragmas == nil {
-		return "", false
+	if proto.HasExtension(f, E_ExtendedAttributes) {
+		xattr := proto.GetExtension(f, E_ExtendedAttributes).(*ExtendedAttributes)
+		if xattr.Pragmas == nil {
+			return "", false
+		}
+		val, ok := xattr.Pragmas[key]
+		return val, ok
 	}
-	val, ok := f.Pragmas[key]
-	return val, ok
+	return "", false
 }
 
 func (m *SyntaxNode) Start() Token { return m.Keyword.Start() }

@@ -7,10 +7,12 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	. "github.com/kralicky/protocompile/ast"
+	"github.com/kralicky/protocompile/ast/paths"
 	"github.com/kralicky/protocompile/parser"
 	"github.com/kralicky/protocompile/reporter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 )
 
@@ -356,13 +358,14 @@ var sampleTree3 = &FieldNode{
 }
 
 func TestInspect(t *testing.T) {
-	var tracker AncestorTracker
+	var tracker paths.AncestorTracker
 	nodePaths := [][]Node{}
-	paths := []string{}
+	pathStrings := []string{}
 
 	Inspect(sampleTree1, func(n Node) bool {
-		nodePaths = append(nodePaths, slices.Clone(tracker.Path()))
-		paths = append(paths, tracker.ProtoPath().String())
+		values := tracker.Values()
+		nodePaths = append(nodePaths, paths.ValuesToNodes(values))
+		pathStrings = append(pathStrings, values.Path.String())
 		return true
 	}, tracker.AsWalkOptions()...)
 
@@ -447,7 +450,7 @@ func TestInspect(t *testing.T) {
 		}
 	}
 
-	assert.Equal(t, expectedPaths, paths)
+	assert.Equal(t, expectedPaths, pathStrings)
 }
 
 func TestFullAST(t *testing.T) {
@@ -455,13 +458,14 @@ func TestFullAST(t *testing.T) {
 	require.NoError(t, err)
 	res, err := parser.Parse("../internal/testdata/desc_test_complex.proto", f, reporter.NewHandler(nil), 0)
 	require.NoError(t, err)
-	var tracker AncestorTracker
+	var tracker paths.AncestorTracker
 	nodePaths := [][]Node{}
-	paths := []string{}
+	pathStrings := []string{}
 
 	Inspect(res, func(n Node) bool {
-		nodePaths = append(nodePaths, slices.Clone(tracker.Path()))
-		paths = append(paths, tracker.ProtoPath().String())
+		values := tracker.Values()
+		nodePaths = append(nodePaths, paths.ValuesToNodes(values))
+		pathStrings = append(pathStrings, tracker.Path().String())
 		return true
 	}, tracker.AsWalkOptions()...)
 
@@ -585,15 +589,30 @@ func TestBreak(t *testing.T) {
 	}
 
 	for i, c := range cases {
-		var tracker AncestorTracker
+		var tracker paths.AncestorTracker
 		paths := []string{}
 
 		Inspect(c.tree, func(n Node) bool {
-			pathStr := tracker.ProtoPath().String()
+			pathStr := tracker.Path().String()
 			paths = append(paths, pathStr)
 			return !slices.Contains(c.stopAt, pathStr)
 		}, tracker.AsWalkOptions()...)
 
 		assert.Equal(t, c.want, paths, "case %d", i)
 	}
+}
+
+func TestSkipExtensions(t *testing.T) {
+	root := &FileNode{
+		Syntax: &SyntaxNode{Keyword: &IdentNode{Token: 1, Val: "syntax"}},
+	}
+	proto.SetExtension(root, E_FileInfo, &FileInfo{Comments: []*FileInfo_CommentInfo{{Index: 1}}})
+
+	visited := []Node{}
+	Inspect(root, func(n Node) bool {
+		visited = append(visited, n)
+		return true
+	})
+
+	assert.Equal(t, []Node{root, root.Syntax, root.Syntax.Keyword}, visited)
 }
