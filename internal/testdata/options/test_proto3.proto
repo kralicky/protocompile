@@ -15,7 +15,7 @@ syntax = "proto3";
 
 package bufbuild.protocompile.test3;
 
-import "github.com/kralicky/protocompile/internal/testdata/options/options.proto";
+import "options.proto";
 import "google/protobuf/descriptor.proto";
 
 option go_package   = "foo";

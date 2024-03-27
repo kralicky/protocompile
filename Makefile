@@ -162,7 +162,7 @@ internal/testdata/encoding/tabs.protoset: $(PROTOC) internal/testdata/encoding/t
 internal/testdata/encoding/spaces.protoset: $(PROTOC) internal/testdata/encoding/spaces.proto
 	cd $(@D) && $(PROTOC) --descriptor_set_out=$(@F) --include_source_info -I. $(filter-out protoc,$(^F))
 
-internal/testdata/options/test.protoset: $(PROTOC) internal/testdata/options/test.proto
+internal/testdata/options/options2/test.protoset: $(PROTOC) internal/testdata/options/options2/test.proto
 	cd $(@D) && $(PROTOC) --descriptor_set_out=$(@F) -I. $(filter-out protoc,$(^F))
 
 internal/testdata/options/test_proto3.protoset: $(PROTOC) internal/testdata/options/test_proto3.proto

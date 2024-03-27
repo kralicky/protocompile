@@ -347,7 +347,7 @@ func qualify(qualifier, name string) string {
 func TestOptionsEncoding(t *testing.T) {
 	t.Parallel()
 	testCases := map[string]string{
-		"proto2":   "options/test.proto",
+		"proto2":   "options/options2/test.proto",
 		"proto3":   "options/test_proto3.proto",
 		"defaults": "desc_test_defaults.proto",
 	}
@@ -356,13 +356,13 @@ func TestOptionsEncoding(t *testing.T) {
 		t.Run(syntax, func(t *testing.T) {
 			t.Parallel()
 			fileToCompile := strings.TrimPrefix(file, "options/")
-			importPath := "../internal/testdata"
-			if fileToCompile != file {
-				importPath = "../internal/testdata/options"
-			}
 			compiler := protocompile.Compiler{
 				Resolver: protocompile.WithStandardImports(&protocompile.SourceResolver{
-					ImportPaths: []string{importPath},
+					ImportPaths: []string{
+						"../internal/testdata/options/options2",
+						"../internal/testdata/options",
+						"../internal/testdata",
+					},
 				}),
 			}
 			fds, err := compiler.Compile(context.Background(), protocompile.ResolvedPath(fileToCompile))
