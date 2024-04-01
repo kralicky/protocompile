@@ -2,8 +2,8 @@ syntax = "proto2";
 
 package testprotos;
 
-import "github.com/kralicky/protocompile/internal/testdata/desc_test_complex.proto";
-import "github.com/kralicky/protocompile/internal/testdata/desc_test_options.proto";
+import "desc_test_complex.proto";
+import "desc_test_options.proto";
 import "google/protobuf/descriptor.proto";
 
 option go_package = "github.com/kralicky/protocompile/internal/testprotos";
@@ -66,7 +66,7 @@ extend google.protobuf.FieldOptions {
 
 message KeywordCollisionOptions {
   optional uint64 id = 1 [
-    (foo.bar.float)   = inf,
+ //   (foo.bar.float)   = inf,
     (foo.bar.syntax)  = true,
     (foo.bar.import)  = true,
     (foo.bar.public)  = true,

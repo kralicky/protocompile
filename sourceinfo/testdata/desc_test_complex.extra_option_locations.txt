@@ -795,19 +795,10 @@ desc_test_complex.proto > message_type[4] > options > (foo.bar.rept)[0] > array[
    Span: 97:13 -> 97:14
 
 desc_test_complex.proto > message_type[4] > options > (foo.bar.rept)[0] > array[1]:
-   Span: 97:14 -> 97:15
-
-desc_test_complex.proto > message_type[4] > options > (foo.bar.rept)[0] > array[2]:
    Span: 97:16 -> 97:17
 
-desc_test_complex.proto > message_type[4] > options > (foo.bar.rept)[0] > array[3]:
-   Span: 97:17 -> 97:18
-
-desc_test_complex.proto > message_type[4] > options > (foo.bar.rept)[0] > array[4]:
+desc_test_complex.proto > message_type[4] > options > (foo.bar.rept)[0] > array[2]:
    Span: 97:19 -> 97:20
-
-desc_test_complex.proto > message_type[4] > options > (foo.bar.rept)[0] > array[5]:
-   Span: 97:20 -> 97:20
 
 desc_test_complex.proto > message_type[4] > options > (foo.bar.rept)[0] > r[0]:
    Span: 98:5 -> 98:49
@@ -834,19 +825,10 @@ desc_test_complex.proto > message_type[4] > options > (foo.bar.rept)[1] > array[
    Span: 103:13 -> 103:14
 
 desc_test_complex.proto > message_type[4] > options > (foo.bar.rept)[1] > array[1]:
-   Span: 103:14 -> 103:15
-
-desc_test_complex.proto > message_type[4] > options > (foo.bar.rept)[1] > array[2]:
    Span: 103:16 -> 103:17
 
-desc_test_complex.proto > message_type[4] > options > (foo.bar.rept)[1] > array[3]:
-   Span: 103:17 -> 103:18
-
-desc_test_complex.proto > message_type[4] > options > (foo.bar.rept)[1] > array[4]:
+desc_test_complex.proto > message_type[4] > options > (foo.bar.rept)[1] > array[2]:
    Span: 103:19 -> 103:20
-
-desc_test_complex.proto > message_type[4] > options > (foo.bar.rept)[1] > array[5]:
-   Span: 103:20 -> 103:20
 
 desc_test_complex.proto > message_type[4] > options:
    Span: 107:3 -> 107:34
@@ -879,28 +861,16 @@ desc_test_complex.proto > message_type[4] > options > (foo.bar.a) > test > enums
    Span: 114:7 -> 114:9
 
 desc_test_complex.proto > message_type[4] > options > (foo.bar.a) > test > enums[1]:
-   Span: 114:9 -> 114:10
-
-desc_test_complex.proto > message_type[4] > options > (foo.bar.a) > test > enums[2]:
    Span: 115:7 -> 115:9
 
-desc_test_complex.proto > message_type[4] > options > (foo.bar.a) > test > enums[3]:
-   Span: 115:9 -> 115:10
-
-desc_test_complex.proto > message_type[4] > options > (foo.bar.a) > test > enums[4]:
+desc_test_complex.proto > message_type[4] > options > (foo.bar.a) > test > enums[2]:
    Span: 116:7 -> 116:9
-
-desc_test_complex.proto > message_type[4] > options > (foo.bar.a) > test > enums[5]:
-   Span: 117:5 -> 117:5
 
 desc_test_complex.proto > message_type[4] > options > (foo.bar.a) > test > bools[0]:
    Span: 118:5 -> 118:19
 
 desc_test_complex.proto > message_type[4] > options > (foo.bar.a) > test > bools[0]:
    Span: 118:13 -> 118:18
-
-desc_test_complex.proto > message_type[4] > options > (foo.bar.a) > test > bools[1]:
-   Span: 118:18 -> 118:18
 
 desc_test_complex.proto > message_type[4] > options:
    Span: 120:3 -> 120:74

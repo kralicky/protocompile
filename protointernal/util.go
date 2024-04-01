@@ -231,3 +231,9 @@ func CanPack(k protoreflect.Kind) bool {
 		return true
 	}
 }
+
+func ClonePath(path protoreflect.SourcePath) protoreflect.SourcePath {
+	clone := make(protoreflect.SourcePath, len(path))
+	copy(clone, path)
+	return clone
+}

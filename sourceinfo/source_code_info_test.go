@@ -187,7 +187,8 @@ func TestSourceCodeInfoOptions(t *testing.T) {
 	// set to true to re-generate golden output file
 	const regenerateGoldenOutputFile = true
 
-	generateSourceInfoText := func(filename string, mode protocompile.SourceInfoMode) string {
+	generateSourceInfoText := func(t *testing.T, filename string, mode protocompile.SourceInfoMode) string {
+		t.Helper()
 		compiler := protocompile.Compiler{
 			Resolver: protocompile.WithStandardImports(&protocompile.SourceResolver{
 				ImportPaths: []string{"../internal/testdata"},
@@ -227,14 +228,14 @@ func TestSourceCodeInfoOptions(t *testing.T) {
 		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			output := generateSourceInfoText(testCase.filename, testCase.mode)
+			output := generateSourceInfoText(t, testCase.filename, testCase.mode)
 
 			baseName := strings.TrimSuffix(testCase.filename, ".proto")
 			if regenerateGoldenOutputFile {
 				err := os.WriteFile(fmt.Sprintf("testdata/%s.%s.txt", baseName, testCase.name), []byte(output), 0o644)
 				require.NoError(t, err)
 				// also create a file with standard comments, as a useful demonstration of the differences
-				output := generateSourceInfoText(testCase.filename, protocompile.SourceInfoStandard|protocompile.SourceInfoProtocCompatible)
+				output := generateSourceInfoText(t, testCase.filename, protocompile.SourceInfoStandard|protocompile.SourceInfoProtocCompatible)
 				err = os.WriteFile(fmt.Sprintf("testdata/%s.standard.txt", baseName), []byte(output), 0o644)
 				require.NoError(t, err)
 				return

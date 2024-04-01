@@ -168,6 +168,9 @@ internal/testdata/options/options2/test.protoset: $(PROTOC) internal/testdata/op
 internal/testdata/options/test_proto3.protoset: $(PROTOC) internal/testdata/options/test_proto3.proto
 	cd $(@D) && $(PROTOC) --descriptor_set_out=$(@F) -I. $(filter-out protoc,$(^F))
 
+internal/testdata/options/test_editions.protoset: $(PROTOC) internal/testdata/options/test_editions.proto
+	cd $(@D) && $(PROTOC) --experimental_editions --descriptor_set_out=$(@F) -I. $(filter-out protoc,$(^F))
+
 .PHONY: test-descriptors
 test-descriptors: internal/testdata/all.protoset
 test-descriptors: internal/testdata/desc_test_complex.protoset
@@ -177,5 +180,7 @@ test-descriptors: internal/testdata/descriptor_impl_tests.protoset
 test-descriptors: internal/testdata/descriptor_editions_impl_tests.protoset
 test-descriptors: internal/testdata/editions/all.protoset
 test-descriptors: internal/testdata/source_info.protoset
+test-descriptors: internal/testdata/options/options.protoset
 test-descriptors: internal/testdata/options/test.protoset
 test-descriptors: internal/testdata/options/test_proto3.protoset
+test-descriptors: internal/testdata/options/test_editions.protoset
