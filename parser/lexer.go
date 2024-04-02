@@ -674,12 +674,12 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 
 		if c == '\'' || c == '"' {
 			// string literal
-			str, err := l.readStringLiteral(c)
+			str, raw, err := l.readStringLiteral(c)
 			if err != nil {
 				l.setError(lval, err)
 				return _ERROR
 			}
-			l.setString(lval, str)
+			l.setString(lval, str, raw)
 			// check if this is a compound string literal
 			if _, ok := l.matchNextRune('"', '\''); ok {
 				l.inCompoundStringLiteral = true
@@ -824,8 +824,12 @@ func (l *protoLex) setPrevAndAddComments(n ast.TerminalNode) {
 	l.prevSym = n
 }
 
-func (l *protoLex) setString(lval *protoSymType, val string) {
-	node := &ast.StringLiteralNode{Token: l.newToken(), Val: val}
+func (l *protoLex) setString(lval *protoSymType, val string, raw []byte) {
+	node := &ast.StringLiteralNode{
+		Token: l.newToken(),
+		Val:   val,
+		Raw:   raw,
+	}
 	if l.inCompoundStringLiteral && lval.sv != nil {
 		switch sv := lval.sv.Unwrap().(type) {
 		case *ast.StringLiteralNode:
@@ -1078,7 +1082,7 @@ func (l *protoLex) readIdentifier() {
 	}
 }
 
-func (l *protoLex) readStringLiteral(quote rune) (string, error) {
+func (l *protoLex) readStringLiteral(quote rune) (string, []byte, error) {
 	var buf bytes.Buffer
 	var escapeError reporter.ErrorWithPos
 	var noMoreErrors bool
@@ -1114,16 +1118,17 @@ func (l *protoLex) readStringLiteral(quote rune) (string, error) {
 			l.addSourceError(fmt.Errorf("too many errors (%d) encountered while parsing string literal", errCount))
 		}
 	}()
+	start := l.input.offset()
 	for {
 		c, _, err := l.input.readRune()
 		if err != nil {
 			if err == io.EOF {
 				err = io.ErrUnexpectedEOF
 			}
-			return "", err
+			return "", nil, err
 		}
 		if c == '\n' {
-			return "", errors.New("encountered end-of-line before end of string literal")
+			return "", nil, errors.New("encountered end-of-line before end of string literal")
 		}
 		if c == quote {
 			break
@@ -1136,14 +1141,14 @@ func (l *protoLex) readStringLiteral(quote rune) (string, error) {
 			// escape sequence
 			c, _, err = l.input.readRune()
 			if err != nil {
-				return "", err
+				return "", nil, err
 			}
 			switch {
 			case c == 'x' || c == 'X':
 				// hex escape
 				c1, sz1, err := l.input.readRune()
 				if err != nil {
-					return "", err
+					return "", nil, err
 				}
 				if c1 == quote || c1 == '\\' {
 					l.input.unreadRune(sz1)
@@ -1152,7 +1157,7 @@ func (l *protoLex) readStringLiteral(quote rune) (string, error) {
 				}
 				c2, sz2, err := l.input.readRune()
 				if err != nil {
-					return "", err
+					return "", nil, err
 				}
 				var hex string
 				if (c2 < '0' || c2 > '9') && (c2 < 'a' || c2 > 'f') && (c2 < 'A' || c2 > 'F') {
@@ -1171,7 +1176,7 @@ func (l *protoLex) readStringLiteral(quote rune) (string, error) {
 				// octal escape
 				c2, sz2, err := l.input.readRune()
 				if err != nil {
-					return "", err
+					return "", nil, err
 				}
 				var octal string
 				if c2 < '0' || c2 > '7' {
@@ -1180,7 +1185,7 @@ func (l *protoLex) readStringLiteral(quote rune) (string, error) {
 				} else {
 					c3, sz3, err := l.input.readRune()
 					if err != nil {
-						return "", err
+						return "", nil, err
 					}
 					if c3 < '0' || c3 > '7' {
 						l.input.unreadRune(sz3)
@@ -1205,7 +1210,7 @@ func (l *protoLex) readStringLiteral(quote rune) (string, error) {
 				for i := range u {
 					c2, sz2, err := l.input.readRune()
 					if err != nil {
-						return "", err
+						return "", nil, err
 					}
 					if c2 == quote || c2 == '\\' {
 						l.input.unreadRune(sz2)
@@ -1231,7 +1236,7 @@ func (l *protoLex) readStringLiteral(quote rune) (string, error) {
 				for i := range u {
 					c2, sz2, err := l.input.readRune()
 					if err != nil {
-						return "", err
+						return "", nil, err
 					}
 					if c2 == quote || c2 == '\\' {
 						l.input.unreadRune(sz2)
@@ -1286,9 +1291,9 @@ func (l *protoLex) readStringLiteral(quote rune) (string, error) {
 		}
 	}
 	if escapeError != nil {
-		return "", escapeError
+		return "", nil, escapeError
 	}
-	return buf.String(), nil
+	return buf.String(), l.input.data[start:l.input.pos], nil
 }
 
 func (l *protoLex) skipToEndOfLineComment(lval *protoSymType) (hasErr bool) {

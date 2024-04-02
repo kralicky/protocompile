@@ -955,6 +955,9 @@ func (p stringLiteralNodePathBuilder) Token() protopath.Path {
 func (p stringLiteralNodePathBuilder) Val() protopath.Path {
 	return protopath.Path(append(p, protopath.FieldAccess(((*StringLiteralNode)(nil)).ProtoReflect().Descriptor().Fields().ByNumber(2))))
 }
+func (p stringLiteralNodePathBuilder) Raw() protopath.Path {
+	return protopath.Path(append(p, protopath.FieldAccess(((*StringLiteralNode)(nil)).ProtoReflect().Descriptor().Fields().ByNumber(3))))
+}
 func (p runeNodePathBuilder) Token() protopath.Path {
 	return protopath.Path(append(p, protopath.FieldAccess(((*RuneNode)(nil)).ProtoReflect().Descriptor().Fields().ByNumber(1))))
 }

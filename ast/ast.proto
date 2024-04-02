@@ -249,6 +249,9 @@ message StringLiteralNode {
   Token token = 1;
   // Val is the actual string value that the literal indicates.
   string val = 2;
+  // Raw is the original string representation of the literal as it appeared
+  // in the source file.
+  bytes raw = 3;
 }
 
 // CompoundStringLiteralNode represents a compound string literal, which is
