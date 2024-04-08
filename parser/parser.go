@@ -161,7 +161,7 @@ type Result interface {
 	// return nil, such as if the given oneof is not part of the
 	// FileDescriptorProto hierarchy. If this result has no AST, this returns a
 	// placeholder node.
-	OneofNode(*descriptorpb.OneofDescriptorProto) ast.Node
+	OneofNode(*descriptorpb.OneofDescriptorProto) *ast.OneofNode
 	// ExtensionRangeNode returns the AST node corresponding to the given
 	// extension range. This can return nil, such as if the given range is not
 	// part of the FileDescriptorProto hierarchy. If this result has no AST,

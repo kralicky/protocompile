@@ -1000,7 +1000,7 @@ func (r *result) FieldExtendeeNode(f *descriptorpb.FieldDescriptorProto) *ast.Ex
 	return r.fieldExtendeeNodes[r.FieldNode(f).Unwrap()]
 }
 
-func (r *result) OneofNode(o *descriptorpb.OneofDescriptorProto) ast.Node {
+func (r *result) OneofNode(o *descriptorpb.OneofDescriptorProto) *ast.OneofNode {
 	node, _ := r.nodes[o].(*ast.OneofNode)
 	return node
 }
