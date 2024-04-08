@@ -75,12 +75,12 @@ message StringAndBytesDefaults {
 	optional string dq = 1 [default = "this is a string with \"nested quotes\""];
 	optional string sq = 2 [default = 'this is a string with "nested quotes"'];
 
-	optional bytes escaped_bytes = 3 [default = "\0\001\a\b\f\n\r\t\v\\\'\"\xfe"];
+	optional bytes escaped_bytes = 3 [default = /*foo*/ "\0\001\a\b\f\n\r\t\v\\\'\"\xfe" /*foo*/];
 	optional string utf8_string = 4 [default = "\341\210\264"]; // this is utf-8 for \u1234
   	optional string string_with_zero = 5 [default = "hel\000lo"];
   	optional bytes bytes_with_zero = 6 [default = "wor\000ld"];
 
-	optional string really_long_string = 7 [default = "this is "
+	optional string really_long_string = 7 [default = /*a*/"this is \0"/*b*/
                                            "a really long string constant, so it "
                                            "spans multiple lines! it also tests "
                                            "support for multi-line string literals "

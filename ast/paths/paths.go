@@ -76,6 +76,15 @@ func NodeAt[T ast.Node](idx PathIndex) (t T) {
 // Slice returns a new path with both its path and values resliced by the given
 // range. It is assumed that both slices are of the same length.
 func Slice(from protopath.Values, start, end int) protopath.Values {
+	// if start is > 0, transform the first step into a Root step with the
+	// message type of the first value
+	if start > 0 {
+		rootStep := protopath.Root(from.Values[start].Message().Descriptor())
+		return protopath.Values{
+			Path:   append(protopath.Path{rootStep}, from.Path[start+1:end]...),
+			Values: from.Values[start:end],
+		}
+	}
 	return protopath.Values{
 		Path:   from.Path[start:end],
 		Values: from.Values[start:end],
@@ -286,6 +295,68 @@ func Suffix4[T, U, V, W ast.Node](values protopath.Values) (
 	var tailIdx int
 	// find W
 	out.W, tailIdx, ok = initSuffixMatch[W](values)
+	if !ok {
+		return
+	}
+	out.WIndex = tailIdx
+	tailIdx--
+
+	// walk up to find V
+	out.V, ok = suffixMatchRev[V](values, &tailIdx)
+	if !ok {
+		return
+	}
+	out.VIndex = tailIdx
+	tailIdx--
+
+	// walk up to find U
+	out.U, ok = suffixMatchRev[U](values, &tailIdx)
+	if !ok {
+		return
+	}
+	out.UIndex = tailIdx
+	tailIdx--
+
+	// walk up to find T
+	out.T, ok = suffixMatchRev[T](values, &tailIdx)
+	if !ok {
+		return
+	}
+	out.TIndex = tailIdx
+
+	return
+}
+
+func Suffix5[T, U, V, W, X ast.Node](values protopath.Values) (
+	out struct {
+		T      T
+		TIndex int
+		U      U
+		UIndex int
+		V      V
+		VIndex int
+		W      W
+		WIndex int
+		X      X
+		XIndex int
+	},
+	ok bool,
+) {
+	if len(values.Path) < 5 {
+		return
+	}
+
+	var tailIdx int
+	// find X
+	out.X, tailIdx, ok = initSuffixMatch[X](values)
+	if !ok {
+		return
+	}
+	out.XIndex = tailIdx
+	tailIdx--
+
+	// walk up to find W
+	out.W, ok = suffixMatchRev[W](values, &tailIdx)
 	if !ok {
 		return
 	}
