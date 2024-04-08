@@ -1251,6 +1251,7 @@ func (interp *interpreter) fieldValue(
 		if err != nil {
 			return protoreflect.Value{}, sourceinfo.OptionSourceInfo{}, err
 		}
+		interp.indexEnumValueRef(fld, val)
 		return protoreflect.ValueOfEnum(num), newSrcInfo(pathPrefix, nil), nil
 
 	case protoreflect.MessageKind, protoreflect.GroupKind:
@@ -1803,9 +1804,6 @@ func (interp *interpreter) messageLiteralValue(
 				return protoreflect.Value{}, sourceinfo.OptionSourceInfo{}, err
 			}
 			interp.descriptorIndex.FieldReferenceNodesToFieldDescriptors[fieldNode] = ffld
-			if ffld.Kind() == protoreflect.EnumKind {
-				interp.indexEnumValueRef(ffld, fieldNode.Val)
-			}
 			flds[fieldNode] = srcInfo
 		}
 	}
