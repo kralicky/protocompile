@@ -474,6 +474,8 @@ func TestLinkerValidation(t *testing.T) {
 			expectedErr: "foo.proto:1:95: field com.google.Foo.str: unknown type google.protobuf.StringValue; resolved to com.google.protobuf.StringValue which is not defined; consider using a leading dot",
 		},
 		"success_group_in_custom_option": {
+			// Groups must be referred by lower-case field name in option name.
+			// Hence "bar" instead of "Bar" in the option at the end.
 			input: map[string]string{
 				"foo.proto": `
 					syntax = "proto2";
@@ -486,6 +488,8 @@ func TestLinkerValidation(t *testing.T) {
 			},
 		},
 		"failure_group_in_custom_option_referred_by_type_name": {
+			// Trying to refer to group by the group name (which is a message name)
+			// instead of lower-case field name fails.
 			input: map[string]string{
 				"foo.proto": `
 					syntax = "proto2";
@@ -521,19 +525,7 @@ func TestLinkerValidation(t *testing.T) {
 			},
 			expectedErr: "foo.proto:6:22: message Bar: invalid extension: Foo is a message, not an extension",
 		},
-		"success_group_in_custom_option_msg_literal": {
-			input: map[string]string{
-				"foo.proto": `
-					syntax = "proto2";
-					import "google/protobuf/descriptor.proto";
-					message Foo {
-					  optional group Bar = 1 { optional string name = 1; }
-					}
-					extend google.protobuf.MessageOptions { optional Foo foo = 10001; }
-					message Baz { option (foo) = { Bar< name: "abc" > }; }`,
-			},
-		},
-		"failure_group_in_custom_option_msg_literal_referred_by_field_name": {
+		"success_group_in_custom_option_msg_literal_referred_by_field_name": {
 			input: map[string]string{
 				"foo.proto": `
 					syntax = "proto2";
@@ -544,7 +536,24 @@ func TestLinkerValidation(t *testing.T) {
 					extend google.protobuf.MessageOptions { optional Foo foo = 10001; }
 					message Baz { option (foo) = { bar< name: "abc" > }; }`,
 			},
-			expectedErr: "foo.proto:7:32: message Baz: option (foo): field bar not found (did you mean the group named Bar?)",
+			// protoc will allow this in v27.0:
+			// https://github.com/protocolbuffers/protobuf/commit/29c69ff00b58b60e67fcf40fd810009bd39b86c6
+			expectedDiffWithProtoc: true,
+		},
+		"success_group_in_custom_option_msg_literal": {
+			// However, groups MAY be referred by group name (i.e. message name)
+			// inside of a message literal. So, in this example, "Bar" is allowed
+			// (instead of lower-case "bar") because it's inside a message literal.
+			input: map[string]string{
+				"foo.proto": `
+					syntax = "proto2";
+					import "google/protobuf/descriptor.proto";
+					message Foo {
+					  optional group Bar = 1 { optional string name = 1; }
+					}
+					extend google.protobuf.MessageOptions { optional Foo foo = 10001; }
+					message Baz { option (foo) = { Bar< name: "abc" > }; }`,
+			},
 		},
 		"success_group_extension_in_custom_option_msg_literal": {
 			input: map[string]string{
@@ -558,6 +567,9 @@ func TestLinkerValidation(t *testing.T) {
 			},
 		},
 		"failure_group_extension_in_custom_option_msg_literal_referred_by_type_name": {
+			// BUT, groups may NOT be referred to by group name (i.e. message name) if
+			// they are extensions. Only the lower-case field name works in this
+			// context.
 			input: map[string]string{
 				"foo.proto": `
 					syntax = "proto2";
@@ -568,6 +580,73 @@ func TestLinkerValidation(t *testing.T) {
 					message Baz { option (foo) = { [Bar]< name: "abc" > }; }`,
 			},
 			expectedErr: "foo.proto:6:33: message Baz: option (foo): invalid extension: Bar is a message, not an extension",
+		},
+		"success_looks_like_group_in_custom_option_msg_literal": {
+			// Fields that "look like groups" may also be referred to by their
+			// group/message name. This is for backwards-compatibility for proto2
+			// groups that are migrated to editions. A field "looks like a group" if:
+			// 1. It uses delimited encoding.
+			// 2. The field name == lower-case(message name)
+			// 3. The message is declared in the same scope as the field that
+			//    references it (i.e. field and message type are siblings)
+			input: map[string]string{
+				"foo.proto": `
+					edition = "2023";
+					import "google/protobuf/descriptor.proto";
+					message Foo {
+					  Bar bar = 1 [features.message_encoding=DELIMITED];
+					  message Bar { string name = 1; }
+					}
+					extend google.protobuf.MessageOptions { Foo foo = 10001; }
+					message Baz { option (foo) = { Bar< name: "abc" > }; }`,
+			},
+		},
+		"failure_not_looks_like_group_in_custom_option_msg_literal_wrong_scope": {
+			// ONLY fields that "look like groups" can use the message name. Other
+			// fields of message type MUST use the field name.
+			input: map[string]string{
+				"foo.proto": `
+					edition = "2023";
+					import "google/protobuf/descriptor.proto";
+					message Foo {
+					  Bar bar = 1 [features.message_encoding=DELIMITED];
+					}
+					message Bar { string name = 1; }
+					extend google.protobuf.MessageOptions { Foo foo = 10001; }
+					message Baz { option (foo) = { Bar< name: "abc" > }; }`,
+			},
+			expectedErr: `foo.proto:8:32: message Baz: option (foo): field Bar not found`,
+			// protoc will fix this in v27.0:
+			// https://github.com/protocolbuffers/protobuf/commit/29c69ff00b58b60e67fcf40fd810009bd39b86c6
+			expectedDiffWithProtoc: true,
+		},
+		"failure_not_looks_like_group_in_custom_option_msg_literal_wrong_field_name": {
+			input: map[string]string{
+				"foo.proto": `
+					edition = "2023";
+					import "google/protobuf/descriptor.proto";
+					message Foo {
+					  Bar barbar = 1 [features.message_encoding=DELIMITED];
+					  message Bar { string name = 1; }
+					}
+					extend google.protobuf.MessageOptions { Foo foo = 10001; }
+					message Baz { option (foo) = { Bar< name: "abc" > }; }`,
+			},
+			expectedErr: `foo.proto:8:32: message Baz: option (foo): field Bar not found`,
+		},
+		"failure_not_looks_like_group_in_custom_option_msg_literal_not_delimited": {
+			input: map[string]string{
+				"foo.proto": `
+					edition = "2023";
+					import "google/protobuf/descriptor.proto";
+					message Foo {
+					  Bar bar = 1;
+					  message Bar { string name = 1; }
+					}
+					extend google.protobuf.MessageOptions { Foo foo = 10001; }
+					message Baz { option (foo) = { Bar< name: "abc" > }; }`,
+			},
+			expectedErr: `foo.proto:8:32: message Baz: option (foo): field Bar not found`,
 		},
 		"failure_oneof_extension_already_set_msg_literal": {
 			input: map[string]string{
@@ -2298,14 +2377,14 @@ func TestLinkerValidation(t *testing.T) {
 			// 		require.False(t, passProtoc)
 			// 	} else {
 			// 		// if the test case passes protocompile, it should also pass protoc.
-			// 		require.True(t, passProtoc)
+			// 		require.True(t, passProtoc, "protoc should allow the case")
 			// 	}
 			// } else {
 			// 	if tc.expectedDiffWithProtoc {
-			// 		require.True(t, passProtoc)
+			// 		require.True(t, passProtoc, "expected protoc to allow the case, but it disallows it")
 			// 	} else {
 			// 		// if the test case fails protocompile, it should also fail protoc.
-			// 		require.False(t, passProtoc)
+			// 		require.False(t, passProtoc, "protoc should disallow the case")
 			// 	}
 			// }
 		})
