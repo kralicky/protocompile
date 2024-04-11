@@ -442,7 +442,7 @@ func (r *result) createImports() fileImports {
 		if desc == nil {
 			imps[i] = protoreflect.FileImport{FileDescriptor: NewPlaceholderFile(dep)}
 		} else {
-			imps[i] = protoreflect.FileImport{FileDescriptor: desc}
+			imps[i] = protoreflect.FileImport{FileDescriptor: unwrap(desc)}
 		}
 	}
 	for _, publicIndex := range fd.PublicDependency {
@@ -452,6 +452,20 @@ func (r *result) createImports() fileImports {
 		imps[int(weakIndex)].IsWeak = true
 	}
 	return fileImports{files: imps}
+}
+
+func unwrap(descriptor protoreflect.FileDescriptor) protoreflect.FileDescriptor {
+	wrapped, ok := descriptor.(interface {
+		Unwrap() protoreflect.FileDescriptor
+	})
+	if !ok {
+		return descriptor
+	}
+	unwrapped := wrapped.Unwrap()
+	if unwrapped == nil {
+		return descriptor // shouldn't ever happen
+	}
+	return unwrapped
 }
 
 func (f *fileImports) Len() int {
