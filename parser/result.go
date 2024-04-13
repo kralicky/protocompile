@@ -28,6 +28,7 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/kralicky/protocompile/ast"
+	"github.com/kralicky/protocompile/editions"
 	"github.com/kralicky/protocompile/protointernal"
 	"github.com/kralicky/protocompile/reporter"
 )
@@ -153,7 +154,7 @@ func (r *result) createFileDescriptor(filename string, file *ast.FileNode, handl
 			fd.Syntax = proto.String(file.Syntax.Syntax.AsString())
 		}
 	case file.Edition != nil:
-		if !protointernal.AllowEditions {
+		if !editions.AllowEditions {
 			nodeInfo := file.NodeInfo(file.Edition.Edition)
 			if handler.HandleErrorf(nodeInfo, `editions are not yet supported; use syntax proto2 or proto3 instead`) != nil {
 				return
@@ -163,11 +164,11 @@ func (r *result) createFileDescriptor(filename string, file *ast.FileNode, handl
 		syntax = protoreflect.Editions
 
 		fd.Syntax = proto.String("editions")
-		editionEnum, ok := protointernal.SupportedEditions[edition]
+		editionEnum, ok := editions.SupportedEditions[edition]
 		if !ok {
 			nodeInfo := file.NodeInfo(file.Edition.Edition)
-			editionStrs := make([]string, 0, len(protointernal.SupportedEditions))
-			for supportedEdition := range protointernal.SupportedEditions {
+			editionStrs := make([]string, 0, len(editions.SupportedEditions))
+			for supportedEdition := range editions.SupportedEditions {
 				editionStrs = append(editionStrs, fmt.Sprintf("%q", supportedEdition))
 			}
 			sort.Strings(editionStrs)
