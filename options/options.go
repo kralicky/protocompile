@@ -47,16 +47,6 @@ import (
 	"github.com/kralicky/protocompile/sourceinfo"
 )
 
-const (
-	// featuresFieldName is the name of a field in every options message.
-	featuresFieldName = "features"
-)
-
-var (
-	featureSetType = (*descriptorpb.FeatureSet)(nil).ProtoReflect().Type()
-	featureSetName = featureSetType.Descriptor().FullName()
-)
-
 type interpreter struct {
 	file                    file
 	resolver                linker.Resolver
@@ -588,7 +578,7 @@ func (interp *interpreter) interpretOptions(
 	// see if the parse included an override copy for these options
 	if md := interp.resolveOptionsType(optsFqn); md != nil {
 		dm := dynamicpb.NewMessage(md)
-		if err := cloneInto(dm, opts, nil); err != nil {
+		if err := cloneInto(dm, opts, interp.resolver); err != nil {
 			node := interp.file.Node(element)
 			return nil, interp.HandleOptionNotFoundErrorf(nil, node, "failed to resolve option type: %w", err)
 		}
@@ -604,7 +594,6 @@ func (interp *interpreter) interpretOptions(
 	}
 	var remain []*descriptorpb.UninterpretedOption
 	var optNodes []*ast.OptionNode
-	var features []*ast.OptionNode
 	for _, uo := range uninterpreted {
 		if len(uo.Name) == 0 {
 			continue
@@ -635,7 +624,7 @@ func (interp *interpreter) interpretOptions(
 			continue
 		}
 		mc.Option = uo
-		srcInfo, err := interp.interpretField(mc, msg, uo, 0, interp.pathBuffer)
+		srcInfo, err := interp.interpretField(targetType, mc, msg, uo, 0, interp.pathBuffer)
 		if err != nil {
 			if interp.lenient {
 				remain = append(remain, uo)
@@ -644,16 +633,9 @@ func (interp *interpreter) interpretOptions(
 			return nil, err
 		}
 		optNodes = append(optNodes, node)
-		if !isCustom && uo.Name[0].GetNamePart() == featuresFieldName {
-			features = append(features, node)
-		}
 		if srcInfo != nil {
 			interp.index[node] = srcInfo
 		}
-	}
-
-	if err := interp.validateFeatures(targetType, msg, features); err != nil && !interp.lenient {
-		return nil, err
 	}
 
 	if interp.lenient {
@@ -687,104 +669,36 @@ func (interp *interpreter) interpretOptions(
 	return remain, nil
 }
 
-func (interp *interpreter) validateFeatures(
+// checkFieldUsage verifies that the given option field can be used
+// for the given target type. It reports an error if not and returns
+// a non-nil error if the handler returned a non-nil error.
+func (interp *interpreter) checkFieldUsage(
 	targetType descriptorpb.FieldOptions_OptionTargetType,
-	opts protoreflect.Message,
-	features []*ast.OptionNode,
+	mc *protointernal.MessageContext,
+	fld protoreflect.FieldDescriptor,
+	node ast.Node,
 ) error {
-	fld := opts.Descriptor().Fields().ByName(featuresFieldName)
-	if fld == nil {
-		// no features to resolve
+	opts, ok := fld.Options().(*descriptorpb.FieldOptions)
+	if !ok {
 		return nil
 	}
-	if fld.IsList() || fld.Message() == nil || fld.Message().FullName() != featureSetName {
-		// features field doesn't look right... abort
-		// TODO: should this return an error?
+	targetTypes := opts.GetTargets()
+	if len(targetTypes) == 0 {
 		return nil
 	}
-	featureSet := opts.Get(fld).Message()
-	var err error
-	featureSet.Range(func(featureField protoreflect.FieldDescriptor, _ protoreflect.Value) bool {
-		opts, ok := featureField.Options().(*descriptorpb.FieldOptions)
-		if !ok {
-			return true
-		}
-		targetTypes := opts.GetTargets()
-		var allowed bool
-		for _, allowedType := range targetTypes {
-			if allowedType == targetType {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
-			allowedTypes := make([]string, len(targetTypes))
-			for i, t := range opts.Targets {
-				allowedTypes[i] = targetTypeString(t)
-			}
-			node := interp.positionOfFeature(features, featuresFieldName, featureField.Name())
-			if len(opts.Targets) == 1 && opts.Targets[0] == descriptorpb.FieldOptions_TARGET_TYPE_UNKNOWN {
-				err = interp.HandleOptionForbiddenErrorf(nil, node, "feature field %q may not be used explicitly", featureField.Name())
-			} else {
-				err = interp.HandleOptionForbiddenErrorf(nil, node, "feature %q is allowed on [%s], not on %s", featureField.Name(), strings.Join(allowedTypes, ","), targetTypeString(targetType))
-			}
-		}
-		return err == nil
-	})
-	return err
-}
-
-func (interp *interpreter) positionOfFeature(features []*ast.OptionNode, fieldNames ...protoreflect.Name) ast.Node {
-	if interp.file.AST() == nil {
-		return &ast.NoSourceNode{Filename: interp.file.FileDescriptorProto().GetName()}
-	}
-	for _, feature := range features {
-		matched, remainingNames, nodePos, nodeValue := matchInterpretedOption(feature, fieldNames)
-		if !matched {
-			continue
-		}
-		if len(remainingNames) > 0 {
-			nodePos = findInterpretedFieldForFeature(nodePos, nodeValue, remainingNames)
-		}
-		if nodePos != nil {
-			return nodePos
+	for _, allowedType := range targetTypes {
+		if allowedType == targetType {
+			return nil
 		}
 	}
-	return &ast.NoSourceNode{Filename: interp.file.FileDescriptorProto().GetName()}
-}
-
-func matchInterpretedOption(node *ast.OptionNode, path []protoreflect.Name) (bool, []protoreflect.Name, ast.Node, *ast.ValueNode) {
-	parts := node.Name.FilterFieldReferences()
-	for i := 0; i < len(path) && i < len(parts); i++ {
-		part := parts[i]
-		if !part.IsExtension() && protoreflect.Name(part.Name.AsIdentifier()) != path[i] {
-			return false, nil, nil, nil
-		}
+	allowedTypes := make([]string, len(targetTypes))
+	for i, t := range targetTypes {
+		allowedTypes[i] = targetTypeString(t)
 	}
-	if len(path) <= len(node.Name.Parts) {
-		// No more path elements to match. Report location
-		// of the final element of path inside option name.
-		return true, nil, node.Name.Parts[len(path)-1], node.Val
+	if len(targetTypes) == 1 && targetTypes[0] == descriptorpb.FieldOptions_TARGET_TYPE_UNKNOWN {
+		return interp.HandleOptionForbiddenErrorf(mc, node, "field %q may not be used in an option (it declares no allowed target types)", fld.FullName())
 	}
-	return true, path[len(node.Name.Parts):], node.Name.Parts[len(node.Name.Parts)-1], node.Val
-}
-
-func findInterpretedFieldForFeature(nodePos ast.Node, nodeValue *ast.ValueNode, path []protoreflect.Name) ast.Node {
-	if len(path) == 0 {
-		return nodePos
-	}
-	msgNode := nodeValue.GetMessageLiteral()
-	if msgNode == nil {
-		return nil
-	}
-	for _, fldNode := range msgNode.Elements {
-		if fldNode.Name.Open == nil && protoreflect.Name(fldNode.Name.Name.AsIdentifier()) == path[0] {
-			if res := findInterpretedFieldForFeature(fldNode.Name, fldNode.Val, path[1:]); res != nil {
-				return res
-			}
-		}
-	}
-	return nil
+	return interp.HandleOptionForbiddenErrorf(mc, node, "field %q is allowed on [%s], not on %s", fld.FullName(), strings.Join(allowedTypes, ","), targetTypeString(targetType))
 }
 
 func targetTypeString(t descriptorpb.FieldOptions_OptionTargetType) string {
@@ -810,7 +724,15 @@ func cloneInto(dest proto.Message, src proto.Message, res linker.Resolver) error
 	if err != nil {
 		return err
 	}
-	return proto.UnmarshalOptions{Resolver: res, AllowPartial: true}.Unmarshal(data, dest)
+	unmarshaler := proto.UnmarshalOptions{AllowPartial: true}
+	if res != nil {
+		unmarshaler.Resolver = res
+	} else {
+		// Use a typed nil, which returns "not found" to all queries
+		// and prevents fallback to protoregistry.GlobalTypes.
+		unmarshaler.Resolver = (*protoregistry.Types)(nil)
+	}
+	return unmarshaler.Unmarshal(data, dest)
 }
 
 func (interp *interpreter) validateRecursive(
@@ -1022,7 +944,12 @@ func findOptionValueNode(
 // msg must be an options message. For nameIndex > 0, msg is a nested message inside of the
 // options message. The given pathPrefix is the path (sequence of field numbers and indices
 // with a FileDescriptorProto as the start) up to but not including the given nameIndex.
+//
+// Any errors encountered will be handled, so the returned error will only be non-nil if
+// the handler returned non-nil. Callers must check that the source info is non-nil before
+// using it since it can be nil (in the event of a problem) even if the error is nil.
 func (interp *interpreter) interpretField(
+	targetType descriptorpb.FieldOptions_OptionTargetType,
 	mc *protointernal.MessageContext,
 	msg protoreflect.Message,
 	opt *descriptorpb.UninterpretedOption,
@@ -1056,6 +983,10 @@ func (interp *interpreter) interpretField(
 	interp.descriptorIndex.OptionsToFieldDescriptors[opt] = fld
 	pathPrefix = append(pathPrefix, int32(fld.Number()))
 
+	if err := interp.checkFieldUsage(targetType, mc, fld, node); err != nil {
+		return nil, err
+	}
+
 	if len(opt.GetName()) > nameIndex+1 {
 		nextnm := opt.GetName()[nameIndex+1]
 		nextnode := interp.file.OptionNamePartNode(nextnm)
@@ -1082,7 +1013,7 @@ func (interp *interpreter) interpretField(
 			msg.Set(fld, fldVal)
 		}
 		// recurse to set next part of name
-		return interp.interpretField(mc, fdm, opt, nameIndex+1, pathPrefix)
+		return interp.interpretField(targetType, mc, fdm, opt, nameIndex+1, pathPrefix)
 	}
 
 	optNode := interp.file.OptionNode(opt)
@@ -1091,11 +1022,11 @@ func (interp *interpreter) interpretField(
 	var srcInfo *sourceinfo.OptionSourceInfo
 	var err error
 	if optValNode.Value() == nil {
-		err = interp.setOptionFieldFromProto(mc, msg, fld, node, opt, optValNode)
+		err = interp.setOptionFieldFromProto(targetType, mc, msg, fld, node, opt, optValNode)
 		srcInfoVal := newSrcInfo(pathPrefix, nil)
 		srcInfo = &srcInfoVal
 	} else {
-		srcInfo, err = interp.setOptionField(mc, msg, fld, node, optValNode, false, pathPrefix)
+		srcInfo, err = interp.setOptionField(targetType, mc, msg, fld, node, optValNode, false, pathPrefix)
 	}
 
 	if err != nil {
@@ -1108,6 +1039,7 @@ func (interp *interpreter) interpretField(
 // by AST node val. The given name is the AST node that corresponds to the name of fld. On success,
 // it returns additional metadata about the field that was set.
 func (interp *interpreter) setOptionField(
+	targetType descriptorpb.FieldOptions_OptionTargetType,
 	mc *protointernal.MessageContext,
 	msg protoreflect.Message,
 	fld protoreflect.FieldDescriptor,
@@ -1120,7 +1052,7 @@ func (interp *interpreter) setOptionField(
 	if sl, ok := v.([]*ast.ValueNode); ok {
 		// handle slices a little differently than the others
 		if fld.Cardinality() != protoreflect.Repeated {
-			return nil, reporter.Errorf(interp.nodeInfo(val), "%vvalue is an array but field is not repeated", mc)
+			return nil, interp.HandleOptionForbiddenErrorf(mc, name, "value is an array but field is not repeated")
 		}
 		origPath := mc.OptAggPath
 		defer func() {
@@ -1135,8 +1067,8 @@ func (interp *interpreter) setOptionField(
 		}
 		for index, item := range sl {
 			mc.OptAggPath = fmt.Sprintf("%s[%d]", origPath, index)
-			value, srcInfo, err := interp.fieldValue(mc, msg, fld, item, insideMsgLiteral, append(pathPrefix, int32(firstIndex+index)))
-			if err != nil {
+			value, srcInfo, err := interp.fieldValue(targetType, mc, msg, fld, item, insideMsgLiteral, append(pathPrefix, int32(firstIndex+index)))
+			if err != nil || !value.IsValid() {
 				return nil, err
 			}
 			if fld.IsMap() {
@@ -1158,8 +1090,8 @@ func (interp *interpreter) setOptionField(
 		pathPrefix = append(pathPrefix, int32(msg.Get(fld).List().Len()))
 	}
 
-	value, srcInfo, err := interp.fieldValue(mc, msg, fld, val, insideMsgLiteral, pathPrefix)
-	if err != nil {
+	value, srcInfo, err := interp.fieldValue(targetType, mc, msg, fld, val, insideMsgLiteral, pathPrefix)
+	if err != nil || !value.IsValid() {
 		return nil, err
 	}
 	if !value.IsValid() {
@@ -1169,7 +1101,7 @@ func (interp *interpreter) setOptionField(
 	if ood := fld.ContainingOneof(); ood != nil {
 		existingFld := msg.WhichOneof(ood)
 		if existingFld != nil && existingFld.Number() != fld.Number() {
-			return nil, reporter.Errorf(interp.nodeInfo(name), "%voneof %q already has field %q set", mc, ood.Name(), fieldName(existingFld))
+			return nil, interp.HandleOptionForbiddenErrorf(mc, name, "oneof %q already has field %q set", ood.Name(), fieldName(existingFld))
 		}
 	}
 
@@ -1182,7 +1114,7 @@ func (interp *interpreter) setOptionField(
 		lv.Append(value)
 	default:
 		if msg.Has(fld) {
-			return nil, reporter.Errorf(interp.nodeInfo(name), "%vnon-repeated option field %s already set", mc, fieldName(fld))
+			return nil, interp.HandleOptionForbiddenErrorf(mc, name, "non-repeated option field %s already set", fieldName(fld))
 		}
 		msg.Set(fld, value)
 	}
@@ -1194,6 +1126,7 @@ func (interp *interpreter) setOptionField(
 // to report source positions in error messages. On success, it returns additional metadata
 // about the field that was set.
 func (interp *interpreter) setOptionFieldFromProto(
+	targetType descriptorpb.FieldOptions_OptionTargetType,
 	mc *protointernal.MessageContext,
 	msg protoreflect.Message,
 	fld protoreflect.FieldDescriptor,
@@ -1207,13 +1140,13 @@ func (interp *interpreter) setOptionFieldFromProto(
 	case protoreflect.EnumKind:
 		num, _, err := interp.enumFieldValueFromProto(mc, fld.Enum(), opt, node)
 		if err != nil {
-			return err
+			return interp.HandleOptionValueErrorf(mc, node, "%w", err)
 		}
 		value = protoreflect.ValueOfEnum(num)
 
 	case protoreflect.MessageKind, protoreflect.GroupKind:
 		if opt.AggregateValue == nil {
-			return reporter.Errorf(interp.nodeInfo(node), "%vexpecting message, got %s", mc, optionValueKind(opt))
+			return interp.HandleOptionValueErrorf(mc, node, "expecting message, got %s", optionValueKind(opt))
 		}
 		// We must parse the text format from the aggregate value string
 		var elem protoreflect.Message
@@ -1230,13 +1163,16 @@ func (interp *interpreter) setOptionFieldFromProto(
 			AllowPartial: true,
 		}.Unmarshal([]byte(opt.GetAggregateValue()), elem.Interface())
 		if err != nil {
-			return reporter.Errorf(interp.nodeInfo(node), "%vfailed to parse message literal %w", mc, err)
+			return interp.HandleOptionValueErrorf(mc, node, "failed to parse message literal: %w", err)
+		}
+		if err := interp.checkFieldUsagesInMessage(targetType, mc, elem, node); err != nil {
+			return err
 		}
 		value = protoreflect.ValueOfMessage(elem)
 	default:
 		v, err := interp.scalarFieldValueFromProto(mc, descriptorpb.FieldDescriptorProto_Type(k), opt, node)
 		if err != nil {
-			return err
+			return interp.HandleOptionValueErrorf(mc, node, "%w", err)
 		}
 		value = protoreflect.ValueOf(v)
 	}
@@ -1244,7 +1180,7 @@ func (interp *interpreter) setOptionFieldFromProto(
 	if ood := fld.ContainingOneof(); ood != nil {
 		existingFld := msg.WhichOneof(ood)
 		if existingFld != nil && existingFld.Number() != fld.Number() {
-			return reporter.Errorf(interp.nodeInfo(name), "%voneof %q already has field %q set", mc, ood.Name(), fieldName(existingFld))
+			return interp.HandleOptionForbiddenErrorf(mc, node, "oneof %q already has field %q set", ood.Name(), fieldName(existingFld))
 		}
 	}
 
@@ -1256,11 +1192,55 @@ func (interp *interpreter) setOptionFieldFromProto(
 		msg.Mutable(fld).List().Append(value)
 	default:
 		if msg.Has(fld) {
-			return reporter.Errorf(interp.nodeInfo(name), "%vnon-repeated option field %s already set", mc, fieldName(fld))
+			// return interp.reporter.HandleErrorf(interp.nodeInfo(name), "%vnon-repeated option field %s already set", mc, fieldName(fld))
+			return interp.HandleOptionForbiddenErrorf(mc, node, "non-repeated option field %s already set", fieldName(fld))
 		}
 		msg.Set(fld, value)
 	}
 	return nil
+}
+
+// checkFieldUsagesInMessage verifies that all fields present in the given
+// message can be used for the given target type. When an AST is
+// present, we validate each field as it is processed. But without
+// an AST, we unmarshal a message from an uninterpreted option's
+// aggregate value string, and then must make sure that all fields
+// set in that message are valid. This reports an error for each
+// invalid field it encounters and returns a non-nil error if/when
+// the handler returns a non-nil error.
+func (interp *interpreter) checkFieldUsagesInMessage(
+	targetType descriptorpb.FieldOptions_OptionTargetType,
+	mc *protointernal.MessageContext,
+	msg protoreflect.Message,
+	node ast.Node,
+) error {
+	var err error
+	msg.Range(func(fld protoreflect.FieldDescriptor, val protoreflect.Value) bool {
+		err = interp.checkFieldUsage(targetType, mc, fld, node)
+		if err != nil {
+			return false
+		}
+		switch {
+		case fld.IsList() && fld.Message() != nil:
+			listVal := val.List()
+			for i, length := 0, listVal.Len(); i < length; i++ {
+				err = interp.checkFieldUsagesInMessage(targetType, mc, listVal.Get(i).Message(), node)
+				if err != nil {
+					return false
+				}
+			}
+		case fld.IsMap() && fld.MapValue().Message() != nil:
+			mapVal := val.Map()
+			mapVal.Range(func(_ protoreflect.MapKey, val protoreflect.Value) bool {
+				err = interp.checkFieldUsagesInMessage(targetType, mc, val.Message(), node)
+				return err == nil
+			})
+		case !fld.IsMap() && fld.Message() != nil:
+			err = interp.checkFieldUsagesInMessage(targetType, mc, val.Message(), node)
+		}
+		return err == nil
+	})
+	return err
 }
 
 func setMapEntry(
@@ -1304,6 +1284,9 @@ type msgLiteralResolver struct {
 }
 
 func (r *msgLiteralResolver) FindMessageByName(message protoreflect.FullName) (protoreflect.MessageType, error) {
+	if r.interp.resolver == nil {
+		return nil, protoregistry.NotFound
+	}
 	return r.interp.resolver.FindMessageByName(message)
 }
 
@@ -1321,6 +1304,9 @@ func (r *msgLiteralResolver) FindMessageByURL(url string) (protoreflect.MessageT
 }
 
 func (r *msgLiteralResolver) FindExtensionByName(field protoreflect.FullName) (protoreflect.ExtensionType, error) {
+	if r.interp.resolver == nil {
+		return nil, protoregistry.NotFound
+	}
 	// In a message literal, extension name may be partially qualified, relative to package.
 	// So we have to search through package scopes.
 	pkg := r.pkg
@@ -1342,6 +1328,9 @@ func (r *msgLiteralResolver) FindExtensionByName(field protoreflect.FullName) (p
 }
 
 func (r *msgLiteralResolver) FindExtensionByNumber(message protoreflect.FullName, field protoreflect.FieldNumber) (protoreflect.ExtensionType, error) {
+	if r.interp.resolver == nil {
+		return nil, protoregistry.NotFound
+	}
 	return r.interp.resolver.FindExtensionByNumber(message, field)
 }
 
@@ -1400,7 +1389,12 @@ func optionValueKind(opt *descriptorpb.UninterpretedOption) string {
 
 // fieldValue computes a compile-time value (constant or list or message literal) for the given
 // AST node val. The value in val must be assignable to the field fld.
+//
+// If the returned value is not valid, then an error occurred during processing.
+// The returned err may be nil, however, as any errors will already have been
+// handled (so the resulting error could be nil if the handler returned nil).
 func (interp *interpreter) fieldValue(
+	targetType descriptorpb.FieldOptions_OptionTargetType,
 	mc *protointernal.MessageContext,
 	msg protoreflect.Message,
 	fld protoreflect.FieldDescriptor,
@@ -1413,7 +1407,7 @@ func (interp *interpreter) fieldValue(
 	case protoreflect.EnumKind:
 		num, _, err := interp.enumFieldValue(mc, fld.Enum(), val, insideMsgLiteral)
 		if err != nil {
-			return protoreflect.Value{}, sourceinfo.OptionSourceInfo{}, err
+			return protoreflect.Value{}, sourceinfo.OptionSourceInfo{}, interp.handler.HandleError(err)
 		}
 		interp.indexEnumValueRef(fld, val)
 		return protoreflect.ValueOfEnum(num), newSrcInfo(pathPrefix, nil), nil
@@ -1434,15 +1428,15 @@ func (interp *interpreter) fieldValue(
 				// Normal message field
 				childMsg = msg.NewField(fld).Message()
 			}
-			return interp.messageLiteralValue(mc, aggs, childMsg, pathPrefix)
+			return interp.messageLiteralValue(targetType, mc, aggs, childMsg, pathPrefix)
 		}
 		return protoreflect.Value{}, sourceinfo.OptionSourceInfo{},
-			reporter.Errorf(interp.nodeInfo(val), "%vexpecting message, got %s", mc, valueKind(v))
+			interp.HandleOptionValueErrorf(mc, val, "expecting message, got %s", valueKind(v))
 
 	default:
 		v, err := interp.scalarFieldValue(mc, descriptorpb.FieldDescriptorProto_Type(k), val, insideMsgLiteral)
 		if err != nil {
-			return protoreflect.Value{}, sourceinfo.OptionSourceInfo{}, err
+			return protoreflect.Value{}, sourceinfo.OptionSourceInfo{}, interp.handler.HandleError(err)
 		}
 		return protoreflect.ValueOf(v), newSrcInfo(pathPrefix, nil), nil
 	}
@@ -1822,7 +1816,13 @@ func descriptorType(m proto.Message) string {
 	}
 }
 
+// messageLiteralValue processes a message literal value.
+//
+// If the returned value is not valid, then an error occurred during processing.
+// The returned err may be nil, however, as any errors will already have been
+// handled (so the resulting error could be nil if the handler returned nil).
 func (interp *interpreter) messageLiteralValue(
+	targetType descriptorpb.FieldOptions_OptionTargetType,
 	mc *protointernal.MessageContext,
 	fieldNodes []*ast.MessageFieldNode,
 	msg protoreflect.Message,
@@ -1834,6 +1834,7 @@ func (interp *interpreter) messageLiteralValue(
 		mc.OptAggPath = origPath
 	}()
 	flds := make(map[*ast.MessageFieldNode]*sourceinfo.OptionSourceInfo, len(fieldNodes))
+	var hadError bool
 	for _, fieldNode := range fieldNodes {
 		if origPath == "" {
 			mc.OptAggPath = fieldNode.Name.Value()
@@ -1842,12 +1843,55 @@ func (interp *interpreter) messageLiteralValue(
 		}
 		if fieldNode.Name.IsAnyTypeReference() {
 			if len(fieldNodes) > 1 {
-				return protoreflect.Value{}, sourceinfo.OptionSourceInfo{},
-					reporter.Errorf(interp.nodeInfo(fieldNode.Name.UrlPrefix), "%vany type references cannot be repeated or mixed with other fields", mc)
+				err := interp.HandleOptionForbiddenErrorf(mc, fieldNode.Name.UrlPrefix, "any type references cannot be repeated or mixed with other fields")
+				if err != nil {
+					return protoreflect.Value{}, sourceinfo.OptionSourceInfo{}, err
+				}
+				hadError = true
 			}
+
 			if fmd.FullName() != "google.protobuf.Any" {
-				return protoreflect.Value{}, sourceinfo.OptionSourceInfo{},
-					reporter.Errorf(interp.nodeInfo(fieldNode.Name.UrlPrefix), "%vtype references are only allowed for google.protobuf.Any, but this type is %s", mc, fmd.FullName())
+				err := interp.HandleOptionForbiddenErrorf(mc, fieldNode.Name.UrlPrefix, "type references are only allowed for google.protobuf.Any, but this type is %s", fmd.FullName())
+				if err != nil {
+					return protoreflect.Value{}, sourceinfo.OptionSourceInfo{}, err
+				}
+				hadError = true
+				continue
+			}
+			typeURLDescriptor := fmd.Fields().ByNumber(protointernal.AnyTypeURLTag)
+			var err error
+			switch {
+			case typeURLDescriptor == nil:
+				err = fmt.Errorf("message schema is missing type_url field (number %d)", protointernal.AnyTypeURLTag)
+			case typeURLDescriptor.IsList():
+				err = fmt.Errorf("message schema has type_url field (number %d) that is a list but should be singular", protointernal.AnyTypeURLTag)
+			case typeURLDescriptor.Kind() != protoreflect.StringKind:
+				err = fmt.Errorf("message schema has type_url field (number %d) that is %s but should be string", protointernal.AnyTypeURLTag, typeURLDescriptor.Kind())
+			}
+			if err != nil {
+				err := interp.HandleOptionValueErrorf(mc, fieldNode.Name, "%w", err)
+				if err != nil {
+					return protoreflect.Value{}, sourceinfo.OptionSourceInfo{}, err
+				}
+				hadError = true
+				continue
+			}
+			valueDescriptor := fmd.Fields().ByNumber(protointernal.AnyValueTag)
+			switch {
+			case valueDescriptor == nil:
+				err = fmt.Errorf("message schema is missing value field (number %d)", protointernal.AnyValueTag)
+			case valueDescriptor.IsList():
+				err = fmt.Errorf("message schema has value field (number %d) that is a list but should be singular", protointernal.AnyValueTag)
+			case valueDescriptor.Kind() != protoreflect.BytesKind:
+				err = fmt.Errorf("message schema has value field (number %d) that is %s but should be bytes", protointernal.AnyValueTag, valueDescriptor.Kind())
+			}
+			if err != nil {
+				err := interp.HandleOptionValueErrorf(mc, fieldNode.Name, "%w", err)
+				if err != nil {
+					return protoreflect.Value{}, sourceinfo.OptionSourceInfo{}, err
+				}
+				hadError = true
+				continue
 			}
 
 			urlPrefix := fieldNode.Name.UrlPrefix.AsIdentifier()
@@ -1861,108 +1905,140 @@ func (interp *interpreter) messageLiteralValue(
 			// file's transitive closure to find the named message, since that
 			// is what protoc does.
 			if urlPrefix != "type.googleapis.com" && urlPrefix != "type.googleprod.com" {
-				return protoreflect.Value{}, sourceinfo.OptionSourceInfo{},
-					reporter.Errorf(interp.nodeInfo(fieldNode.Name.UrlPrefix), "%vcould not resolve type reference %s", mc, fullURL)
+				err := interp.HandleOptionNotFoundErrorf(mc, fieldNode.Name.UrlPrefix, "could not resolve type reference %s", fullURL)
+				if err != nil {
+					return protoreflect.Value{}, sourceinfo.OptionSourceInfo{}, err
+				}
+				hadError = true
+				continue
 			}
 			anyFields, ok := fieldNode.Val.Value().([]*ast.MessageFieldNode)
 			if !ok {
-				return protoreflect.Value{}, sourceinfo.OptionSourceInfo{},
-					reporter.Errorf(interp.nodeInfo(fieldNode.Val), "%vtype references for google.protobuf.Any must have message literal value", mc)
+				err := interp.HandleOptionForbiddenErrorf(mc, fieldNode.Val, "type references for google.protobuf.Any must have message literal value")
+				if err != nil {
+					return protoreflect.Value{}, sourceinfo.OptionSourceInfo{}, err
+				}
+				hadError = true
+				continue
 			}
 
 			anyMd := resolveDescriptor[protoreflect.MessageDescriptor](interp.resolver, protoreflect.FullName(msgName))
 			if anyMd == nil {
-				return protoreflect.Value{}, sourceinfo.OptionSourceInfo{},
-					reporter.Errorf(interp.nodeInfo(fieldNode.Name), "%vcould not resolve type reference %s", mc, fullURL)
+				err := interp.HandleOptionNotFoundErrorf(mc, fieldNode.Name.UrlPrefix, "could not resolve type reference %s", fullURL)
+				if err != nil {
+					return protoreflect.Value{}, sourceinfo.OptionSourceInfo{}, err
+				}
+				hadError = true
+				continue
 			}
 			// parse the message value
-			msgVal, valueSrcInfo, err := interp.messageLiteralValue(mc, anyFields, dynamicpb.NewMessage(anyMd), append(pathPrefix, protointernal.AnyValueTag))
+			msgVal, valueSrcInfo, err := interp.messageLiteralValue(targetType, mc, anyFields, dynamicpb.NewMessage(anyMd), append(pathPrefix, protointernal.AnyValueTag))
 			if err != nil {
 				return protoreflect.Value{}, sourceinfo.OptionSourceInfo{}, err
-			}
-
-			typeURLDescriptor := fmd.Fields().ByNumber(protointernal.AnyTypeURLTag)
-			if typeURLDescriptor == nil || typeURLDescriptor.Kind() != protoreflect.StringKind {
-				return protoreflect.Value{}, sourceinfo.OptionSourceInfo{},
-					reporter.Errorf(interp.nodeInfo(fieldNode.Name), "%vfailed to set type_url string field on Any: %w", mc, err)
-			}
-			typeURLVal := protoreflect.ValueOfString(fullURL)
-			msg.Set(typeURLDescriptor, typeURLVal)
-			valueDescriptor := fmd.Fields().ByNumber(protointernal.AnyValueTag)
-			if valueDescriptor == nil || valueDescriptor.Kind() != protoreflect.BytesKind {
-				return protoreflect.Value{}, sourceinfo.OptionSourceInfo{},
-					reporter.Errorf(interp.nodeInfo(fieldNode.Name), "%vfailed to set value bytes field on Any: %w", mc, err)
+			} else if !msgVal.IsValid() {
+				hadError = true
+				continue
 			}
 
 			b, err := (proto.MarshalOptions{Deterministic: true}).Marshal(msgVal.Message().Interface())
 			if err != nil {
-				return protoreflect.Value{}, sourceinfo.OptionSourceInfo{},
-					reporter.Errorf(interp.nodeInfo(fieldNode.Val), "%vfailed to serialize message value: %w", mc, err)
+				err := interp.HandleOptionValueErrorf(mc, fieldNode.Val, "failed to serialize message value: %w", err)
+				if err != nil {
+					return protoreflect.Value{}, sourceinfo.OptionSourceInfo{}, err
+				}
+				hadError = true
+				continue
 			}
 
-			interp.descriptorIndex.TypeReferenceURLsToMessageDescriptors[fieldNode.Name] = anyMd
-			msg.Set(valueDescriptor, protoreflect.ValueOfBytes(b))
-			flds[fieldNode] = &valueSrcInfo
-		} else {
-			var ffld protoreflect.FieldDescriptor
-			var err error
-			if fieldNode.Name.IsExtension() {
-				n := interp.file.ResolveMessageLiteralExtensionName(fieldNode.Name.Name)
-				if n == "" {
-					// this should not be possible!
-					n = string(fieldNode.Name.Name.AsIdentifier())
-				}
-				ffld, err = interp.resolveExtensionType(n)
-				if errors.Is(err, protoregistry.NotFound) {
-					// may need to qualify with package name
-					// (this should not be necessary!)
-					pkg := mc.File.FileDescriptorProto().GetPackage()
-					if pkg != "" {
-						ffld, err = interp.resolveExtensionType(pkg + "." + n)
-					}
-				}
-			} else {
-				ffld = fmd.Fields().ByName(protoreflect.Name(fieldNode.Name.Value()))
-				if ffld == nil {
-					err = protoregistry.NotFound
-					// It could be a proto2 group, where the text format refers to the group type
-					// name, and the field name is the lower-cased form of that.
-					ffld = fmd.Fields().ByName(protoreflect.Name(strings.ToLower(fieldNode.Name.Value())))
-					if ffld != nil {
-						// In editions, we support using the group type name only for fields that
-						// "look like" proto2 groups.
-						if protoreflect.Name(fieldNode.Name.Value()) == ffld.Message().Name() && // text format uses type name
-							ffld.Message().FullName().Parent() == ffld.FullName().Parent() && // message and field declared in same scope
-							ffld.Kind() == protoreflect.GroupKind /* uses delimited encoding */ {
-							// This one looks like a proto2 group, so it's a keeper.
-							err = nil
-						} else {
-							// It doesn't look like a proto2 group, so this is not a match.
-							ffld = nil
-						}
-					}
-				}
+			// Success!
+			if !hadError {
+				interp.descriptorIndex.TypeReferenceURLsToMessageDescriptors[fieldNode.Name] = anyMd
+				msg.Set(typeURLDescriptor, protoreflect.ValueOfString(fullURL))
+				msg.Set(valueDescriptor, protoreflect.ValueOfBytes(b))
+				flds[fieldNode] = &valueSrcInfo
 			}
+			continue
+		}
+
+		// Not expanded Any syntax; handle normal field.
+		var ffld protoreflect.FieldDescriptor
+		var err error
+		if fieldNode.Name.IsExtension() {
+			n := interp.file.ResolveMessageLiteralExtensionName(fieldNode.Name.Name)
+			if n == "" {
+				// this should not be possible!
+				n = string(fieldNode.Name.Name.AsIdentifier())
+			}
+			ffld, err = interp.resolveExtensionType(n)
 			if errors.Is(err, protoregistry.NotFound) {
-				return protoreflect.Value{}, sourceinfo.OptionSourceInfo{},
-					reporter.Errorf(interp.nodeInfo(fieldNode.Name), "%vfield %s not found", mc, string(fieldNode.Name.Name.AsIdentifier()))
-			} else if err != nil {
-				return protoreflect.Value{}, sourceinfo.OptionSourceInfo{},
-					reporter.Error(interp.nodeInfo(fieldNode.Name), err)
+				// may need to qualify with package name
+				// (this should not be necessary!)
+				pkg := mc.File.FileDescriptorProto().GetPackage()
+				if pkg != "" {
+					ffld, err = interp.resolveExtensionType(pkg + "." + n)
+				}
 			}
-			if fieldNode.Sep == nil && ffld.Message() == nil {
-				// If there is no separator, the field type should be a message.
-				// Otherwise, it is an error in the text format.
-				return protoreflect.Value{}, sourceinfo.OptionSourceInfo{},
-					reporter.Errorf(interp.nodeInfo(fieldNode.Val), "syntax error: unexpected value, expecting ':'")
+		} else {
+			ffld = fmd.Fields().ByName(protoreflect.Name(fieldNode.Name.Value()))
+			if ffld == nil {
+				err = protoregistry.NotFound
+				// It could be a proto2 group, where the text format refers to the group type
+				// name, and the field name is the lower-cased form of that.
+				ffld = fmd.Fields().ByName(protoreflect.Name(strings.ToLower(fieldNode.Name.Value())))
+				if ffld != nil {
+					// In editions, we support using the group type name only for fields that
+					// "look like" proto2 groups.
+					if protoreflect.Name(fieldNode.Name.Value()) == ffld.Message().Name() && // text format uses type name
+						ffld.Message().FullName().Parent() == ffld.FullName().Parent() && // message and field declared in same scope
+						ffld.Kind() == protoreflect.GroupKind /* uses delimited encoding */ {
+						// This one looks like a proto2 group, so it's a keeper.
+						err = nil
+					} else {
+						// It doesn't look like a proto2 group, so this is not a match.
+						ffld = nil
+					}
+				}
 			}
-			srcInfo, err := interp.setOptionField(mc, msg, ffld, fieldNode.Name, fieldNode.Val, true, append(pathPrefix, int32(ffld.Number())))
+		}
+		if errors.Is(err, protoregistry.NotFound) {
+			err := interp.HandleOptionNotFoundErrorf(mc, fieldNode.Name, "field %s not found", string(fieldNode.Name.Name.AsIdentifier()))
 			if err != nil {
 				return protoreflect.Value{}, sourceinfo.OptionSourceInfo{}, err
 			}
+			hadError = true
+			continue
+		} else if err != nil {
+			err := interp.HandleOptionNotFoundErrorf(mc, fieldNode.Name, "%v", err)
+			if err != nil {
+				return protoreflect.Value{}, sourceinfo.OptionSourceInfo{}, err
+			}
+			hadError = true
+			continue
+		}
+		if err := interp.checkFieldUsage(targetType, mc, ffld, fieldNode.Name); err != nil {
+			return protoreflect.Value{}, sourceinfo.OptionSourceInfo{}, err
+		}
+		if fieldNode.Sep == nil && ffld.Message() == nil {
+			// If there is no separator, the field type should be a message.
+			// Otherwise, it is an error in the text format.
+			err := interp.HandleOptionValueErrorf(mc, fieldNode.Val, "unexpected value, expecting ':'")
+			if err != nil {
+				return protoreflect.Value{}, sourceinfo.OptionSourceInfo{}, err
+			}
+			hadError = true
+			continue
+		}
+		srcInfo, err := interp.setOptionField(targetType, mc, msg, ffld, fieldNode.Name, fieldNode.Val, true, append(pathPrefix, int32(ffld.Number())))
+		if err != nil {
+			return protoreflect.Value{}, sourceinfo.OptionSourceInfo{}, err
+		}
+		if srcInfo != nil {
 			interp.descriptorIndex.FieldReferenceNodesToFieldDescriptors[fieldNode] = ffld
 			flds[fieldNode] = srcInfo
 		}
+	}
+	if hadError {
+		return protoreflect.Value{}, sourceinfo.OptionSourceInfo{}, nil
 	}
 	return protoreflect.ValueOfMessage(msg),
 		newSrcInfo(pathPrefix, &sourceinfo.MessageLiteralSourceInfo{Fields: flds}),
