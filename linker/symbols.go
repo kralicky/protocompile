@@ -367,12 +367,15 @@ func (ps *packageSymbols) deleteFile(fd protoreflect.FileDescriptor, handler *re
 }
 
 func (s *Symbols) importPackages(pkgSpan ast.SourceSpan, pkg protoreflect.FullName, handler *reporter.Handler) (*packageSymbols, error) {
-	parts := splitAccumulated(pkg)
-
 	cur := &s.pkgTrie
-	for _, p := range parts {
+	enumerator := nameEnumerator{name: pkg}
+	for {
+		p, ok := enumerator.next()
+		if !ok {
+			return cur, nil
+		}
 		var err error
-		cur, err = cur.importPackage(pkgSpan, protoreflect.FullName(p), handler)
+		cur, err = cur.importPackage(pkgSpan, p, handler)
 		if err != nil {
 			return nil, err
 		}
@@ -380,23 +383,6 @@ func (s *Symbols) importPackages(pkgSpan ast.SourceSpan, pkg protoreflect.FullNa
 			return nil, nil
 		}
 	}
-
-	return cur, nil
-}
-
-// returns a list of all fully-qualified package names up to and including the
-// given package name. For example, for the package "foo.bar.baz", this would
-// return ["foo", "foo.bar", "foo.bar.baz"]. If the package name is empty, this
-// returns an empty list.
-func splitAccumulated(pkg protoreflect.FullName) []string {
-	if pkg == "" {
-		return nil
-	}
-	parts := strings.Split(string(pkg), ".")
-	for i := 1; i < len(parts); i++ {
-		parts[i] = parts[i-1] + "." + parts[i]
-	}
-	return parts
 }
 
 func (ps *packageSymbols) importPackage(pkgSpan ast.SourceSpan, pkg protoreflect.FullName, handler *reporter.Handler) (*packageSymbols, error) {
@@ -427,12 +413,15 @@ func (s *Symbols) getPackage(pkg protoreflect.FullName) *packageSymbols {
 		return nil
 	}
 
-	parts := splitAccumulated(pkg)
-
 	cur := &s.pkgTrie
-	for _, p := range parts {
+	enumerator := nameEnumerator{name: pkg}
+	for {
+		p, ok := enumerator.next()
+		if !ok {
+			return cur
+		}
 		cur.mu.RLock()
-		next := cur.children[protoreflect.FullName(p)]
+		next := cur.children[p]
 		cur.mu.RUnlock()
 
 		if next == nil {
@@ -440,8 +429,6 @@ func (s *Symbols) getPackage(pkg protoreflect.FullName) *packageSymbols {
 		}
 		cur = next
 	}
-
-	return cur
 }
 
 func reportSymbolCollision(sym symbolEntry, fqn protoreflect.FullName, additionIsEnumVal bool, existing symbolEntry, handler *reporter.Handler) error {
@@ -845,4 +832,45 @@ func (s *Symbols) AddExtension(pkg, extendee protoreflect.FullName, tag protoref
 		s.pkgTrie.exts[extNum] = span // also add to global map
 	}
 	return nil
+}
+
+// Lookup finds the registered location of the given name. If the given name has
+// not been seen/registered, nil is returned.
+func (s *Symbols) Lookup(name protoreflect.FullName) ast.SourceSpan {
+	if pkgSyms := s.getPackage(name.Parent()); pkgSyms != nil {
+		if entry, ok := pkgSyms.symbols[name]; ok {
+			return entry.span
+		}
+	}
+	return nil
+}
+
+// LookupExtension finds the registered location of the given extension. If the given
+// extension has not been seen/registered, nil is returned.
+func (s *Symbols) LookupExtension(messageName protoreflect.FullName, extensionNumber protoreflect.FieldNumber) ast.SourceSpan {
+	if pkgSyms := s.getPackage(messageName.Parent()); pkgSyms != nil {
+		if entry, ok := pkgSyms.exts[extNumber{messageName, extensionNumber}]; ok {
+			return entry
+		}
+	}
+	return nil
+}
+
+type nameEnumerator struct {
+	name  protoreflect.FullName
+	start int
+}
+
+func (e *nameEnumerator) next() (protoreflect.FullName, bool) {
+	if e.start < 0 {
+		return "", false
+	}
+	pos := strings.IndexByte(string(e.name[e.start:]), '.')
+	if pos == -1 {
+		e.start = -1
+		return e.name, true
+	}
+	pos += e.start
+	e.start = pos + 1
+	return e.name[:pos], true
 }
