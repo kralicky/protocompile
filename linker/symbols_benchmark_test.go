@@ -21,7 +21,7 @@ import (
 )
 
 func BenchmarkSymbols(b *testing.B) {
-	s := &Symbols{}
+	s := NewSymbolTable()
 	_, err := s.importPackages(nil, "foo.bar.baz.fizz.buzz.frob.nitz", nil)
 	require.NoError(b, err)
 	for i := 0; i < b.N; i++ {

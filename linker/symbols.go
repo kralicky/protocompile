@@ -22,12 +22,11 @@ import (
 	"strings"
 	"sync"
 
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/kralicky/protocompile/ast"
 	"github.com/kralicky/protocompile/protointernal"
+	"github.com/kralicky/protocompile/protoutil"
 	"github.com/kralicky/protocompile/reporter"
 	"github.com/kralicky/protocompile/walk"
 )
@@ -514,6 +513,10 @@ func sourceSpanFor(d protoreflect.Descriptor) ast.SourceSpan {
 	if !ok {
 		return ast.UnknownSpan(file.Path())
 	}
+	if result, ok := file.(*result); ok {
+		return nameSpan(result.FileNode(), result.Node(protoutil.ProtoFromDescriptor(d)))
+	}
+
 	namePath := path
 	switch d.(type) {
 	case protoreflect.FieldDescriptor:
@@ -734,17 +737,18 @@ func (ps *packageSymbols) importResult(r *result, handler *reporter.Handler) (bo
 	}
 
 	// second pass: commit all symbols
-	ps.commitResultLocked(r)
+	ps.commitFileLocked(r)
 
 	return true, nil
 }
 
 func (ps *packageSymbols) checkResultLocked(r *result, handler *reporter.Handler) error {
 	resultSyms := map[protoreflect.FullName]symbolEntry{}
-	return walk.DescriptorProtos(r.FileDescriptorProto(), func(fqn protoreflect.FullName, d proto.Message) error {
-		_, isEnumVal := d.(*descriptorpb.EnumValueDescriptorProto)
+	return walk.Descriptors(r, func(d protoreflect.Descriptor) error {
+		_, isEnumVal := d.(protoreflect.EnumValueDescriptor)
 		file := r.FileNode()
-		node := r.Node(d)
+		fqn := d.FullName()
+		node := r.Node(protoutil.ProtoFromDescriptor(d))
 		span := nameSpan(file, node)
 		// check symbols already in this symbol table
 		if existing, ok := ps.symbols[fqn]; ok {
@@ -793,15 +797,9 @@ func nameSpan(file *ast.FileNode, n ast.Node) ast.SourceSpan {
 	}
 }
 
-func (ps *packageSymbols) commitResultLocked(r *result) {
-	_ = walk.DescriptorProtos(r.FileDescriptorProto(), func(fqn protoreflect.FullName, d proto.Message) error {
-		span := nameSpan(r.FileNode(), r.Node(d))
-		_, isEnumValue := d.(protoreflect.EnumValueDescriptor)
-		ps.symbols[fqn] = symbolEntry{span: span, isEnumValue: isEnumValue}
-		return nil
-	})
-}
-
+// AddExtension records the given extension, which is used to ensure that no two files
+// attempt to extend the same message using the same tag. The given pkg should be the
+// package that defines extendee.
 func (s *Symbols) AddExtension(pkg, extendee protoreflect.FullName, tag protoreflect.FieldNumber, span ast.SourceSpan, handler *reporter.Handler) error {
 	if pkg != "" {
 		if !strings.HasPrefix(string(extendee), string(pkg)+".") {

@@ -120,8 +120,10 @@ dependencies_ok:
 		resolvedReferences:   map[protoreflect.Descriptor][]ast.NodeReference{},
 		extensionsByMessage:  map[protoreflect.FullName][]protoreflect.ExtensionDescriptor{},
 	}
+	// First, we create the hierarchy of descendant descriptors.
+	r.createDescendants()
 
-	// First, we put all symbols into a single pool, which lets us ensure there
+	// Then we can put all symbols into a single pool, which lets us ensure there
 	// are no duplicate symbols and will also let us resolve and revise all type
 	// references in next step.
 	var err error
