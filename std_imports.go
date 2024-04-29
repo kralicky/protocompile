@@ -20,7 +20,8 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
-	_ "google.golang.org/protobuf/types/known/anypb" // link in packages that include the standard protos included with protoc.
+	_ "google.golang.org/protobuf/types/gofeaturespb" // link in packages that include the standard protos included with protoc.
+	_ "google.golang.org/protobuf/types/known/anypb"
 	_ "google.golang.org/protobuf/types/known/apipb"
 	_ "google.golang.org/protobuf/types/known/durationpb"
 	_ "google.golang.org/protobuf/types/known/emptypb"
@@ -31,6 +32,8 @@ import (
 	_ "google.golang.org/protobuf/types/known/typepb"
 	_ "google.golang.org/protobuf/types/known/wrapperspb"
 	_ "google.golang.org/protobuf/types/pluginpb"
+
+	"github.com/kralicky/protocompile/internal/featuresext"
 )
 
 // All files that are included with protoc are also included with this package
@@ -49,6 +52,7 @@ func init() {
 		"google/protobuf/duration.proto",
 		"google/protobuf/empty.proto",
 		"google/protobuf/field_mask.proto",
+		"google/protobuf/go_features.proto",
 		"google/protobuf/source_context.proto",
 		"google/protobuf/struct.proto",
 		"google/protobuf/timestamp.proto",
@@ -69,6 +73,36 @@ func init() {
 			msg := msgs.Get(i)
 			wellKnownMessages[msg.FullName()] = true
 		}
+	}
+
+	otherFeatures := []struct {
+		Name          string
+		GetDescriptor func() (protoreflect.FileDescriptor, error)
+	}{
+		{
+			Name:          "google/protobuf/cpp_features.proto",
+			GetDescriptor: featuresext.CppFeaturesDescriptor,
+		},
+		{
+			Name:          "google/protobuf/java_features.proto",
+			GetDescriptor: featuresext.JavaFeaturesDescriptor,
+		},
+	}
+	for _, feature := range otherFeatures {
+		// First see if the program has generated Go code for this
+		// file linked in:
+		fd, err := protoregistry.GlobalFiles.FindFileByPath(feature.Name)
+		if err == nil {
+			standardImports[feature.Name] = protodesc.ToFileDescriptorProto(fd)
+			continue
+		}
+		fd, err = feature.GetDescriptor()
+		if err != nil {
+			// For these extensions to FeatureSet, we are lenient. If
+			// we can't load them, just ignore them.
+			continue
+		}
+		standardImports[feature.Name] = protodesc.ToFileDescriptorProto(fd)
 	}
 }
 
