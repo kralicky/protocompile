@@ -50,6 +50,9 @@ func TestLexer(t *testing.T) {
 	 * block comment
 	 */ /* inline comment */
 
+	option (foo).bar =
+	  "baz";
+
 	message Foo {
 		int32 name = 1 [opt= "\032\x16\n\rfoobar\"zap"		'another\tstring\'s\t']
   }
@@ -147,6 +150,14 @@ func TestLexer(t *testing.T) {
 		{t: _SYNTAX, v: "syntax"},
 		{t: '=', v: '='},
 		{t: _STRING_LIT, v: "proto2"},
+		{t: ';', v: ';', virtual: false},
+
+		// option (foo).bar =
+		//   baz";
+		{t: _OPTION, v: "option"},
+		{t: _EXTENSION_IDENT, v: "(foo).bar"},
+		{t: '=', v: '='},
+		{t: _STRING_LIT, v: "baz"},
 		{t: ';', v: ';', virtual: false},
 
 		{t: _MESSAGE, v: "message"},

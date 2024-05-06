@@ -1581,7 +1581,7 @@ func (l *protoLex) canStartFileElement() bool {
 
 func canDirectlyPrecedeVirtualSemi(c rune) bool {
 	switch c {
-	case ';', '{', '<':
+	case ';', '{', '<', '=':
 		return false
 	}
 	return true
