@@ -8,7 +8,7 @@ require (
 	github.com/plar/go-adaptive-radix-tree v1.0.5
 	github.com/stretchr/testify v1.9.0
 	golang.org/x/sync v0.7.0
-	google.golang.org/protobuf v1.33.1-0.20240422163739-e4ad8f9dfc8b
+	google.golang.org/protobuf v1.34.1
 )
 
 require (

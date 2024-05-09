@@ -7,8 +7,8 @@ require (
 	github.com/jhump/protoreflect v1.14.1 // MUST NOT be updated to v1.15 or higher
 	github.com/kralicky/protocompile v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.9.0
-	golang.org/x/sync v0.6.0
-	google.golang.org/protobuf v1.33.1-0.20240408130810-98873a205002
+	golang.org/x/sync v0.7.0
+	google.golang.org/protobuf v1.34.1
 )
 
 require (

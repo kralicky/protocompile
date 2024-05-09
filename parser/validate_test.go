@@ -16,7 +16,6 @@ package parser
 
 import (
 	"errors"
-	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -25,17 +24,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kralicky/protocompile/editions"
 	"github.com/kralicky/protocompile/internal/protoc"
 	"github.com/kralicky/protocompile/reporter"
 )
-
-func TestMain(m *testing.M) {
-	// Enable just for tests.
-	editions.AllowEditions = true
-	status := m.Run()
-	os.Exit(status)
-}
 
 func TestBasicValidation(t *testing.T) {
 	t.Parallel()
