@@ -40,6 +40,7 @@ import (
 	"google.golang.org/protobuf/types/dynamicpb"
 
 	"github.com/kralicky/protocompile/ast"
+	"github.com/kralicky/protocompile/internal/messageset"
 	"github.com/kralicky/protocompile/linker"
 	"github.com/kralicky/protocompile/parser"
 	"github.com/kralicky/protocompile/protointernal"
@@ -679,7 +680,7 @@ func (interp *interpreter) checkFieldUsage(
 	node ast.Node,
 ) error {
 	msgOpts, _ := fld.ContainingMessage().Options().(*descriptorpb.MessageOptions)
-	if msgOpts.GetMessageSetWireFormat() && !canSerializeMessageSets() {
+	if msgOpts.GetMessageSetWireFormat() && !messageset.CanSupportMessageSets() {
 		err := interp.HandleOptionForbiddenErrorf(mc, node, "field %q may not be used in an option: it uses 'message set wire format' legacy proto1 feature which is not supported", fld.FullName())
 		if err != nil {
 			return err
