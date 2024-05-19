@@ -868,7 +868,7 @@ func (e *nameEnumerator) next() (protoreflect.FullName, bool) {
 	pos := strings.IndexByte(string(e.name[e.start:]), '.')
 	if pos == -1 {
 		e.start = -1
-		return e.name, true
+		return e.name, len(e.name) > 0 // note: changed from upstream `return e.name, true`, bug?
 	}
 	pos += e.start
 	e.start = pos + 1
