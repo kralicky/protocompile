@@ -116,6 +116,22 @@ func TestLexer(t *testing.T) {
 		reserved 1 to max
 	}
 
+	extend google.protobuf.MessageOptions {
+		optional MessageOpt message_opt = 50000;
+	}
+
+	message MessageOpt {
+		optional string str = 1;
+	}
+
+	message Bar {
+		option (message_opt) = {
+			str:
+				"hello" " "
+				"world"
+		}
+	}
+
 	// some strange cases
 	1.543 g12 /* trailing inline comment */
 	000.000
@@ -459,6 +475,59 @@ func TestLexer(t *testing.T) {
 		{t: _INT_LIT, v: uint64(1)},
 		{t: _TO, v: "to"},
 		{t: _MAX, v: "max"},
+		{t: ';', v: ';', virtual: true},
+		{t: '}', v: '}'},
+		{t: ';', v: ';', virtual: true},
+
+		// extend google.protobuf.MessageOptions {
+		//   optional MessageOpt message_opt = 50000;
+		// }
+		{t: _EXTEND, v: "extend"},
+		{t: _QUALIFIED_IDENT, v: "google.protobuf.MessageOptions"},
+		{t: '{', v: '{'},
+		{t: _OPTIONAL, v: "optional"},
+		{t: _SINGULAR_IDENT, v: "MessageOpt"},
+		{t: _SINGULAR_IDENT, v: "message_opt"},
+		{t: '=', v: '='},
+		{t: _INT_LIT, v: uint64(50000)},
+		{t: ';', v: ';'},
+		{t: '}', v: '}'},
+		{t: ';', v: ';', virtual: true},
+
+		// message MessageOpt {
+		//   optional string str = 1;
+		// }
+		{t: _MESSAGE, v: "message"},
+		{t: _SINGULAR_IDENT, v: "MessageOpt"},
+		{t: '{', v: '{'},
+		{t: _OPTIONAL, v: "optional"},
+		{t: _STRING, v: "string"},
+		{t: _SINGULAR_IDENT, v: "str"},
+		{t: '=', v: '='},
+		{t: _INT_LIT, v: uint64(1)},
+		{t: ';', v: ';'},
+		{t: '}', v: '}'},
+		{t: ';', v: ';', virtual: true},
+
+		// message Bar {
+		//   option (message_opt) = {
+		//     str:
+		//       "hello" " "
+		//       "world"
+		//   }
+		// }
+		{t: _MESSAGE, v: "message"},
+		{t: _SINGULAR_IDENT, v: "Bar"},
+		{t: '{', v: '{'},
+		{t: _OPTION, v: "option"},
+		{t: _EXTENSION_IDENT, v: "(message_opt)"},
+		{t: '=', v: '='},
+		{t: '{', v: '{'},
+		{t: _SINGULAR_IDENT, v: "str"},
+		{t: ':', v: ':'},
+		{t: _STRING_LIT, v: "hello world"},
+		{t: ';', v: ';', virtual: true},
+		{t: '}', v: '}'},
 		{t: ';', v: ';', virtual: true},
 		{t: '}', v: '}'},
 		{t: ';', v: ';', virtual: true},

@@ -100,9 +100,10 @@ const (
 	atNextNewline = 1
 	immediate     = 2 | atNextNewline
 
-	atEOF                 = 8
-	onlyIfLastTokenOnLine = 16
-	insertComma           = 32
+	atEOF                   = 8
+	onlyIfLastTokenOnLine   = 16
+	insertComma             = 32
+	skipPrecedingTokenCheck = 64
 )
 
 type protoLex struct {
@@ -309,14 +310,27 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 				l.insertSemi = immediate | insertComma
 			}
 		case ':':
-			if _, ok := l.matchNextRune('}'); ok {
-				if l.peekNewline() {
-					l.insertSemi = atNextNewline | onlyIfLastTokenOnLine
-				} else {
-					l.insertSemi = immediate
+			// if the next rune is ':', insert a semicolon if the following token is
+			// '}' (last field in message literal) or another ident followed by ':'
+			idents, nextRune := l.peekNextIdentsFast(2)
+			if len(idents) > 0 {
+				switch nextRune {
+				case ':':
+					if l.peekNewline() {
+						l.insertSemi = atNextNewline | onlyIfLastTokenOnLine
+					} else {
+						l.insertSemi = immediate
+					}
 				}
 			} else {
-				l.insertSemi = atNextNewline | onlyIfLastTokenOnLine
+				switch nextRune {
+				case '}': // last field in message literal, without a value
+					if l.peekNewline() {
+						l.insertSemi = atNextNewline | onlyIfLastTokenOnLine
+					} else {
+						l.insertSemi = immediate
+					}
+				}
 			}
 		case '\n':
 			if l.insertSemi&atNextNewline != 0 {
@@ -326,12 +340,14 @@ func (l *protoLex) Lex(lval *protoSymType) int {
 				}
 				prev := l.prevSym
 				canInsert := true
-				switch prev := prev.(type) {
-				case *ast.RuneNode:
-					if rn == ';' {
-						canInsert = canDirectlyPrecedeVirtualSemi(prev.Rune)
-					} else {
-						canInsert = canDirectlyPrecedeVirtualComma(prev.Rune)
+				if l.insertSemi&skipPrecedingTokenCheck == 0 {
+					switch prev := prev.(type) {
+					case *ast.RuneNode:
+						if rn == ';' {
+							canInsert = canDirectlyPrecedeVirtualSemi(prev.Rune)
+						} else {
+							canInsert = canDirectlyPrecedeVirtualComma(prev.Rune)
+						}
 					}
 				}
 				if canInsert {
@@ -1704,7 +1720,7 @@ func (l *protoLex) maybeProcessPartialField(ident string) {
 					l.input.readRune()
 					tagRune := l.skipToNextRune()
 					if tagRune < '0' || tagRune > '9' {
-						l.insertSemi |= atNextNewline
+						l.insertSemi |= atNextNewline | skipPrecedingTokenCheck
 					}
 				}
 			}
