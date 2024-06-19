@@ -656,6 +656,9 @@ func (r *result) indexCompoundIdentRefs(fullIdent *ast.CompoundIdentNode, desc p
 				break
 			case protoreflect.MessageDescriptor:
 				r.resolvedReferences[desc] = append(r.resolvedReferences[desc], ast.NewNodeReference(r.AST(), ident))
+			case protoreflect.ExtensionTypeDescriptor:
+				fld := desc.Descriptor()
+				r.resolvedReferences[fld] = append(r.resolvedReferences[fld], ast.NewNodeReference(r.AST(), fullIdent))
 			}
 		}
 		desc = desc.Parent()
