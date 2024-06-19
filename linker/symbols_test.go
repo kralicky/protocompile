@@ -536,3 +536,44 @@ func requireEquivalent(t *testing.T, expected, actual any) {
 	// 	t.Errorf(diff)
 	// }
 }
+
+func TestNameEnumerator(t *testing.T) {
+	// returns a list of all fully-qualified package names up to and including the
+	// given package name. For example, for the package "foo.bar.baz", this would
+	// return ["foo", "foo.bar", "foo.bar.baz"]. If the package name is empty, this
+	// returns an empty list.
+	splitAccumulated := func(pkg protoreflect.FullName) []string {
+		if pkg == "" {
+			return []string{}
+		}
+		parts := strings.Split(string(pkg), ".")
+		for i := 1; i < len(parts); i++ {
+			parts[i] = parts[i-1] + "." + parts[i]
+		}
+		return parts
+	}
+
+	for _, tc := range []struct {
+		pkg  protoreflect.FullName
+		want []string
+	}{
+		{"", nil},
+		{"foo", []string{"foo"}},
+		{"foo.bar", []string{"foo", "foo.bar"}},
+		{"foo.bar.baz", []string{"foo", "foo.bar", "foo.bar.baz"}},
+	} {
+		t.Run(string(tc.pkg), func(t *testing.T) {
+			actual := []string{}
+			e := nameEnumerator{name: tc.pkg}
+			for {
+				part, ok := e.next()
+				if !ok {
+					break
+				}
+				actual = append(actual, string(part))
+			}
+
+			assert.Equal(t, actual, splitAccumulated(tc.pkg))
+		})
+	}
+}

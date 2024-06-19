@@ -65,6 +65,10 @@ type OptionSourceInfo struct {
 	// The source info path to this element. If this element represents a
 	// declaration with an array-literal value, the last element of the
 	// path is the index of the first item in the array.
+	//
+	// This path is relative to the options message. So the first element
+	// is a field number of the options message.
+	//
 	// If the first element is negative, it indicates the number of path
 	// components to remove from the path to the relevant options. This is
 	// used for field pseudo-options, so that the path indicates a field on
@@ -73,8 +77,8 @@ type OptionSourceInfo struct {
 	Path []int32
 	// Children can be an *ArrayLiteralSourceInfo, a *MessageLiteralSourceInfo,
 	// or nil, depending on whether the option's value is an
-	// *ast.ArrayLiteralNode, an *ast.MessageLiteralNode, or neither.
-	// For *ast.ArrayLiteralNode values, this is only populated if the
+	// [*ast.ArrayLiteralNode], an [*ast.MessageLiteralNode], or neither.
+	// For [*ast.ArrayLiteralNode] values, this is only populated if the
 	// value is a non-empty array of messages. (Empty arrays and arrays
 	// of scalar values do not need any additional info.)
 	Children OptionChildrenSourceInfo
@@ -87,7 +91,7 @@ type OptionChildrenSourceInfo interface {
 }
 
 // ArrayLiteralSourceInfo represents source info paths for the child
-// elements of an *ast.ArrayLiteralNode. This value is only useful for
+// elements of an [*ast.ArrayLiteralNode]. This value is only useful for
 // non-empty array literals that contain messages.
 type ArrayLiteralSourceInfo struct {
 	Elements []OptionSourceInfo
@@ -96,7 +100,7 @@ type ArrayLiteralSourceInfo struct {
 func (*ArrayLiteralSourceInfo) isChildSourceInfo() {}
 
 // MessageLiteralSourceInfo represents source info paths for the child
-// elements of an *ast.MessageLiteralNode.
+// elements of an [*ast.MessageLiteralNode].
 type MessageLiteralSourceInfo struct {
 	Fields map[*ast.MessageFieldNode]*OptionSourceInfo
 }

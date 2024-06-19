@@ -20,28 +20,33 @@ package editions
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"google.golang.org/protobuf/encoding/prototext"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/types/dynamicpb"
+)
+
+const (
+	// MinSupportedEdition is the earliest edition supported by this module.
+	// It should be 2023 (the first edition) for the indefinite future.
+	MinSupportedEdition = descriptorpb.Edition_EDITION_2023
+
+	// MaxSupportedEdition is the most recent edition supported by this module.
+	MaxSupportedEdition = descriptorpb.Edition_EDITION_2023
 )
 
 var (
-	// AllowEditions is set to true in tests to enable editions syntax for testing.
-	// This will be removed and editions will be allowed by non-test code once the
-	// implementation is complete.
-	AllowEditions = false
-
 	// SupportedEditions is the exhaustive set of editions that protocompile
 	// can support. We don't allow it to compile future/unknown editions, to
 	// make sure we don't generate incorrect descriptors, in the event that
 	// a future edition introduces a change or new feature that requires
 	// new logic in the compiler.
-	SupportedEditions = map[string]descriptorpb.Edition{
-		"2023": descriptorpb.Edition_EDITION_2023,
-	}
+	SupportedEditions = computeSupportedEditions(MinSupportedEdition, MaxSupportedEdition)
 
 	// FeatureSetDescriptor is the message descriptor for the compiled-in
 	// version (in the descriptorpb package) of the google.protobuf.FeatureSet
@@ -77,7 +82,7 @@ var _ HasFeatures = (*descriptorpb.MethodOptions)(nil)
 // override. If there is no overridden value, it returns a zero value.
 func ResolveFeature(
 	element protoreflect.Descriptor,
-	field protoreflect.FieldDescriptor,
+	fields ...protoreflect.FieldDescriptor,
 ) (protoreflect.Value, error) {
 	for {
 		var features *descriptorpb.FeatureSet
@@ -86,9 +91,25 @@ func ResolveFeature(
 			features = withFeatures.GetFeatures()
 		}
 
-		msgRef := features.ProtoReflect()
-		if msgRef.Has(field) {
-			return msgRef.Get(field), nil
+		msgRef, err := adaptFeatureSet(features, fields[0])
+		if err != nil {
+			return protoreflect.Value{}, err
+		}
+		// Navigate the fields to find the value
+		var val protoreflect.Value
+		for i, field := range fields {
+			if i > 0 {
+				msgRef = val.Message()
+			}
+			if !msgRef.Has(field) {
+				val = protoreflect.Value{}
+				break
+			}
+			val = msgRef.Get(field)
+		}
+		if val.IsValid() {
+			// All fields were set!
+			return val, nil
 		}
 
 		parent := element.Parent()
@@ -229,4 +250,107 @@ func GetFeatureDefault(edition descriptorpb.Edition, container protoreflect.Mess
 		return protoreflect.Value{}, err
 	}
 	return empty.Get(feature), nil
+}
+
+func adaptFeatureSet(msg *descriptorpb.FeatureSet, field protoreflect.FieldDescriptor) (protoreflect.Message, error) {
+	msgRef := msg.ProtoReflect()
+	if field.IsExtension() {
+		// Extensions can always be used directly with the feature set, even if
+		// field.ContainingMessage() != FeatureSetDescriptor.
+		if msgRef.Has(field) || len(msgRef.GetUnknown()) == 0 {
+			return msgRef, nil
+		}
+		// The field is not present, but the message has unrecognized values. So
+		// let's try to parse the unrecognized bytes, just in case they contain
+		// this extension.
+		temp := &descriptorpb.FeatureSet{}
+		unmarshaler := proto.UnmarshalOptions{
+			AllowPartial: true,
+			Resolver:     resolverForExtension{field},
+		}
+		if err := unmarshaler.Unmarshal(msgRef.GetUnknown(), temp); err != nil {
+			return nil, fmt.Errorf("failed to parse unrecognized fields of FeatureSet: %w", err)
+		}
+		return temp.ProtoReflect(), nil
+	}
+
+	if field.ContainingMessage() == FeatureSetDescriptor {
+		// Known field, not dynamically generated. Can directly use with the feature set.
+		return msgRef, nil
+	}
+
+	// If we get here, we have a dynamic field descriptor. We want to copy its
+	// value into a dynamic message, which requires marshalling/unmarshalling.
+	msgField := FeatureSetDescriptor.Fields().ByNumber(field.Number())
+	// We only need to copy over the unrecognized bytes (if any)
+	// and the same field (if present).
+	data := msgRef.GetUnknown()
+	if msgField != nil && msgRef.Has(msgField) {
+		subset := &descriptorpb.FeatureSet{}
+		subset.ProtoReflect().Set(msgField, msgRef.Get(msgField))
+		fieldBytes, err := proto.MarshalOptions{AllowPartial: true}.Marshal(subset)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal FeatureSet field %s to bytes: %w", field.Name(), err)
+		}
+		data = append(data, fieldBytes...)
+	}
+	if len(data) == 0 {
+		// No relevant data to copy over, so we can just return
+		// a zero value message
+		return dynamicpb.NewMessageType(field.ContainingMessage()).Zero(), nil
+	}
+
+	other := dynamicpb.NewMessage(field.ContainingMessage())
+	// We don't need to use a resolver for this step because we know that
+	// field is not an extension. And features are not allowed to themselves
+	// have extensions.
+	if err := (proto.UnmarshalOptions{AllowPartial: true}).Unmarshal(data, other); err != nil {
+		return nil, fmt.Errorf("failed to marshal FeatureSet field %s to bytes: %w", field.Name(), err)
+	}
+	return other, nil
+}
+
+type resolverForExtension struct {
+	ext protoreflect.ExtensionDescriptor
+}
+
+func (r resolverForExtension) FindMessageByName(_ protoreflect.FullName) (protoreflect.MessageType, error) {
+	return nil, protoregistry.NotFound
+}
+
+func (r resolverForExtension) FindMessageByURL(_ string) (protoreflect.MessageType, error) {
+	return nil, protoregistry.NotFound
+}
+
+func (r resolverForExtension) FindExtensionByName(field protoreflect.FullName) (protoreflect.ExtensionType, error) {
+	if field == r.ext.FullName() {
+		return asExtensionType(r.ext), nil
+	}
+	return nil, protoregistry.NotFound
+}
+
+func (r resolverForExtension) FindExtensionByNumber(message protoreflect.FullName, field protoreflect.FieldNumber) (protoreflect.ExtensionType, error) {
+	if message == r.ext.ContainingMessage().FullName() && field == r.ext.Number() {
+		return asExtensionType(r.ext), nil
+	}
+	return nil, protoregistry.NotFound
+}
+
+func asExtensionType(ext protoreflect.ExtensionDescriptor) protoreflect.ExtensionType {
+	if xtd, ok := ext.(protoreflect.ExtensionTypeDescriptor); ok {
+		return xtd.Type()
+	}
+	return dynamicpb.NewExtensionType(ext)
+}
+
+func computeSupportedEditions(min, max descriptorpb.Edition) map[string]descriptorpb.Edition {
+	supportedEditions := map[string]descriptorpb.Edition{}
+	for editionNum := range descriptorpb.Edition_name {
+		edition := descriptorpb.Edition(editionNum)
+		if edition >= min && edition <= max {
+			name := strings.TrimPrefix(edition.String(), "EDITION_")
+			supportedEditions[name] = edition
+		}
+	}
+	return supportedEditions
 }

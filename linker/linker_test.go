@@ -19,34 +19,31 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"unicode"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protodesc"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/kralicky/protocompile"
-	"github.com/kralicky/protocompile/editions"
+	"github.com/kralicky/protocompile/internal/messageset"
 	"github.com/kralicky/protocompile/internal/protoc"
 	"github.com/kralicky/protocompile/linker"
 	"github.com/kralicky/protocompile/protointernal/prototest"
+	"github.com/kralicky/protocompile/protoutil"
 	"github.com/kralicky/protocompile/reporter"
 )
-
-func TestMain(m *testing.M) {
-	// Enable just for tests.
-	editions.AllowEditions = true
-	status := m.Run()
-	os.Exit(status)
-}
 
 func TestSimpleLink(t *testing.T) {
 	t.Parallel()
@@ -125,6 +122,7 @@ func TestLinkerValidation(t *testing.T) {
 		// Expected error message - leave empty if input is expected to succeed
 		expectedErr            string
 		expectedDiffWithProtoc bool
+		expectProtodescFail    bool
 	}{
 		"success_multi_namespace": {
 			input: map[string]string{
@@ -151,7 +149,7 @@ func TestLinkerValidation(t *testing.T) {
 		},
 		"failure_enum_cpp_scope": {
 			input: map[string]string{
-				"foo.proto": "enum foo { bar = 1; baz = 2; } enum fu { bar = 1; baz = 2; }",
+				"foo.proto": "enum foo { bar = 1; baz = 2; } enum fu { bar = 1; }",
 			},
 			expectedErr: `foo.proto:1:42: symbol "bar" already defined at foo.proto:1:12; protobuf uses C++ scoping rules for enum values, so they exist in the scope enclosing the enum`,
 		},
@@ -437,7 +435,44 @@ func TestLinkerValidation(t *testing.T) {
 					extend google.protobuf.FileOptions { optional foo f = 20000; }
 					option (f) = { a: "a" };`,
 			},
-			expectedErr: "foo.proto:1:1: error in file options: some required fields missing: (f).b",
+			expectedErr: "foo.proto:4:1: error in file options: some required fields missing: (f).b",
+		},
+		"failure_option_required_field_unset2": {
+			input: map[string]string{
+				"foo.proto": `
+					import "google/protobuf/descriptor.proto";
+					message foo { required string a = 1; required string b = 2; }
+					extend google.protobuf.FileOptions { optional foo f = 20000; }
+					option (f).a = "a";`,
+			},
+			expectedErr: "foo.proto:4:1: error in file options: some required fields missing: (f).b",
+		},
+		"success_extensions_do_not_inherit_file_field_presence": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					option features.field_presence = IMPLICIT;
+					message Foo {
+					  extensions 1 to 100;
+					}
+					enum Enum {
+					  option features.enum_type = CLOSED;
+					  ZERO = 0;
+					  ONE = 1;
+					}
+					extend Foo {
+					  string s = 1 [default="abc"];
+					  Enum en = 2;
+					  repeated Enum ens = 3;
+					}`,
+			},
+			// This will be fixed before the v27.0 final release but is currently
+			// broken in v27.0-rc1. It reports issues with all three extensions:
+			//    test.proto:12:10: Implicit presence fields can't specify defaults.
+			//    test.proto:13:8: Implicit presence enum fields must always be open.
+			//    test.proto:14:17: Implicit presence enum fields must always be open.
+			// https://github.com/protocolbuffers/protobuf/issues/16664
+			expectedDiffWithProtoc: true,
 		},
 		"failure_message_set_wire_format_scalar": {
 			input: map[string]string{
@@ -449,6 +484,7 @@ func TestLinkerValidation(t *testing.T) {
 			input: map[string]string{
 				"foo.proto": "message Foo { option message_set_wire_format = true; extensions 1 to 100; } extend Foo { optional Foo bar = 1; }",
 			},
+			expectProtodescFail: !messageset.CanSupportMessageSets(),
 		},
 		"failure_tag_out_of_range": {
 			input: map[string]string{
@@ -460,6 +496,7 @@ func TestLinkerValidation(t *testing.T) {
 			input: map[string]string{
 				"foo.proto": "message Foo { option message_set_wire_format = true; extensions 1 to max; } extend Foo { optional Foo bar = 536870912; }",
 			},
+			expectProtodescFail: !messageset.CanSupportMessageSets(),
 		},
 		"failure_message_set_wire_format_repeated": {
 			input: map[string]string{
@@ -536,9 +573,6 @@ func TestLinkerValidation(t *testing.T) {
 					extend google.protobuf.MessageOptions { optional Foo foo = 10001; }
 					message Baz { option (foo) = { bar< name: "abc" > }; }`,
 			},
-			// protoc will allow this in v27.0:
-			// https://github.com/protocolbuffers/protobuf/commit/29c69ff00b58b60e67fcf40fd810009bd39b86c6
-			expectedDiffWithProtoc: true,
 		},
 		"success_group_in_custom_option_msg_literal": {
 			// However, groups MAY be referred by group name (i.e. message name)
@@ -616,9 +650,6 @@ func TestLinkerValidation(t *testing.T) {
 					message Baz { option (foo) = { Bar< name: "abc" > }; }`,
 			},
 			expectedErr: `foo.proto:8:32: message Baz: option (foo): field Bar not found`,
-			// protoc will fix this in v27.0:
-			// https://github.com/protocolbuffers/protobuf/commit/29c69ff00b58b60e67fcf40fd810009bd39b86c6
-			expectedDiffWithProtoc: true,
 		},
 		"failure_not_looks_like_group_in_custom_option_msg_literal_wrong_field_name": {
 			input: map[string]string{
@@ -947,7 +978,10 @@ func TestLinkerValidation(t *testing.T) {
 					  option (foo) = True; option (foo) = False;
 					}`,
 			},
-			expectedErr: "foo.proto:6:18: message Baz: option (foo): expecting bool, got identifier",
+			expectedErr: `foo.proto:6:18: message Baz: option (foo): expecting bool, got identifier` +
+				` && foo.proto:6:36: message Baz: option (foo): expecting bool, got identifier` +
+				` && foo.proto:7:18: message Baz: option (foo): expecting bool, got identifier` +
+				` && foo.proto:7:39: message Baz: option (foo): expecting bool, got identifier`,
 		},
 		"success_message_literals_boolean_names": {
 			// but inside message literals, boolean values can be
@@ -1279,7 +1313,8 @@ func TestLinkerValidation(t *testing.T) {
 					  };
 					}`,
 			},
-			expectedErr: "foo.proto:9:6: message foo.bar.Baz: option (foo.bar.any): any type references cannot be repeated or mixed with other fields",
+			expectedErr: `foo.proto:9:6: message foo.bar.Baz: option (foo.bar.any): any type references cannot be repeated or mixed with other fields` +
+				` && foo.proto:13:6: message foo.bar.Baz: option (foo.bar.any): any type references cannot be repeated or mixed with other fields`,
 		},
 		"failure_scope_type_name": {
 			input: map[string]string{
@@ -1428,6 +1463,10 @@ func TestLinkerValidation(t *testing.T) {
 					  string FOO_BAR = 2;
 					}`,
 			},
+			// protodesc.NewFile is applying overly strict checks on name
+			// collisions in proto3 files.
+			// https://github.com/golang/protobuf/issues/1616
+			expectProtodescFail: true,
 		},
 		"failure_json_name_conflict_leading_underscores": {
 			input: map[string]string{
@@ -2068,7 +2107,8 @@ func TestLinkerValidation(t *testing.T) {
 					service FooService { rpc Do(stream.Foo) returns (stream.Foo); }
 				`,
 			},
-			expectedErr: `test.proto:3:35: method FooService.Do: unknown request type .Foo`,
+			expectedErr: `test.proto:3:35: method FooService.Do: unknown request type .Foo` +
+				` && test.proto:3:56: method FooService.Do: unknown response type .Foo`,
 		},
 		"success_stream_looks_like_name": {
 			input: map[string]string{
@@ -2294,7 +2334,7 @@ func TestLinkerValidation(t *testing.T) {
 					}
 				`,
 			},
-			expectedErr: `test.proto:3:27: feature "enum_type" is allowed on [enum,file], not on field`,
+			expectedErr: `test.proto:3:27: field "google.protobuf.FeatureSet.enum_type" is allowed on [enum,file], not on field`,
 		},
 		"failure_editions_feature_on_wrong_target_type_msg_literal": {
 			input: map[string]string{
@@ -2307,13 +2347,1238 @@ func TestLinkerValidation(t *testing.T) {
 					}
 				`,
 			},
-			expectedErr: `test.proto:4:5: feature "enum_type" is allowed on [enum,file], not on field`,
+			expectedErr: `test.proto:4:5: field "google.protobuf.FeatureSet.enum_type" is allowed on [enum,file], not on field`,
 		},
 		"failure_proto3_enum_zero_value": {
 			input: map[string]string{
 				"test.proto": `syntax = "proto3"; enum Foo { FIRST = 1; }`,
 			},
-			expectedErr: `test.proto:1:39: first value of open enum Foo must be zero`,
+			expectedErr: `test.proto:1:39: enum Foo: proto3 requires that first value of enum have numeric value zero`,
+		},
+		"failure_editions_open_enum_zero_value": {
+			input: map[string]string{
+				"test.proto": `edition = "2023"; enum Foo { FIRST = 1; }`,
+			},
+			expectedErr: `test.proto:1:38: first value of open enum Foo must have numeric value zero`,
+		},
+		"success_extension_declarations": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					import "extendee.proto";
+					package foo;
+					extend A {
+						// No declarations, so not validated.
+						optional bool one = 1;
+						optional string five = 5;
+						optional Msg ten = 10;
+						// But these ones must match declaration.
+						optional int32 eleven = 11;
+						repeated Enum twelve = 12;
+						optional Msg thirteen = 13;
+						optional group Fourteen = 14 { }
+					}
+					enum Enum { ZERO=0; }
+					message Msg { }
+				`,
+				"extendee.proto": `
+					syntax = "proto2";
+					message A {
+						extensions 1 to 10;
+						extensions 11 to 15 [
+							verification=DECLARATION,
+							declaration={
+								number: 11
+								full_name: ".foo.eleven"
+								type: "int32"
+							},
+							declaration={
+								number: 12
+								full_name: ".foo.twelve"
+								type: ".foo.Enum"
+								repeated: true
+							},
+							declaration={
+								number: 13
+								full_name: ".foo.thirteen"
+								type: ".foo.Msg"
+							},
+							declaration={
+								number: 14
+								full_name: ".foo.fourteen"
+								type: ".foo.Fourteen"
+							},
+							declaration={
+								number: 15
+								reserved: true
+							}
+						];
+					}
+				`,
+			},
+		},
+		"success_extension_declaration_without_verification": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					message A {
+						extensions 1 [
+							declaration={
+								number: 1
+								full_name: ".foo.eleven"
+								type: "int32"
+							}
+						];
+					}
+				`,
+			},
+		},
+		"failure_extension_declaration_but_range_unverified": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					message A {
+						extensions 11 [
+							verification=UNVERIFIED,
+							declaration={
+								number: 11
+								full_name: ".foo.eleven"
+								type: "int32"
+							}
+						];
+					}
+				`,
+			},
+			expectedErr: `test.proto:4:17: extension range cannot have declarations and have verification of UNVERIFIED`,
+		},
+		"failure_extension_declaration_without_number": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					message A {
+						extensions 1 [
+							verification=DECLARATION,
+							declaration={
+								full_name: ".foo.bar"
+								type: "int32"
+							}
+						];
+					}
+				`,
+			},
+			expectedErr: `test.proto:5:17: extension declaration is missing required field number`,
+		},
+		"failure_extension_declaration_with_incorrect_number": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					message A {
+						extensions 1 [
+							verification=DECLARATION,
+							declaration={
+								number: 2
+								full_name: ".foo.bar"
+								type: "int32"
+							}
+						];
+					}
+				`,
+			},
+			expectedErr: `test.proto:6:25: extension declaration has number outside the range: 2 not in [1,1]`,
+		},
+		"failure_extension_declaration_with_number_out_of_range": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					message A {
+						extensions 100 to 500 [
+							verification=DECLARATION,
+							declaration={
+								number: 99
+								full_name: ".foo.bar"
+								type: "int32"
+							}
+						];
+					}
+				`,
+			},
+			expectedErr: `test.proto:6:25: extension declaration has number outside the range: 99 not in [100,500]`,
+		},
+		"failure_extension_declaration_with_number_out_of_range2": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					message A {
+						extensions 100 to 500, 1000 to 5000 [
+							verification=DECLARATION,
+							declaration={
+								number: 501
+								full_name: ".foo.bar"
+								type: "int32"
+							}
+						];
+					}
+				`,
+			},
+			expectedErr: `test.proto:6:25: extension declaration has number outside the range: 501 not in [100,500]` +
+				` && test.proto:6:25: extension declaration has number outside the range: 501 not in [1000,5000]`,
+		},
+		"failure_extension_declaration_with_number_out_of_range_multiple_ranges": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					message A {
+						extensions 1 to 3, 5 to 10 [
+							verification=DECLARATION,
+							declaration={
+								number: 3
+								full_name: ".foo.bar"
+								type: "int32"
+							}
+						];
+					}
+				`,
+			},
+			expectedErr: `test.proto:6:25: extension declaration has number outside the range: 3 not in [5,10]; when using declarations, extends statements should indicate only a single span of field numbers`,
+		},
+		"failure_extension_declaration_without_name": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					message A {
+						extensions 1 [
+							verification=DECLARATION,
+							declaration={
+								number: 1
+								type: "int32"
+							}
+						];
+					}
+				`,
+			},
+			expectedErr: `test.proto:5:17: extension declaration that is not marked reserved must have a full_name`,
+		},
+		"failure_extension_declaration_with_name_without_dot": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					message A {
+						extensions 1 [
+							verification=DECLARATION,
+							declaration={
+								number: 1
+								full_name: "foo.bar"
+								type: "int32"
+							}
+						];
+					}
+				`,
+			},
+			expectedErr: `test.proto:7:25: extension declaration full name "foo.bar" should start with a leading dot (.)`,
+		},
+		"failure_extension_declaration_with_invalid_name": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					message A {
+						extensions 1 [
+							verification=DECLARATION,
+							declaration={
+								number: 1
+								full_name: ".123.5-7.Foobar"
+								type: "int32"
+							}
+						];
+					}
+				`,
+			},
+			expectedErr: `test.proto:7:25: extension declaration full name ".123.5-7.Foobar" is not a valid qualified name`,
+		},
+		"failure_extension_declaration_without_type": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					message A {
+						extensions 1 [
+							verification=DECLARATION,
+							declaration={
+								number: 1
+								full_name: ".foo.bar"
+							}
+						];
+					}
+				`,
+			},
+			expectedErr: `test.proto:5:17: extension declaration that is not marked reserved must have a type`,
+		},
+		"failure_extension_declaration_with_type_without_dot": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					message A {
+						extensions 1 [
+							verification=DECLARATION,
+							declaration={
+								number: 1
+								full_name: ".foo.bar"
+								type: "foo.Bar"
+							}
+						];
+					}
+				`,
+			},
+			expectedErr: `test.proto:8:25: extension declaration type "foo.Bar" must be a builtin type or start with a leading dot (.)`,
+		},
+		"failure_extension_declaration_with_invalid_type": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					message A {
+						extensions 1 [
+							verification=DECLARATION,
+							declaration={
+								number: 1
+								full_name: ".foo.bar"
+								type: ".123.Foobar"
+							}
+						];
+					}
+				`,
+			},
+			expectedErr:            `test.proto:8:25: extension declaration type ".123.Foobar" is not a valid qualified name`,
+			expectedDiffWithProtoc: true, // Oops. protoc's name validation seems incomplete
+		},
+		"failure_extension_declaration_with_reserved_should_not_have_name": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					message A {
+						extensions 1 [
+							verification=DECLARATION,
+							declaration={
+								number: 1
+								reserved: true
+								full_name: ".foo.bar"
+							}
+						];
+					}
+				`,
+			},
+			expectedErr: `test.proto:8:25: extension declaration is marked reserved so full_name should not be present`,
+		},
+		"failure_extension_declaration_with_reserved_should_not_have_type": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					message A {
+						extensions 1 [
+							verification=DECLARATION,
+							declaration={
+								number: 1
+								reserved: true
+								type: ".foo.bar"
+							}
+						];
+					}
+				`,
+			},
+			expectedErr: `test.proto:8:25: extension declaration is marked reserved so type should not be present`,
+		},
+		// This exercises the code that finds the relevant node to make sure it track indexes of
+		// repeated fields correctly.
+		"failure_extension_declaration_report_correct_location_with_multiple_declarations": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					message A {
+						extensions 1 to 3 [
+							verification=DECLARATION,
+							declaration={
+								number: 1
+								reserved: true
+							},
+							declaration={
+								number: 2
+								reserved: true
+								type: ".foo.bar"
+							},
+							declaration={
+								number: 3
+								full_name: ".foo.bar"
+								type: ".foo.bar"
+							}
+						];
+					}
+				`,
+			},
+			expectedErr: `test.proto:12:25: extension declaration is marked reserved so type should not be present`,
+		},
+		"failure_extension_declarations_repeated_tags": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					package foo;
+					message A {
+						extensions 1 to 10 [
+							verification=DECLARATION,
+							declaration={
+								number: 1
+								full_name: ".foo.Bar"
+								type: "int32"
+							},
+							declaration={
+								number: 1
+								full_name: ".foo.Baz"
+								type: "string"
+							}
+						];
+					}
+				`,
+			},
+			expectedErr: `test.proto:12:25: extension for tag number 1 already declared at test.proto:7:25`,
+		},
+		"failure_extension_declared_multiple_times": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					package foo;
+					message A {
+						extensions 1 to 10 [
+							verification=DECLARATION,
+							declaration={
+								number: 1
+								full_name: ".foo.Bar"
+								type: "int32"
+							},
+							declaration={
+								number: 5
+								full_name: ".foo.Bar"
+								type: "string"
+							}
+						];
+					}
+				`,
+			},
+			expectedErr: `test.proto:13:25: extension foo.Bar already declared as extending foo.A with tag 1 at test.proto:8:25`,
+		},
+		"failure_extension_declared_multiple_times_across_files": {
+			input: map[string]string{
+				"test1.proto": `
+					syntax = "proto2";
+					package foo;
+					message A {
+						extensions 1 to 10 [
+							verification=DECLARATION,
+							declaration={
+								number: 1
+								full_name: ".foo.Bar"
+								type: "int32"
+							},
+							declaration={
+								number: 5
+								full_name: ".foo.Baz"
+								type: "int32"
+							}
+						];
+					}
+				`,
+				"test2.proto": `
+					syntax = "proto2";
+					import "test1.proto";
+					message B {
+						extensions 1 [
+							verification=DECLARATION,
+							declaration={
+								number: 1
+								full_name: ".foo.Baz"
+								type: "int32"
+							}
+						];
+					}
+				`,
+			},
+			expectedErr: `test2.proto:8:25: extension foo.Baz already declared as extending foo.A with tag 5 at test1.proto:13:25`,
+			// protoc only validates that the same name doesn't appear again inside
+			// the same extendable message
+			expectedDiffWithProtoc: true,
+		},
+		"failure_extension_number_is_reserved": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					package foo;
+					message A {
+						extensions 1 [
+							verification=DECLARATION,
+							declaration={
+								number: 1
+								reserved: true
+							}
+						];
+					}
+					extend A {
+						optional string s = 1;
+					}
+				`,
+			},
+			expectedErr: `test.proto:13:29: cannot use field number 1 for an extension because it is reserved in declaration at test.proto:8:25`,
+		},
+		"failure_extension_name_does_not_match_declaration": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					package foo;
+					message A {
+						extensions 1 [
+							verification=DECLARATION,
+							declaration={
+								number: 1
+								full_name: ".foo.bar"
+								type: "string"
+							}
+						];
+					}
+					extend A {
+						optional string s = 1;
+					}
+				`,
+			},
+			expectedErr: `test.proto:14:25: expected extension with number 1 to be named .foo.bar, not foo.s, per declaration at test.proto:8:25`,
+		},
+		"failure_extension_type_does_not_match_declaration": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					package foo;
+					message A {
+						extensions 1 [
+							verification=DECLARATION,
+							declaration={
+								number: 1
+								full_name: ".foo.bar"
+								type: "string"
+							}
+						];
+					}
+					extend A {
+						optional uint32 bar = 1;
+					}
+				`,
+			},
+			expectedErr: `test.proto:14:18: expected extension with number 1 to have type string, not uint32, per declaration at test.proto:9:25`,
+		},
+		"failure_extension_label_does_not_match_declaration": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					package foo;
+					message A {
+						extensions 1 [
+							verification=DECLARATION,
+							declaration={
+								number: 1
+								full_name: ".foo.bar"
+								type: "string"
+								repeated: true
+							}
+						];
+					}
+					extend A {
+						optional string bar = 1;
+					}
+				`,
+			},
+			expectedErr: `test.proto:15:9: expected extension with number 1 to be repeated, not optional, per declaration at test.proto:10:25`,
+		},
+		"failure_extension_label_does_not_match_declaration2": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					package foo;
+					message A {
+						extensions 1 [
+							verification=DECLARATION,
+							declaration={
+								number: 1
+								full_name: ".foo.bar"
+								type: "string"
+							}
+						];
+					}
+					extend A {
+						repeated string bar = 1;
+					}
+				`,
+			},
+			expectedErr: `test.proto:14:9: expected extension with number 1 to be optional, not repeated, per declaration at test.proto:6:17`,
+		},
+		"failure_extension_matches_no_declaration": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					package foo;
+					message A {
+						extensions 1 to 3 [
+							verification=DECLARATION,
+							declaration={
+								number: 1
+								full_name: ".foo.bar"
+								type: "string"
+							}
+						];
+					}
+					extend A {
+						repeated string bar = 3;
+					}
+				`,
+			},
+			expectedErr: `test.proto:14:31: expected extension with number 3 to be declared in type foo.A, but no declaration found at test.proto:5:17`,
+		},
+		"failure_extension_matches_no_declaration2": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					package foo;
+					message A {
+						extensions 1 to 3 [
+							declaration={
+								number: 1
+								full_name: ".foo.bar"
+								type: "string"
+							}
+						];
+					}
+					extend A {
+						repeated string bar = 3;
+					}
+				`,
+			},
+			expectedErr: `test.proto:13:31: expected extension with number 3 to be declared in type foo.A, but no declaration found at test.proto:4:9`,
+		},
+		"failure_extension_matches_no_declaration3": {
+			input: map[string]string{
+				"test.proto": `
+					syntax = "proto2";
+					package foo;
+					message A {
+						extensions 1 to 3 [
+							verification=DECLARATION
+						];
+					}
+					extend A {
+						repeated string bar = 3;
+					}
+				`,
+			},
+			expectedErr: `test.proto:9:31: expected extension with number 3 to be declared in type foo.A, but no declaration found at test.proto:5:17`,
+		},
+		"success_field_presence": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					package foo;
+					option features.field_presence = IMPLICIT;
+					message A {
+						B b = 1 [features.field_presence = LEGACY_REQUIRED];
+						message B {
+							string s = 1 [features.field_presence = EXPLICIT];
+						}
+						A a = 2 [features.field_presence = EXPLICIT];
+						uint64 u = 3 [features.field_presence = IMPLICIT];
+					}
+				`,
+			},
+		},
+		"failure_field_presence_on_oneof_field": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					package foo;
+					message A {
+						oneof b {
+							string s = 1 [features.field_presence = EXPLICIT];
+							int64 n = 2;
+						}
+					}
+				`,
+			},
+			expectedErr: `test.proto:5:40: oneof fields may not specify field presence`,
+		},
+		"failure_field_presence_on_repeated_field": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					package foo;
+					message A {
+						repeated string s = 1 [features.field_presence = IMPLICIT];
+					}
+				`,
+			},
+			expectedErr: `test.proto:4:41: repeated fields may not specify field presence`,
+		},
+		"failure_field_presence_on_map_field": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					package foo;
+					message A {
+						map<string,string> s = 1 [features.field_presence = IMPLICIT];
+					}
+				`,
+			},
+			expectedErr: `test.proto:4:44: repeated fields may not specify field presence`,
+		},
+		"failure_field_presence_on_message_field": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					package foo;
+					message A {
+						A a = 1 [features.field_presence = IMPLICIT];
+					}
+				`,
+			},
+			expectedErr: `test.proto:4:27: message fields may not specify implicit presence`,
+		},
+		"failure_field_presence_on_extension_field": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					package foo;
+					message A {
+						extensions 1 to 100;
+					}
+					extend A {
+						string s = 1 [features = {
+							field_presence:LEGACY_REQUIRED
+						}];
+					}
+				`,
+			},
+			expectedErr: `test.proto:8:17: extension fields may not specify field presence`,
+		},
+		"failure_field_presence_on_file": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					package foo;
+					option features={
+						field_presence : LEGACY_REQUIRED;
+					};
+					message A {
+						string s = 1;
+					}
+				`,
+			},
+			expectedErr: `test.proto:4:9: LEGACY_REQUIRED field presence cannot be set as the default for a file`,
+		},
+		"success_repeated_field_encoding": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					package foo;
+					option features.repeated_field_encoding=EXPANDED;
+					message A {
+						repeated string s = 1 [features.repeated_field_encoding=EXPANDED];
+						map<string,string> m = 2 [features.repeated_field_encoding=EXPANDED];
+						repeated A a = 3 [features.repeated_field_encoding=EXPANDED];
+						repeated bool b = 4 [features.repeated_field_encoding=PACKED];
+						repeated double d = 5 [features.repeated_field_encoding=PACKED];
+						repeated E e = 6 [features.repeated_field_encoding=PACKED];
+						enum E { ZERO=0; }
+					}
+				`,
+			},
+		},
+		"failure_repeated_field_encoding_not_repeated": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					package foo;
+					message A {
+						string s = 1 [features.repeated_field_encoding=EXPANDED];
+					}
+				`,
+			},
+			expectedErr: `test.proto:4:32: only repeated fields may specify repeated field encoding`,
+		},
+		"failure_repeated_field_encoding_not_packable": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					package foo;
+					message A {
+						repeated string s = 1 [features.repeated_field_encoding=PACKED];
+					}
+				`,
+			},
+			expectedErr: `test.proto:4:41: only repeated primitive fields may specify packed encoding`,
+		},
+		"failure_repeated_field_encoding_not_packable_map": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					package foo;
+					message A {
+						map<string,string> s = 1 [features.repeated_field_encoding=PACKED];
+					}
+				`,
+			},
+			expectedErr: `test.proto:4:44: only repeated primitive fields may specify packed encoding`,
+		},
+		"success_utf8_validation": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					package foo;
+					option features = {
+						utf8_validation:NONE;
+					};
+					message A {
+						string s = 1 [features.utf8_validation=VERIFY];
+						map<string,A> ma = 2 [features.utf8_validation=VERIFY];
+						map<uint32,string> mu = 3 [features.utf8_validation=VERIFY];
+						map<string,string> ms = 4 [features.utf8_validation=VERIFY];
+					}
+				`,
+			},
+		},
+		"failure_utf8_validation_not_string": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					package foo;
+					message A {
+						bytes s = 1 [features.utf8_validation=VERIFY];
+					}
+				`,
+			},
+			expectedErr: `test.proto:4:31: only string fields may specify UTF8 validation`,
+		},
+		"failure_utf8_validation_not_string_map": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					package foo;
+					message A {
+						map<uint32,bytes> m = 1 [features.utf8_validation=VERIFY];
+					}
+				`,
+			},
+			expectedErr: `test.proto:4:43: only string fields may specify UTF8 validation`,
+		},
+		"failure_utf8_validation_java_option": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					package foo;
+					option java_string_check_utf8 = true;
+					message A {
+						map<uint32,bytes> m = 1;
+					}
+				`,
+			},
+			expectedErr: `test.proto:3:8: file option java_string_check_utf8 is not allowed with editions; import "google/protobuf/java_features.proto" and use (pb.java).utf8_validation instead`,
+		},
+		"success_message_encoding": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					package foo;
+					option features.message_encoding = DELIMITED;
+					message A {
+						A a = 1 [features={
+							message_encoding : LENGTH_PREFIXED,
+						}];
+						repeated A as = 2 [features.message_encoding=DELIMITED];
+					}
+				`,
+			},
+		},
+		"failure_message_encoding_not_message": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					package foo;
+					message A {
+						repeated string s = 1 [features={
+							message_encoding : LENGTH_PREFIXED,
+						}];
+					}
+				`,
+			},
+			expectedErr: `test.proto:5:17: only message fields may specify message encoding`,
+		},
+		"failure_message_encoding_map": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					package foo;
+					message A {
+						map<string,string> m = 1 [features={
+							message_encoding : LENGTH_PREFIXED,
+						}];
+					}
+				`,
+			},
+			expectedErr: `test.proto:5:17: only message fields may specify message encoding`,
+		},
+		"success_editions_ctype": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					package foo;
+					message A {
+						string s = 1 [ctype=CORD];
+						bytes b = 2 [ctype=STRING_PIECE];
+						repeated string r = 3 [ctype=STRING];
+						extensions 10 to 100;
+					}
+					extend A {
+						string ext = 10 [ctype=STRING_PIECE];
+					}
+				`,
+			},
+		},
+		"failure_editions_ctype_not_string_or_bytes": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					package foo;
+					message A {
+						uint32 s = 1 [ctype=STRING_PIECE];
+					}
+				`,
+			},
+			expectedErr: `test.proto:4:23: ctype option can only be used on string and bytes fields`,
+		},
+		"failure_editions_ctype_ext_cannot_be_cord": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					package foo;
+					message A {
+						extensions 10 to 100;
+					}
+					extend A {
+						string ext = 10 [ctype=CORD];
+					}
+				`,
+			},
+			expectedErr: `test.proto:7:26: ctype option cannot be CORD for extension fields`,
+		},
+		"success_feature_within_lifetime": {
+			input: map[string]string{
+				"feature.proto": `
+					syntax = "proto2";
+					package google.protobuf;
+					message FileOptions {
+						optional FeatureSet features = 50 [
+							// Ignored on "features" itself, only
+							// validated on fields therein.
+							feature_support = {
+								edition_introduced: EDITION_2024
+							}
+						];
+					}
+					message FeatureSet {
+						optional bool flag = 20 [
+							feature_support = {
+								edition_introduced: EDITION_PROTO2
+								edition_deprecated: EDITION_2024
+								edition_removed: EDITION_99997_TEST_ONLY
+							}
+						];
+						optional bool other = 21 [
+							feature_support = {
+								edition_introduced: EDITION_PROTO2
+								edition_deprecated: EDITION_2024
+								edition_removed: EDITION_99997_TEST_ONLY
+							}
+						];
+					}
+					`,
+				"test.proto": `
+					edition = "2023";
+					import "feature.proto";
+					package foo;
+					option features = { flag: true };
+					option features.other = true;
+					`,
+			},
+		},
+		"success_feature_deprecated": {
+			input: map[string]string{
+				"feature.proto": `
+					syntax = "proto2";
+					package google.protobuf;
+					message FileOptions {
+						optional FeatureSet features = 50 [
+							// Ignored on "features" itself, only
+							// validated on fields therein.
+							feature_support = {
+								edition_introduced: EDITION_PROTO2
+								edition_removed: EDITION_2023
+							}
+						];
+					}
+					message FeatureSet {
+						optional bool flag = 20 [
+							feature_support = {
+								edition_introduced: EDITION_PROTO2
+								edition_deprecated: EDITION_PROTO3
+								deprecation_warning: "foo"
+							}
+						];
+						optional bool other = 21 [
+							feature_support = {
+								edition_introduced: EDITION_PROTO2
+								edition_deprecated: EDITION_PROTO3
+								deprecation_warning: "foo"
+							}
+						];
+					}
+					`,
+				"test.proto": `
+					edition = "2023";
+					import "feature.proto";
+					package foo;
+					option features = { flag: true };
+					option features.other = true;
+					`,
+			},
+		},
+		"failure_feature_not_yet_introduced": {
+			input: map[string]string{
+				"feature.proto": `
+					syntax = "proto2";
+					package google.protobuf;
+					message FileOptions {
+						optional FeatureSet features = 50;
+					}
+					message FeatureSet {
+						optional bool flag = 20 [
+							feature_support = {
+								edition_introduced: EDITION_2024
+							}
+						];
+					}
+					`,
+				"test.proto": `
+					edition = "2023";
+					import "feature.proto";
+					package foo;
+					option features.flag = true;
+					`,
+			},
+			expectedErr: `test.proto:4:1: field "google.protobuf.FeatureSet.flag" was not introduced until edition 2024`,
+		},
+		"failure_feature_not_yet_introduced_msg_literal": {
+			input: map[string]string{
+				"feature.proto": `
+					syntax = "proto2";
+					package google.protobuf;
+					message FileOptions {
+						optional FeatureSet features = 50;
+					}
+					message FeatureSet {
+						optional bool flag = 20 [
+							feature_support = {
+								edition_introduced: EDITION_2024
+							}
+						];
+					}
+					`,
+				"test.proto": `
+					edition = "2023";
+					import "feature.proto";
+					package foo;
+					option features = { flag: true };
+					`,
+			},
+			expectedErr: `test.proto:4:21: field "google.protobuf.FeatureSet.flag" was not introduced until edition 2024`,
+		},
+		"failure_feature_removed": {
+			input: map[string]string{
+				"feature.proto": `
+					syntax = "proto2";
+					package google.protobuf;
+					message FileOptions {
+						optional FeatureSet features = 50;
+					}
+					message FeatureSet {
+						optional bool flag = 20 [
+							feature_support = {
+								edition_removed: EDITION_PROTO3
+							}
+						];
+					}
+					`,
+				"test.proto": `
+					edition = "2023";
+					import "feature.proto";
+					package foo;
+					option features.flag = true;
+					`,
+			},
+			expectedErr: `test.proto:4:1: field "google.protobuf.FeatureSet.flag" was removed in edition proto3`,
+		},
+		"failure_feature_removed_msg_literal": {
+			input: map[string]string{
+				"feature.proto": `
+					syntax = "proto2";
+					package google.protobuf;
+					message FileOptions {
+						optional FeatureSet features = 50;
+					}
+					message FeatureSet {
+						optional bool flag = 20 [
+							feature_support = {
+								edition_removed: EDITION_PROTO3
+							}
+						];
+					}
+					`,
+				"test.proto": `
+					edition = "2023";
+					import "feature.proto";
+					package foo;
+					option features = { flag: true };
+					`,
+			},
+			expectedErr: `test.proto:4:21: field "google.protobuf.FeatureSet.flag" was removed in edition proto3`,
+		},
+		"success_custom_feature_within_lifetime": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					import "google/protobuf/descriptor.proto";
+					package foo;
+					message CustomFeatures {
+						bool flag = 1 [
+							feature_support = {
+								edition_introduced: EDITION_2023
+								edition_deprecated: EDITION_2024
+								edition_removed: EDITION_2024
+							}
+						];
+					}
+					extend google.protobuf.FeatureSet {
+						CustomFeatures custom = 1000;
+					}
+					option features.(custom).flag = true;
+					`,
+			},
+		},
+		"success_custom_feature_deprecated": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					import "google/protobuf/descriptor.proto";
+					package foo;
+					message CustomFeatures {
+						bool flag = 1 [
+							feature_support = {
+								edition_introduced: EDITION_2023
+								edition_deprecated: EDITION_2023
+								edition_removed: EDITION_2024
+							}
+						];
+					}
+					extend google.protobuf.FeatureSet {
+						CustomFeatures custom = 1000;
+					}
+					option features.(custom).flag = true;
+					`,
+			},
+		},
+		"failure_custom_feature_not_yet_introduced": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					import "google/protobuf/descriptor.proto";
+					package foo;
+					message CustomFeatures {
+						bool flag = 1 [
+							feature_support = {
+								edition_introduced: EDITION_2024
+								edition_deprecated: EDITION_2024
+							}
+						];
+					}
+					extend google.protobuf.FeatureSet {
+						CustomFeatures custom = 1000;
+					}
+					option features.(custom).flag = true;
+					`,
+			},
+			expectedErr: `test.proto:15:1: field "foo.CustomFeatures.flag" was not introduced until edition 2024`,
+		},
+		"failure_custom_feature_not_yet_introduced_msg_literal": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					import "google/protobuf/descriptor.proto";
+					package foo;
+					message CustomFeatures {
+						bool flag = 1 [
+							feature_support = {
+								edition_introduced: EDITION_2024
+								edition_deprecated: EDITION_2024
+							}
+						];
+					}
+					extend google.protobuf.FeatureSet {
+						CustomFeatures custom = 1000;
+					}
+					option features.(custom) = { flag: true };
+					`,
+			},
+			expectedErr: `test.proto:15:30: field "foo.CustomFeatures.flag" was not introduced until edition 2024`,
+		},
+		"failure_custom_feature_not_yet_introduced_msg_literal2": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					import "google/protobuf/descriptor.proto";
+					package foo;
+					message CustomFeatures {
+						bool flag = 1 [
+							feature_support = {
+								edition_introduced: EDITION_2024
+								edition_deprecated: EDITION_2024
+							}
+						];
+					}
+					extend google.protobuf.FeatureSet {
+						CustomFeatures custom = 1000;
+					}
+					option features = { [foo.custom]: { flag: true } };
+					`,
+			},
+			expectedErr: `test.proto:15:37: field "foo.CustomFeatures.flag" was not introduced until edition 2024`,
+		},
+		"failure_custom_feature_removed": {
+			input: map[string]string{
+				"test.proto": `
+					edition = "2023";
+					import "google/protobuf/descriptor.proto";
+					package foo;
+					message CustomFeatures {
+						bool flag = 1 [
+							feature_support = {
+								edition_introduced: EDITION_PROTO2
+								edition_removed: EDITION_2023
+							}
+						];
+					}
+					extend google.protobuf.FeatureSet {
+						CustomFeatures custom = 1000;
+					}
+					option features.(custom).flag = true;
+					`,
+			},
+			expectedErr: `test.proto:15:1: field "foo.CustomFeatures.flag" was removed in edition 2023`,
 		},
 	}
 
@@ -2329,64 +3594,102 @@ func TestLinkerValidation(t *testing.T) {
 			for filename, data := range tc.input {
 				tc.input[filename] = removePrefixIndent(data)
 			}
-			_, err := compile(t, tc.input)
-			var panicErr protocompile.PanicError
-			if errors.As(err, &panicErr) {
-				t.Logf("panic! %v\n%s", panicErr.Value, panicErr.Stack)
+			files, errs := compile(t, tc.input)
+
+			actualErrs := make([]string, len(errs))
+			for i := range errs {
+				actualErrs[i] = errs[i].Error()
+			}
+			expectedErrs := strings.Split(tc.expectedErr, "&&")
+			for i, expectedErr := range expectedErrs {
+				expectedErrs[i] = strings.TrimSpace(expectedErr)
 			}
 
 			switch {
 			case tc.expectedErr == "":
-				if err != nil {
-					t.Errorf("expecting no error; instead got error %q", err)
-				}
-			case err == nil:
+				assert.Empty(t, errs, "expecting no error; instead got error:\n%s", strings.Join(actualErrs, "\n"))
+			case len(errs) == 0:
 				t.Errorf("expecting validation error %q; instead got no error", tc.expectedErr)
 			default:
-				// TODO: errors now show a column range, but ignore that for now
-				// there are way too many test cases to update
-				// rewrite "test.proto:\d+:\d+\-\d+:" to "test.proto:$1:$2"
-				msg := err.Error()
-				msg = errRegex.ReplaceAllString(msg, "$1.proto:$2:")
+				if len(expectedErrs) == 1 && len(errs) > 1 && len(errs) == strings.Count(expectedErrs[0], "||")+1 {
+					// We were expecting one or another error, but got all of them. This can
+					// happen since the multiple errors are triggered concurrently and
+					// non-deterministically. When it happens, we sort both lists, since we
+					// otherwise don't know in what order they could arrive.
+					expectedErrs = strings.Split(expectedErrs[0], "||")
+					for i := range expectedErrs {
+						expectedErrs[i] = strings.TrimSpace(expectedErrs[i])
+					}
+					sort.Strings(expectedErrs)
+					sort.Slice(errs, func(i, j int) bool {
+						return errs[i].Error() < errs[j].Error()
+					})
+				}
+				assert.Len(t, errs, len(expectedErrs), "wrong number of errors reported")
+				limit := len(expectedErrs)
+				if limit > len(errs) {
+					limit = len(errs)
+				}
+				for i := 0; i < limit; i++ {
+					err := errs[i]
+					// TODO: errors now show a column range, but ignore that for now
+					// there are way too many test cases to update
+					// rewrite "test.proto:\d+:\d+\-\d+:" to "test.proto:$1:$2"
+					msg := err.Error()
+					msg = errRegex.ReplaceAllString(msg, "$1.proto:$2:")
 
-				if strings.Contains(tc.expectedErr, " || ") {
-					msgs := strings.Split(tc.expectedErr, " || ")
+					var panicErr protocompile.PanicError
+					if errors.As(err, &panicErr) {
+						t.Logf("panic! %v\n%s", panicErr.Value, panicErr.Stack)
+					}
+					expectedErr := expectedErrs[i]
+					msgs := strings.Split(expectedErr, "||")
 					found := false
 					for _, expectedMsg := range msgs {
 						expectedMsg = errRegex.ReplaceAllString(expectedMsg, "$1.proto:$2:")
-						if msg == expectedMsg {
+						if msg == strings.TrimSpace(expectedMsg) {
 							found = true
 							break
 						}
 					}
-					if !found {
-						t.Errorf("expecting validation error %q; instead got: %q", tc.expectedErr, err)
+					var errNum string
+					if len(errs) > 1 {
+						errNum = fmt.Sprintf("#%d", i+1)
 					}
-				} else {
-					tc.expectedErr = errRegex.ReplaceAllString(tc.expectedErr, "$1.proto:$2:")
-					assert.Equal(t, tc.expectedErr, msg, "bad error message")
+					assert.True(t, found, "expecting validation error%s %q; instead got: %q", errNum, expectedErr, err)
 				}
 			}
 
-			// // parse with protoc
-			// passProtoc := testByProtoc(t, tc.input, tc.inputOrder)
-			// if tc.expectedErr == "" {
-			// 	if tc.expectedDiffWithProtoc {
-			// 		// We can explicitly check different result is produced by protoc. When the bug is fixed,
-			// 		// we can change the tc.expectedDiffWithProtoc field to false and delete the comment.
-			// 		require.False(t, passProtoc)
-			// 	} else {
-			// 		// if the test case passes protocompile, it should also pass protoc.
-			// 		require.True(t, passProtoc, "protoc should allow the case")
-			// 	}
-			// } else {
-			// 	if tc.expectedDiffWithProtoc {
-			// 		require.True(t, passProtoc, "expected protoc to allow the case, but it disallows it")
-			// 	} else {
-			// 		// if the test case fails protocompile, it should also fail protoc.
-			// 		require.False(t, passProtoc, "protoc should disallow the case")
-			// 	}
-			// }
+			// Make sure protobuf-go can handle resulting files
+			if len(errs) == 0 && len(files) > 0 {
+				err := convertToProtoreflectDescriptors(files)
+				if tc.expectProtodescFail {
+					// This is a known case where it cannot handle the file.
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+				}
+			}
+
+			// parse with protoc
+			passProtoc := testByProtoc(t, tc.input, tc.inputOrder)
+			if tc.expectedErr == "" {
+				if tc.expectedDiffWithProtoc {
+					// We can explicitly check different result is produced by protoc. When the bug is fixed,
+					// we can change the tc.expectedDiffWithProtoc field to false and delete the comment.
+					require.False(t, passProtoc, "expected protoc to disallow the case, but it allows it")
+				} else {
+					// if the test case passes protocompile, it should also pass protoc.
+					require.True(t, passProtoc, "protoc should allow the case")
+				}
+			} else {
+				if tc.expectedDiffWithProtoc {
+					require.True(t, passProtoc, "expected protoc to allow the case, but it disallows it")
+				} else {
+					// if the test case fails protocompile, it should also fail protoc.
+					require.False(t, passProtoc, "protoc should disallow the case")
+				}
+			}
 		})
 	}
 }
@@ -2414,7 +3717,7 @@ func removePrefixIndent(s string) string {
 	return strings.Join(lines, "\n")
 }
 
-func compile(t *testing.T, input map[string]string) (linker.Files, error) {
+func compile(t *testing.T, input map[string]string) (linker.Files, []error) {
 	t.Helper()
 	acc := func(filename protocompile.ResolvedPath) (io.ReadCloser, error) {
 		f, ok := input[string(filename)]
@@ -2428,16 +3731,36 @@ func compile(t *testing.T, input map[string]string) (linker.Files, error) {
 		names = append(names, protocompile.ResolvedPath(k))
 	}
 
+	// We use a reporter that returns nil, so the compile operation
+	// will always keep going
+	var errsMu sync.Mutex
+	var errs []error
+	rep := reporter.NewReporter(
+		func(err reporter.ErrorWithPos) error {
+			errsMu.Lock()
+			defer errsMu.Unlock()
+			errs = append(errs, err)
+			return nil
+		},
+		nil,
+	)
+
 	compiler := protocompile.Compiler{
 		Resolver: protocompile.WithStandardImports(&protocompile.SourceResolver{
 			Accessor: acc,
 		}),
+		Reporter:       rep,
+		SourceInfoMode: protocompile.SourceInfoExtraOptionLocations,
 	}
-	res, err := compiler.Compile(context.Background(), names...)
-	if err != nil {
-		return nil, err
+	files, err := compiler.Compile(context.Background(), names...)
+	if err != nil && len(errs) == 0 {
+		t.Log("compiler.Compile returned an error but none were reported")
+		return files.Files, []error{err}
 	}
-	return res.Files, nil
+	if err == nil {
+		assert.Empty(t, errs, "compiler.Compile returned no error though %d errors were reported", len(errs))
+	}
+	return files.Files, errs
 }
 
 func TestProto3Enums(t *testing.T) {
@@ -2932,4 +4255,29 @@ func testByProtoc(t *testing.T, files map[string]string, fileNames []string) boo
 	}
 	require.NoError(t, err)
 	return true
+}
+
+func convertToProtoreflectDescriptors(files linker.Files) error {
+	allFiles := make(map[string]*descriptorpb.FileDescriptorProto, len(files))
+	addFileDescriptorsToMap(files, allFiles)
+	fileSlice := make([]*descriptorpb.FileDescriptorProto, 0, len(allFiles))
+	for _, fileProto := range allFiles {
+		fileSlice = append(fileSlice, fileProto)
+	}
+	_, err := protodesc.NewFiles(&descriptorpb.FileDescriptorSet{File: fileSlice})
+	return err
+}
+
+func addFileDescriptorsToMap[F protoreflect.FileDescriptor](files []F, allFiles map[string]*descriptorpb.FileDescriptorProto) {
+	for _, file := range files {
+		if _, exists := allFiles[file.Path()]; exists {
+			continue // already added this one
+		}
+		allFiles[file.Path()] = protoutil.ProtoFromFileDescriptor(file)
+		deps := make([]protoreflect.FileDescriptor, file.Imports().Len())
+		for i := 0; i < file.Imports().Len(); i++ {
+			deps[i] = file.Imports().Get(i).FileDescriptor
+		}
+		addFileDescriptorsToMap(deps, allFiles)
+	}
 }

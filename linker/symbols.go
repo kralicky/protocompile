@@ -22,12 +22,11 @@ import (
 	"strings"
 	"sync"
 
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/kralicky/protocompile/ast"
 	"github.com/kralicky/protocompile/protointernal"
+	"github.com/kralicky/protocompile/protoutil"
 	"github.com/kralicky/protocompile/reporter"
 	"github.com/kralicky/protocompile/walk"
 )
@@ -367,12 +366,15 @@ func (ps *packageSymbols) deleteFile(fd protoreflect.FileDescriptor, handler *re
 }
 
 func (s *Symbols) importPackages(pkgSpan ast.SourceSpan, pkg protoreflect.FullName, handler *reporter.Handler) (*packageSymbols, error) {
-	parts := splitAccumulated(pkg)
-
 	cur := &s.pkgTrie
-	for _, p := range parts {
+	enumerator := nameEnumerator{name: pkg}
+	for {
+		p, ok := enumerator.next()
+		if !ok {
+			return cur, nil
+		}
 		var err error
-		cur, err = cur.importPackage(pkgSpan, protoreflect.FullName(p), handler)
+		cur, err = cur.importPackage(pkgSpan, p, handler)
 		if err != nil {
 			return nil, err
 		}
@@ -380,23 +382,6 @@ func (s *Symbols) importPackages(pkgSpan ast.SourceSpan, pkg protoreflect.FullNa
 			return nil, nil
 		}
 	}
-
-	return cur, nil
-}
-
-// returns a list of all fully-qualified package names up to and including the
-// given package name. For example, for the package "foo.bar.baz", this would
-// return ["foo", "foo.bar", "foo.bar.baz"]. If the package name is empty, this
-// returns an empty list.
-func splitAccumulated(pkg protoreflect.FullName) []string {
-	if pkg == "" {
-		return nil
-	}
-	parts := strings.Split(string(pkg), ".")
-	for i := 1; i < len(parts); i++ {
-		parts[i] = parts[i-1] + "." + parts[i]
-	}
-	return parts
 }
 
 func (ps *packageSymbols) importPackage(pkgSpan ast.SourceSpan, pkg protoreflect.FullName, handler *reporter.Handler) (*packageSymbols, error) {
@@ -427,12 +412,15 @@ func (s *Symbols) getPackage(pkg protoreflect.FullName) *packageSymbols {
 		return nil
 	}
 
-	parts := splitAccumulated(pkg)
-
 	cur := &s.pkgTrie
-	for _, p := range parts {
+	enumerator := nameEnumerator{name: pkg}
+	for {
+		p, ok := enumerator.next()
+		if !ok {
+			return cur
+		}
 		cur.mu.RLock()
-		next := cur.children[protoreflect.FullName(p)]
+		next := cur.children[p]
 		cur.mu.RUnlock()
 
 		if next == nil {
@@ -440,8 +428,6 @@ func (s *Symbols) getPackage(pkg protoreflect.FullName) *packageSymbols {
 		}
 		cur = next
 	}
-
-	return cur
 }
 
 func reportSymbolCollision(sym symbolEntry, fqn protoreflect.FullName, additionIsEnumVal bool, existing symbolEntry, handler *reporter.Handler) error {
@@ -527,6 +513,10 @@ func sourceSpanFor(d protoreflect.Descriptor) ast.SourceSpan {
 	if !ok {
 		return ast.UnknownSpan(file.Path())
 	}
+	if result, ok := file.(*result); ok {
+		return nameSpan(result.FileNode(), result.Node(protoutil.ProtoFromDescriptor(d)))
+	}
+
 	namePath := path
 	switch d.(type) {
 	case protoreflect.FieldDescriptor:
@@ -747,17 +737,18 @@ func (ps *packageSymbols) importResult(r *result, handler *reporter.Handler) (bo
 	}
 
 	// second pass: commit all symbols
-	ps.commitResultLocked(r)
+	ps.commitFileLocked(r)
 
 	return true, nil
 }
 
 func (ps *packageSymbols) checkResultLocked(r *result, handler *reporter.Handler) error {
 	resultSyms := map[protoreflect.FullName]symbolEntry{}
-	return walk.DescriptorProtos(r.FileDescriptorProto(), func(fqn protoreflect.FullName, d proto.Message) error {
-		_, isEnumVal := d.(*descriptorpb.EnumValueDescriptorProto)
+	return walk.Descriptors(r, func(d protoreflect.Descriptor) error {
+		_, isEnumVal := d.(protoreflect.EnumValueDescriptor)
 		file := r.FileNode()
-		node := r.Node(d)
+		fqn := d.FullName()
+		node := r.Node(protoutil.ProtoFromDescriptor(d))
 		span := nameSpan(file, node)
 		// check symbols already in this symbol table
 		if existing, ok := ps.symbols[fqn]; ok {
@@ -806,15 +797,9 @@ func nameSpan(file *ast.FileNode, n ast.Node) ast.SourceSpan {
 	}
 }
 
-func (ps *packageSymbols) commitResultLocked(r *result) {
-	_ = walk.DescriptorProtos(r.FileDescriptorProto(), func(fqn protoreflect.FullName, d proto.Message) error {
-		span := nameSpan(r.FileNode(), r.Node(d))
-		_, isEnumValue := d.(protoreflect.EnumValueDescriptor)
-		ps.symbols[fqn] = symbolEntry{span: span, isEnumValue: isEnumValue}
-		return nil
-	})
-}
-
+// AddExtension records the given extension, which is used to ensure that no two files
+// attempt to extend the same message using the same tag. The given pkg should be the
+// package that defines extendee.
 func (s *Symbols) AddExtension(pkg, extendee protoreflect.FullName, tag protoreflect.FieldNumber, span ast.SourceSpan, handler *reporter.Handler) error {
 	if pkg != "" {
 		if !strings.HasPrefix(string(extendee), string(pkg)+".") {
@@ -845,4 +830,45 @@ func (s *Symbols) AddExtension(pkg, extendee protoreflect.FullName, tag protoref
 		s.pkgTrie.exts[extNum] = span // also add to global map
 	}
 	return nil
+}
+
+// Lookup finds the registered location of the given name. If the given name has
+// not been seen/registered, nil is returned.
+func (s *Symbols) Lookup(name protoreflect.FullName) ast.SourceSpan {
+	if pkgSyms := s.getPackage(name.Parent()); pkgSyms != nil {
+		if entry, ok := pkgSyms.symbols[name]; ok {
+			return entry.span
+		}
+	}
+	return nil
+}
+
+// LookupExtension finds the registered location of the given extension. If the given
+// extension has not been seen/registered, nil is returned.
+func (s *Symbols) LookupExtension(messageName protoreflect.FullName, extensionNumber protoreflect.FieldNumber) ast.SourceSpan {
+	if pkgSyms := s.getPackage(messageName.Parent()); pkgSyms != nil {
+		if entry, ok := pkgSyms.exts[extNumber{messageName, extensionNumber}]; ok {
+			return entry
+		}
+	}
+	return nil
+}
+
+type nameEnumerator struct {
+	name  protoreflect.FullName
+	start int
+}
+
+func (e *nameEnumerator) next() (protoreflect.FullName, bool) {
+	if e.start < 0 {
+		return "", false
+	}
+	pos := strings.IndexByte(string(e.name[e.start:]), '.')
+	if pos == -1 {
+		e.start = -1
+		return e.name, len(e.name) > 0 // note: changed from upstream `return e.name, true`, bug?
+	}
+	pos += e.start
+	e.start = pos + 1
+	return e.name[:pos], true
 }
