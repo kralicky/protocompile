@@ -28,13 +28,13 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
 
+	art "github.com/kralicky/go-adaptive-radix-tree"
 	"github.com/kralicky/protocompile/ast"
 	"github.com/kralicky/protocompile/editions"
 	"github.com/kralicky/protocompile/parser"
 	"github.com/kralicky/protocompile/protointernal"
 	"github.com/kralicky/protocompile/protoutil"
 	"github.com/kralicky/protocompile/sourceinfo"
-	art "github.com/plar/go-adaptive-radix-tree"
 )
 
 var (
@@ -157,7 +157,7 @@ type result struct {
 
 	// A map of all descriptors keyed by their fully-qualified name (without
 	// any leading dot).
-	descriptors art.Tree
+	descriptors art.Tree[protoreflect.Descriptor]
 
 	// A set of imports that have been used in the course of linking and
 	// interpreting options.
@@ -326,7 +326,7 @@ func (r *result) FindOptionSourceInfo(node *ast.OptionNode) *sourceinfo.OptionSo
 }
 
 func (r *result) FindDescriptorsByPrefix(ctx context.Context, prefix string, filter ...func(protoreflect.Descriptor) bool) (results []protoreflect.Descriptor, err error) {
-	r.descriptors.ForEachPrefix(art.Key(prefix), func(node art.Node) (cont bool) {
+	r.descriptors.ForEachPrefix(art.Key(prefix), func(node art.Node[protoreflect.Descriptor]) (cont bool) {
 		if ctx.Err() != nil {
 			err = ctx.Err()
 			return false
@@ -336,14 +336,13 @@ func (r *result) FindDescriptorsByPrefix(ctx context.Context, prefix string, fil
 			if value == nil {
 				return true
 			}
-			if desc, ok := value.(protoreflect.Descriptor); ok {
-				if len(filter) > 0 {
-					if !filter[0](desc) {
-						return true
-					}
+			desc := node.Value()
+			if len(filter) > 0 {
+				if !filter[0](desc) {
+					return true
 				}
-				results = append(results, desc)
 			}
+			results = append(results, desc)
 		}
 		return true
 	})
@@ -351,7 +350,7 @@ func (r *result) FindDescriptorsByPrefix(ctx context.Context, prefix string, fil
 }
 
 func (r *result) RangeDescriptors(ctx context.Context, fn func(protoreflect.Descriptor) bool) (err error) {
-	r.descriptors.ForEach(func(node art.Node) (cont bool) {
+	r.descriptors.ForEach(func(node art.Node[protoreflect.Descriptor]) (cont bool) {
 		if ctx.Err() != nil {
 			err = ctx.Err()
 			return false

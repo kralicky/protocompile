@@ -22,11 +22,11 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 
+	art "github.com/kralicky/go-adaptive-radix-tree"
 	"github.com/kralicky/protocompile/ast"
 	"github.com/kralicky/protocompile/parser"
 	"github.com/kralicky/protocompile/reporter"
 	"github.com/kralicky/protocompile/sourceinfo"
-	art "github.com/plar/go-adaptive-radix-tree"
 )
 
 // Link handles linking a parsed descriptor proto into a fully-linked descriptor.
@@ -113,7 +113,7 @@ dependencies_ok:
 		FileDescriptor:       noOpFile,
 		Result:               parsed,
 		deps:                 dependencies, // the unfiltered dependencies
-		descriptors:          art.New(),
+		descriptors:          art.New[protoreflect.Descriptor](),
 		usedImports:          map[string]struct{}{},
 		prefix:               prefix,
 		optionQualifiedNames: map[*ast.IdentValueNode]string{},
