@@ -67,7 +67,8 @@ func (r *result) validateField(fld protoreflect.FieldDescriptor, handler *report
 	if err := r.validatePacked(fd, handler); err != nil {
 		return err
 	}
-	if fd.Kind() == protoreflect.EnumKind {
+
+	if fd.Kind() == protoreflect.EnumKind && fd.enumType != nil {
 		requiresOpen := !fd.IsList() && !fd.HasPresence()
 		if requiresOpen && fd.Enum().IsClosed() {
 			// Fields in a proto3 message cannot refer to proto2 enums.
@@ -183,7 +184,11 @@ func (r *result) validateEnum(d protoreflect.EnumDescriptor, handler *reporter.H
 		return fmt.Errorf("enum descriptor is wrong type: expecting %T, got %T", (*enumDescriptor)(nil), d)
 	}
 
-	firstValue := ed.Values().Get(0)
+	values := ed.Values()
+	if values.Len() == 0 {
+		return nil
+	}
+	firstValue := values.Get(0)
 	if !ed.IsClosed() && firstValue.Number() != 0 {
 		// TODO: This check doesn't really belong here. Whether the
 		//       first value is zero s/b orthogonal to whether the
