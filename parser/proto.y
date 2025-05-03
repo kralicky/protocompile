@@ -427,8 +427,8 @@ messageLiteralFieldName
 	| '[' _QUALIFIED_IDENT '/' anyIdentifier virtualComma ']' virtualSemicolon {
 		$$ = &ast.FieldReferenceNode{Open: $1, UrlPrefix: $2, Slash: $3, Name: $4, Comma: $5, Close: $6, Semicolon: $7}
 	}
-	| '[' error ']' ';' {
-		$$ = nil
+	| '[' _SINGULAR_IDENT virtualComma ']' virtualSemicolon {
+		$$ = &ast.FieldReferenceNode{Open: $1, Name: $2.AsIdentValueNode(), Comma: $3, Close: $4, Semicolon: $5}
 	}
 
 fieldValue

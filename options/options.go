@@ -550,14 +550,14 @@ func interpretElementOptions[Elem elementType[OptsStruct, Opts], OptsStruct any,
 	customOpts bool,
 ) error {
 	opts := elem.GetOptions()
-	uninterpreted := opts.GetUninterpretedOption()
-	if len(uninterpreted) > 0 {
+	if uninterpreted := opts.GetUninterpretedOption(); len(uninterpreted) > 0 {
 		remain, err := interp.interpretOptions(fqn, target.t, elem, opts, uninterpreted, customOpts)
 		if err != nil {
 			return err
 		}
 		target.setUninterpretedOptions(opts, remain)
-	} else if customOpts {
+	}
+	if customOpts {
 		// If customOpts is true, we are in second pass of interpreting.
 		// For second pass, even if there are no options to interpret, we still
 		// need to verify feature usage.

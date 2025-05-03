@@ -97,7 +97,7 @@ func (e *extendedSyntaxError) CanFormat() bool {
 	switch e.category {
 	case CategoryEmptyDecl, CategoryIncorrectToken, CategoryMissingToken, CategoryExtraTokens:
 		return true
-	case CategoryIncompleteDecl:
+	case CategoryIncompleteDecl, CategoryDeclNotAllowed:
 		return false
 	}
 	panic("bug: CanFormat called with unknown category " + e.category)
